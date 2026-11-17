@@ -87,7 +87,7 @@
                     <i class="fas fa-chevron-right text-gray-300 mt-2"></i>
                 </div>
             </a>
-            {% if c.status == 'accepted' and c.requester == request.user %}
+            {% if c.status == 'accepted' and c.de_acordo_meu %}
             <div class="px-4 py-3 border-t bg-blue-50 flex flex-wrap gap-2 items-center">
                 <p class="text-xs text-blue-700 font-semibold mr-2"><i class="fas fa-info-circle mr-1"></i> Gestor aprovou. Dê o de acordo ou negue:</p>
                 <input type="text" id="conf-notes-{{ c.pk }}" placeholder="Observação (opcional)"
@@ -107,7 +107,7 @@
                     </button>
                 </form>
             </div>
-            {% elif c.status == 'rejected' and not c.confirmed_by and c.requester == request.user %}
+            {% elif c.status == 'rejected' and not c.confirmed_by and c.de_acordo_meu %}
             <div class="px-4 py-3 border-t bg-red-50 flex flex-wrap gap-2 items-center">
                 <p class="text-xs text-red-700 font-semibold mr-2"><i class="fas fa-exclamation-circle mr-1"></i> Gestor rejeitou. Dê o de acordo ou negue:</p>
                 <input type="text" id="conf-notes-{{ c.pk }}" placeholder="Observação (opcional)"

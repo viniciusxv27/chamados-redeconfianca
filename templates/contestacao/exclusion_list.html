@@ -176,11 +176,13 @@
                 <i class="fas fa-chart-bar mr-2"></i> Dashboard
             </a>
             {% endif %}
+            {% if papel != 'cn' %}
             <a href="{% url 'contestacao:valores_list' %}" class="inline-flex items-center px-4 py-2 text-sm font-medium text-white rounded-lg hover:opacity-90 transition" style="background-color: #f97316"
                title="Receita x Recebido — contestação de valores">
                 <i class="fas fa-scale-unbalanced mr-2"></i> Contestar Valores
                 {% if valores_divergentes %}<span class="ml-2 px-1.5 py-0.5 rounded-full bg-white/25 text-xs">{{ valores_divergentes }}</span>{% endif %}
             </a>
+            {% endif %}
             <a href="{% url 'contestacao:my_contestations' %}" class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
                 <i class="fas fa-list mr-2"></i> Minhas Contestações
             </a>
@@ -208,6 +210,14 @@
     ficaram aparecem contadas pelo motivo de não terem passado.
     {% endcomment %}
     <div id="balancoDoCiclo">{% include 'contestacao/_balanco.html' %}</div>
+
+    {% if not showing_old_records %}{% include 'contestacao/_equipe_ciclo.html' %}{% endif %}
+    {% if vendedor_filter %}
+    <div class="mb-4 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900 flex flex-wrap items-center justify-between gap-2">
+        <span><i class="fas fa-user mr-1"></i> Mostrando só as vendas de <strong>{{ vendedor_filter }}</strong>{% if papel != 'cn' %} — o que você responder aqui fica registrado como feito por você, em nome dele{% endif %}.</span>
+        <a href="{% url 'contestacao:exclusion_list' %}" class="font-semibold hover:underline">Ver todas</a>
+    </div>
+    {% endif %}
 
     <div class="mb-4 rounded-lg border p-3 {% if contestation_blocked %}border-red-200 bg-red-50{% else %}border-emerald-200 bg-emerald-50{% endif %}">
         <div class="flex flex-wrap items-center justify-between gap-2">
@@ -368,6 +378,14 @@
                                     <i class="fas fa-times mr-1"></i> Não
                                 </button>
                             </div>
+                            {% with resp=respostas_nao|get_item:r.pk %}
+                            <div class="nao-info mt-1 text-left text-[11px]" data-id="{{ r.pk }}">{% if resp %}{% include 'contestacao/_nao_info.html' %}{% endif %}</div>
+                            {% endwith %}
+                            {% with outro=sim_de_outros|get_item:r.pk %}{% if outro %}
+                            <div class="mt-1 text-left text-[11px] rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-orange-900">
+                                <span class="font-semibold"><i class="fas fa-check mr-1"></i>Sim</span> no carrinho de {{ outro.user.full_name }}{% if not outro.attachment %} <span class="text-red-700">(sem evidência)</span>{% endif %}
+                            </div>
+                            {% endif %}{% endwith %}
                             {% endif %}
                             {% endif %}
                             {% endwith %}
@@ -375,6 +393,11 @@
                     </tr>
                     {% with info=contestations_map|get_item:r.pk %}
                     {% if not info and not contestation_blocked %}
+                    <tr id="nao-row-{{ r.pk }}" style="display:none" class="{{ zebra_class }}">
+                        <td colspan="6" class="px-4 py-4">
+                            {% include 'contestacao/_nao_caixa.html' %}
+                        </td>
+                    </tr>
                     <tr id="reason-row-{{ r.pk }}" style="display:none" class="{{ zebra_class }}">
                         <td colspan="6" class="px-4 py-4">
                             <div class="reason-content bg-white rounded-lg p-5 shadow-sm" style="background-color: var(--ct-superficie) !important; border: 2px solid #FF6B35 !important; box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18), 0 0 0 4px rgba(255, 107, 53, 0.14) !important;">
@@ -478,6 +501,17 @@
                         <i class="fas fa-times mr-1"></i> Não
                     </button>
                 </div>
+                {% with resp=respostas_nao|get_item:r.pk %}
+                <div class="nao-info mt-2 text-xs" data-id="{{ r.pk }}">{% if resp %}{% include 'contestacao/_nao_info.html' %}{% endif %}</div>
+                {% endwith %}
+                {% with outro=sim_de_outros|get_item:r.pk %}{% if outro %}
+                <div class="mt-2 text-xs rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-orange-900">
+                    <span class="font-semibold"><i class="fas fa-check mr-1"></i>Sim</span> no carrinho de {{ outro.user.full_name }}{% if not outro.attachment %} <span class="text-red-700">(sem evidência)</span>{% endif %}
+                </div>
+                {% endif %}{% endwith %}
+                <div id="nao-card-{{ r.pk }}" class="mt-3" style="display:none">
+                    {% include 'contestacao/_nao_caixa.html' %}
+                </div>
             <!-- Inline reason area for mobile -->
                 <div id="reason-card-{{ r.pk }}" class="mt-4 pt-4" style="display:none; border-top: 1px solid var(--ct-borda) !important;">
                     <div class="reason-content bg-white rounded-lg p-4" style="background-color: var(--ct-superficie) !important; border: 2px solid #FF6B35 !important; box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18), 0 0 0 4px rgba(255, 107, 53, 0.14) !important;">
@@ -561,7 +595,7 @@
                 <div class="flex items-center gap-3">
                     <span class="inline-flex items-center justify-center w-9 h-9 rounded-full text-white text-sm font-bold" style="background-color: #c2410c" id="bulkCount">0</span>
                     <div class="text-sm text-white">
-                        <span class="font-semibold">pedido de contestação pronto para envio</span>
+                        <span class="font-semibold">{% if papel == 'cn' %}com Sim no seu carrinho (salvas — o gerente envia){% else %}pedido de contestação pronto para envio{% endif %}</span>
                         <div id="bulkResumo" class="text-xs text-white/90 mt-0.5"></div>
                     </div>
                 </div>
@@ -575,9 +609,15 @@
                     <button type="button" onclick="clearAllReasons()" class="px-3 py-1.5 text-sm text-white hover:text-white font-medium rounded-md" style="background-color: #ea580c">
                         <i class="fas fa-trash-alt mr-1"></i> Limpar
                     </button>
+                    {% if papel == 'cn' %}
+                    <span class="px-3 py-1.5 text-xs text-white/90 rounded-md" style="background-color: #9a3412" title="Quem envia é o gerente da loja, depois que todos os CNs marcarem pronto.">
+                        <i class="fas fa-user-tie mr-1"></i> O gerente envia
+                    </span>
+                    {% else %}
                     <button type="button" onclick="submitAllContestations()" id="btnSubmitAll" class="inline-flex items-center px-5 py-2 text-white text-sm font-semibold rounded-lg hover:opacity-90 transition" style="background-color: #9a3412">
                         <i class="fas fa-paper-plane mr-2"></i> Enviar
                     </button>
+                    {% endif %}
                 </div>
             </div>
             <div id="bulkDetails" class="bulk-details hidden px-5 py-4" style="background-color: var(--ct-superficie) !important; border-top: 2px solid var(--ct-carrinho-borda-2) !important;">
@@ -658,6 +698,8 @@ window.MOTIVOS_CONFERENCIA = {
     ja_contestada: 'Já contestada neste ciclo',
     fora_do_escopo: 'Fora da sua loja/base',
     nao_encontrada: 'Não está mais na base sincronizada',
+    aguardando_cns: 'Esperando os CNs da loja marcarem pronto',
+    respondida_nao: 'Respondida como Não',
     falhou: 'Não deu para enviar agora (tente de novo)'
 };
 window.contestationDraftDbName = 'contestacaoDraftsDb';
@@ -846,7 +888,7 @@ window.persistPendingDraft = async function() {
     localStorage.setItem(window.contestationStorageKey, JSON.stringify(payload));
 };
 
-window.saveDraftItemOnServer = async function(id, reason, file) {
+window.saveDraftItemOnServer = async function(id, reason, file, substituirNao) {
     if (window.serverDraftUnavailable) {
         return;
     }
@@ -856,6 +898,11 @@ window.saveDraftItemOnServer = async function(id, reason, file) {
     formData.append('reason', reason || '');
     if (file) {
         formData.append('attachment', file);
+    }
+    // Só o clique em Sim troca um Não já registrado; a ressincronização
+    // automática do carrinho não pode desfazer a resposta de outra pessoa.
+    if (substituirNao) {
+        formData.append('substituir_nao', '1');
     }
 
     const resp = await fetch('{% url "contestacao:cart_draft_upsert" %}', {
@@ -1010,7 +1057,7 @@ window.loadServerDraft = async function() {
             }
         });
 
-        if (data.removidos_por_ja_contestada) {
+        if (data.removidos_por_ja_contestada || data.removidos_por_nao) {
             // Some do carrinho o que já está em contestação aberta: o envio
             // recusaria de qualquer forma, e ficar ali só levava a reenviar.
             const ids = Object.keys(window.pendingReasons);
@@ -1025,8 +1072,14 @@ window.loadServerDraft = async function() {
                     delete window.pendingSituacoes[id];
                 }
             });
-            window.showToast(data.removidos_por_ja_contestada
-                + ' venda(s) saíram do carrinho: já estão em contestação.', 'warning');
+            if (data.removidos_por_ja_contestada) {
+                window.showToast(data.removidos_por_ja_contestada
+                    + ' venda(s) saíram do carrinho: já estão em contestação.', 'warning');
+            }
+            if (data.removidos_por_nao) {
+                window.showToast(data.removidos_por_nao
+                    + ' venda(s) saíram do carrinho: foram respondidas como Não.', 'warning');
+            }
         }
 
         await window.persistPendingDraft();
@@ -1401,6 +1454,7 @@ window.getRecordSummary = function(id) {
 };
 
 window.openReason = function(id) {
+    window.fecharCaixaNao(id);
     const row = document.getElementById('reason-row-' + id);
     if (row) row.style.display = 'table-row';
     const card = document.getElementById('reason-card-' + id);
@@ -1468,7 +1522,8 @@ window.confirmReason = async function(id) {
         if (file) {
             await window.saveDraftFile(id, file);
         }
-        await window.saveDraftItemOnServer(id, reason, file || null);
+        await window.saveDraftItemOnServer(id, reason, file || null, true);
+        window.desenharNaoInfo(id, '');
         await window.persistPendingDraft();
     } catch (_) {
         window.showToast('Item salvo localmente. Nao foi possivel sincronizar com o servidor agora.', 'warning');
@@ -1524,19 +1579,113 @@ window.removeItemFromCart = function(id) {
     window.renderBar();
 };
 
+/* "Não" (17/11/2026): antes só escondia a linha no navegador de quem
+ * clicou, sem registro. Agora pede a justificativa (obrigatória) e grava a
+ * resposta da venda no servidor — vale para a loja toda e entra no
+ * histórico com quem respondeu. */
+window.MIN_JUSTIFICATIVA = {{ min_justificativa|default:5 }};
+window.urlDaVenda = function(nomeUrl, id) {
+    return nomeUrl.replace('/0/', '/' + id + '/');
+};
+window.URL_NAO = '{% url "contestacao:responder_nao" 0 %}';
+window.URL_DESFAZER_NAO = '{% url "contestacao:desfazer_nao" 0 %}';
+
 window.markNotContestable = function(id) {
-    window.cancelReason(id);
-    window.hiddenRecords[id] = true;
-    window.persistHiddenRecords();
+    window.closeReasonBox(id);
+    const linha = document.getElementById('nao-row-' + id);
+    if (linha) linha.style.display = 'table-row';
+    const cartao = document.getElementById('nao-card-' + id);
+    if (cartao) cartao.style.display = 'block';
+    const campo = Array.from(document.querySelectorAll('.nao-input[data-id="' + id + '"]'))
+        .find((ta) => ta.offsetParent !== null);
+    if (campo) setTimeout(() => campo.focus(), 50);
+};
 
-    const row = document.getElementById('row-' + id);
-    const reasonRow = document.getElementById('reason-row-' + id);
-    const card = document.getElementById('card-' + id);
-    if (row) row.style.display = 'none';
-    if (reasonRow) reasonRow.style.display = 'none';
-    if (card) card.style.display = 'none';
+window.fecharCaixaNao = function(id) {
+    const linha = document.getElementById('nao-row-' + id);
+    if (linha) linha.style.display = 'none';
+    const cartao = document.getElementById('nao-card-' + id);
+    if (cartao) cartao.style.display = 'none';
+    document.querySelectorAll('.nao-erro[data-id="' + id + '"]').forEach((p) => p.classList.add('hidden'));
+};
 
-    window.showToast('Registro ocultado da tela.', 'info');
+window.escaparHtml = function(texto) {
+    const div = document.createElement('div');
+    div.textContent = texto == null ? '' : String(texto);
+    return div.innerHTML;
+};
+
+window.desenharNaoInfo = function(id, html) {
+    document.querySelectorAll('.nao-info[data-id="' + id + '"]').forEach((caixa) => {
+        caixa.innerHTML = html || '';
+    });
+};
+
+window.confirmarNao = async function(id) {
+    if (window.contestationBlocked) {
+        alert('Contestações bloqueadas. Sincronize a planilha novamente para liberar novas respostas.');
+        return;
+    }
+    let justificativa = '';
+    document.querySelectorAll('.nao-input[data-id="' + id + '"]').forEach((ta) => {
+        if (ta.value.trim()) justificativa = ta.value.trim();
+    });
+    const mostrarErro = (texto) => {
+        document.querySelectorAll('.nao-erro[data-id="' + id + '"]').forEach((p) => {
+            p.textContent = texto;
+            p.classList.remove('hidden');
+        });
+    };
+    if (justificativa.replace(/\s+/g, ' ').length < window.MIN_JUSTIFICATIVA) {
+        mostrarErro('Escreva a justificativa do Não (pelo menos ' + window.MIN_JUSTIFICATIVA + ' letras).');
+        return;
+    }
+    const dados = new FormData();
+    dados.append('justificativa', justificativa);
+    try {
+        const resp = await fetch(window.urlDaVenda(window.URL_NAO, id), {
+            method: 'POST', headers: { 'X-CSRFToken': window.csrfToken }, body: dados,
+        });
+        const corpo = await resp.json().catch(() => null);
+        if (!resp.ok || !corpo || !corpo.success) {
+            mostrarErro((corpo && corpo.error) || 'Não deu para registrar o Não agora. Tente de novo.');
+            return;
+        }
+        // A venda sai do carrinho (o servidor já tirou o rascunho de todo mundo).
+        if (window.pendingReasons[id] !== undefined) {
+            window.removeItemFromCart(id);
+        }
+        window.fecharCaixaNao(id);
+        document.querySelectorAll('.nao-input[data-id="' + id + '"]').forEach((ta) => { ta.value = ''; });
+        window.desenharNaoInfo(id,
+            '<div class="rounded-md border border-gray-300 bg-gray-50 px-2 py-1 text-gray-700">'
+            + '<span class="font-semibold"><i class="fas fa-hand mr-1"></i>Não:</span> '
+            + window.escaparHtml(corpo.justificativa)
+            + '<span class="block text-gray-500">por ' + window.escaparHtml(corpo.preenchido_por) + ' agora · '
+            + '<button type="button" class="underline hover:text-gray-800" onclick="desfazerNao(' + Number(id) + ')">desfazer</button></span>'
+            + '</div>');
+        window.showToast(corpo.em_nome_do_cn ? 'Não registrado (em nome do CN, com o seu nome no histórico).' : 'Não registrado.', 'success');
+    } catch (_) {
+        mostrarErro('Sem conexão agora. Tente de novo.');
+    }
+};
+
+window.desfazerNao = async function(id) {
+    if (!confirm('Desfazer o Não desta venda? Ela volta a ficar sem resposta.')) return;
+    try {
+        const resp = await fetch(window.urlDaVenda(window.URL_DESFAZER_NAO, id), {
+            method: 'POST', headers: { 'X-CSRFToken': window.csrfToken },
+        });
+        const corpo = await resp.json().catch(() => null);
+        if (!resp.ok || !corpo || !corpo.success) {
+            alert((corpo && corpo.error) || 'Não deu para desfazer agora.');
+            return;
+        }
+        window.desenharNaoInfo(id, '');
+        window.showToast('Não desfeito: a venda voltou a ficar sem resposta.', 'info');
+    } catch (_) {
+        alert('Sem conexão agora. Tente de novo.');
+    }
 };
 
 window.resetButton = function(id) {
@@ -2043,6 +2192,58 @@ window.submitAllContestations = async function() {
     }
 };
 
+/* Envio da loja (gerente): as vendas saem do servidor — toda venda da loja
+ * com Sim pronto, do carrinho de quem for (o do CN, o seu) — e vão pelo
+ * mesmo envio em pedaços. Loja com CN sem marcar pronto fica de fora. */
+window.enviarDaLoja = async function() {
+    if (window.contestationBlocked) {
+        alert('Contestações bloqueadas. Sincronize a planilha novamente para liberar novos envios.');
+        return;
+    }
+    const btn = document.getElementById('btnEnviarLoja');
+    if (btn) btn.disabled = true;
+    try {
+        const meus = Object.keys(window.pendingReasons || {});
+        await window.ensurePendingFilesBeforeSubmit(meus);
+        window.abrirConferencia();
+        window.desenharConferencia([], 'Conferindo as vendas da loja…', '');
+        const subida = await window.garantirEvidenciasNoServidor(meus);
+        const resp = await window.comTentativas(async () => {
+            const r = await fetch('{% url "contestacao:cart_check" %}', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': window.csrfToken, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ loja: true, ids: [] })
+            });
+            const corpo = await r.json().catch(() => null);
+            if (!r.ok || !corpo || !corpo.success) {
+                throw new Error((corpo && corpo.error) || 'Não deu para conferir as vendas da loja agora.');
+            }
+            return corpo;
+        }, 2);
+        const prontas = resp.prontas.map(String);
+        window.conferenciaAtual = {
+            ids: prontas,
+            lote: resp.lote || 5,
+            naoProntas: (resp.itens || []).filter((i) => i.situacao !== 'pronta')
+        };
+        let resumo = prontas.length + ' de ' + resp.total + ' vendas com Sim prontas para enviar.';
+        const travadas = (resp.lojas || []).filter((l) => !l.liberada);
+        if (travadas.length) {
+            resumo += ' Esperando: ' + travadas.map((l) => l.filial + ' (' + l.faltando.join(', ') + ')').join('; ') + '.';
+        }
+        if (subida.falhas.length > 0) {
+            resumo += ' (' + subida.falhas.length + ' evidência(s) do seu carrinho não subiram; tente de novo)';
+        }
+        document.getElementById('cartCheckProgresso').classList.add('hidden');
+        window.desenharConferencia(resp.itens || [], resumo, prontas.length > 0 ? ('Enviar ' + prontas.length) : '');
+    } catch (erro) {
+        window.fecharConferencia();
+        alert((erro && erro.message) || 'Não deu para conferir as vendas da loja. Tente de novo.');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+};
+
 window.confirmarEnvioConferido = async function() {
     const dados = window.conferenciaAtual;
     if (!dados || dados.ids.length === 0) return;
@@ -2131,8 +2332,30 @@ window.confirmarEnvioConferido = async function() {
 
 document.addEventListener('DOMContentLoaded', function() {
     window.startSyncCountdown();
-    window.loadHiddenRecords();
-    window.applyHiddenRecords();
+    // O "Não" antigo só escondia a linha neste navegador. Agora toda venda
+    // precisa de resposta registrada, então nada fica escondido.
+    try { localStorage.removeItem(window.hiddenRecordsStorageKey); } catch (_) {}
+    window.hiddenRecords = {};
+
+    // Antes de marcar "pronto", a evidência que só está neste navegador sobe:
+    // o servidor confere a parte pelo que ele tem.
+    document.querySelectorAll('form.form-pronto').forEach((form) => {
+        form.addEventListener('submit', async function(evento) {
+            if (form.dataset.conferido === '1') return;
+            evento.preventDefault();
+            const botao = form.querySelector('button[type="submit"]');
+            if (botao) { botao.disabled = true; }
+            try {
+                const ids = Object.keys(window.pendingReasons || {});
+                await window.ensurePendingFilesBeforeSubmit(ids);
+                await window.garantirEvidenciasNoServidor(ids);
+            } catch (_) {
+                // O servidor confere de qualquer jeito e diz o que falta.
+            }
+            form.dataset.conferido = '1';
+            form.submit();
+        });
+    });
 
     document.querySelectorAll('.reason-input').forEach((input) => {
         input.addEventListener('input', function() {

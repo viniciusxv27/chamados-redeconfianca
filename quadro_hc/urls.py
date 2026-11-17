@@ -16,6 +16,7 @@ urlpatterns = [
     path('vaga/<int:pk>/fechar/', views.vaga_fechar, name='vaga_fechar'),
     path('ajuste/', views.ajuste, name='ajuste'),
     path('previsto/', views.previsto, name='previsto'),
+    path('meta/', views.meta_proporcional, name='meta_proporcional'),
     path('carteira/', views.carteira_salvar, name='carteira_salvar'),
     path('carteira/<int:pk>/excluir/', views.carteira_excluir, name='carteira_excluir'),
 ]

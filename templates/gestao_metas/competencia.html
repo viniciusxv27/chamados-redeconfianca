@@ -31,7 +31,7 @@
 <div class="gm-aviso"><i class="fas fa-triangle-exclamation" style="margin-top:2px"></i><span>Sem realizado de {% for m in meses_faltando %}{{ m|date:"M/y" }}{% if not forloop.last %}, {% endif %}{% endfor %}. <a href="{% url 'gestao_metas:importar' %}?competencia={{ comp.codigo }}">Importe a base ou busque no banco de vendas</a>.</span></div>
 {% endif %}
 
-<div id="gmTela" data-url-salvar="{% url 'gestao_metas:salvar' comp.codigo %}" data-editavel="{% if pode_editar %}1{% endif %}">{% csrf_token %}
+<div id="gmTela" data-url-salvar="{% url 'gestao_metas:salvar' comp.codigo %}" data-url-dividir="{% url 'gestao_metas:dividir' comp.codigo %}" data-editavel="{% if pode_editar %}1{% endif %}">{% csrf_token %}
 <nav class="gm-pilares" role="tablist">
     {% for p in pilares %}<button type="button" role="tab" data-pilar="{{ p.chave }}" class="{% if forloop.first %}ativo{% endif %}">{{ p.nome }}</button>{% endfor %}
 </nav>
@@ -56,8 +56,9 @@
         {% else %}
         <span class="gm-sub"><i class="fas fa-eye"></i> Seu acesso é de visualização.</span>
         {% endif %}
-        <span class="gm-salvo" data-salvo>{% if pode_editar %}As metas se salvam sozinhas ao digitar.{% endif %}</span>
+        <span class="gm-salvo" data-salvo>{% if pode_editar %}As metas se salvam sozinhas ao digitar. O botão Salvar da loja divide a meta entre os consultores do Quadro de HC.{% endif %}</span>
     </div>
+    <div class="gm-aviso ok" data-divisao-retorno role="status" aria-live="polite" hidden></div>
 
     <div class="gm-rolagem cartoes">
     <table class="gm-tabela" data-rc-wrapped="1">
@@ -96,7 +97,9 @@
         {% for l in p.linhas %}
             <tr data-loja="{{ l.loja_id }}" data-regiao="{{ l.regiao|default:'Sem região' }}" data-ultimo="{{ l.ultimo|dado }}" data-ano="{{ l.real_ano_anterior|dado }}"
                 data-quad="{{ l.media_quad|dado }}" data-ant="{{ l.meta_anterior|dado }}"{% if p.fixa %} data-ticket="{{ l.ticket|dado }}"{% endif %}>
-                <td class="loja">{% if l.regiao %}<span class="regiao">{{ l.regiao }}</span>{% endif %}<strong style="display:inline">{{ l.loja.nome }}</strong>{% if l.loja.pdv_vivo %}<small style="display:block">{{ l.loja.pdv_vivo }}</small>{% endif %}</td>
+                <td class="loja">{% if l.regiao %}<span class="regiao">{{ l.regiao }}</span>{% endif %}<strong style="display:inline">{{ l.loja.nome }}</strong>{% if l.loja.pdv_vivo %}<small style="display:block">{{ l.loja.pdv_vivo }}</small>{% endif %}
+                    <div class="gm-divide">{% if pode_editar %}<button type="button" class="gm-botao pequeno" data-dividir title="Grava a meta da loja e a divide entre os consultores do Quadro de HC (100%, 80% ou 60%)" aria-label="Salvar e dividir a meta da {{ l.loja.nome }}"><i class="fas fa-floppy-disk"></i>Salvar</button>{% endif %}
+                    <small data-divisao-resumo title="{% for d in l.divisao %}{{ d.colaborador_nome }} ({{ d.percentual }}%): {% if p.fixa %}{{ d.meta|num }}{% else %}{{ d.meta|num:2 }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}">{% if l.divisao %}<i class="fas fa-users"></i> ÷ {{ l.divisao|length }} consultor{{ l.divisao|length|pluralize:"es" }}{% endif %}</small></div></td>
                 <td data-rot="Real {{ rotulo_ano }}">{% if p.fixa %}{{ l.real_ano_anterior|num }}{% else %}{{ l.real_ano_anterior|num }}{% endif %}</td>
                 {% for v in l.meses %}<td data-rot="{{ rotulos_quad|item:forloop.counter0 }}" class="{% if forloop.first %}sep {% endif %}{% if not forloop.last %}sem-celular{% endif %}"{% if p.fixa %} title="TV {{ l.meses_tv|item:forloop.counter0|num }} · Fixa {{ l.meses_fixa|item:forloop.counter0|num }} · R$ {{ l.meses_valor|item:forloop.counter0|num:2 }}"{% endif %}>{{ v|num }}</td>{% endfor %}
                 <td data-rot="Média quad" class="destaque">{% if p.fixa %}{{ l.media_quad|num:1 }}{% else %}{{ l.media_quad|num }}{% endif %}</td>
@@ -133,5 +136,5 @@
 </section>
 {% endfor %}
 </div>
-<script src="{% static 'gestao_metas/gestao_metas.js' %}?v=1"></script>
+<script src="{% static 'gestao_metas/gestao_metas.js' %}?v=2"></script>
 {% endblock %}

@@ -1,6 +1,7 @@
 from django.contrib import admin
 
-from .models import AcessoGestaoMetas, Competencia, HistoricoMeta, ImportacaoMetas, LojaMeta, MetaLoja, Realizado
+from .models import (AcessoGestaoMetas, Competencia, HistoricoMeta, ImportacaoMetas, LojaMeta, MetaConsultor,
+                     MetaLoja, Realizado)
 
 
 @admin.register(AcessoGestaoMetas)
@@ -40,3 +41,10 @@ class HistoricoMetaAdmin(admin.ModelAdmin):
 class ImportacaoMetasAdmin(admin.ModelAdmin):
     list_display = ('criado_em', 'tipo', 'status', 'arquivo_nome', 'competencia')
     exclude = ('dados',)
+
+
+@admin.register(MetaConsultor)
+class MetaConsultorAdmin(admin.ModelAdmin):
+    list_display = ('competencia', 'loja', 'pilar', 'colaborador_nome', 'percentual', 'meta', 'meta_loja', 'gerado_em')
+    list_filter = ('competencia', 'pilar')
+    raw_id_fields = ('colaborador', 'gerado_por')

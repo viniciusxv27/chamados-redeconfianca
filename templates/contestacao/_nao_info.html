@@ -1,0 +1,4 @@
+<div class="rounded-md border border-gray-300 bg-gray-50 px-2 py-1 text-gray-700">
+    <span class="font-semibold"><i class="fas fa-hand mr-1"></i>Não:</span> {{ resp.justificativa }}
+    <span class="block text-gray-500">por {{ resp.preenchido_por.full_name|default:"—" }} em {{ resp.atualizado_em|date:"d/m H:i" }}{% if not contestation_blocked %} · <button type="button" class="underline hover:text-gray-800" onclick="desfazerNao({{ resp.exclusion_id }})">desfazer</button>{% endif %}</span>
+</div>

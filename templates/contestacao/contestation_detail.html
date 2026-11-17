@@ -19,6 +19,11 @@
             <div>
                 <h1 class="text-lg font-bold text-gray-900">Contestação #{{ c.pk }}</h1>
                 <p class="text-sm text-gray-600">Criada em {{ c.created_at|date:"d/m/Y H:i" }} por {{ c.requester.full_name }}</p>
+                {% if c.preenchido_por and c.preenchido_por_id != c.requester_id or c.enviado_por and c.enviado_por_id != c.requester_id %}
+                <p class="text-xs text-gray-500 mt-0.5">
+                    {% if c.preenchido_por %}Preenchida por {{ c.preenchido_por.full_name }}{% endif %}{% if c.preenchido_por and c.enviado_por %} · {% endif %}{% if c.enviado_por %}enviada por {{ c.enviado_por.full_name }}{% endif %}
+                </p>
+                {% endif %}
             </div>
             <div class="flex items-center gap-2 flex-wrap">
                 {% if c.status == 'pending' %}
@@ -151,7 +156,7 @@
         {% endif %}
 
         <!-- Ação: Gerente confirma/nega (aprovação) -->
-        {% if c.status == 'accepted' and c.requester == request.user %}
+        {% if c.status == 'accepted' and de_acordo_meu %}
         <div class="px-5 py-4 bg-blue-50 space-y-3">
             <h3 class="text-xs uppercase font-semibold text-blue-700 mb-2"><i class="fas fa-info-circle mr-1"></i> Gestor aprovou — dê o de acordo ou negue</h3>
             <input type="text" id="conf-notes" placeholder="Observação (opcional)"
@@ -176,7 +181,7 @@
         {% endif %}
 
         <!-- Ação: Gerente confirma/nega (rejeição) -->
-        {% if c.status == 'rejected' and not c.confirmed_by and c.requester == request.user %}
+        {% if c.status == 'rejected' and not c.confirmed_by and de_acordo_meu %}
         <div class="px-5 py-4 bg-red-50 space-y-3">
             <h3 class="text-xs uppercase font-semibold text-red-700 mb-2"><i class="fas fa-exclamation-circle mr-1"></i> Gestor rejeitou — dê o de acordo ou negue</h3>
             <input type="text" id="conf-notes" placeholder="Observação (opcional)"

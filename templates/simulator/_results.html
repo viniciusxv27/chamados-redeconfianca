@@ -46,7 +46,11 @@ cálculo pesado: cards do usuário + tabelas de comissionamento por papel.
       <div class="flex items-center justify-between">
         <div class="min-w-0 flex-1">
           <p class="text-xs sm:text-sm text-gray-600">Coordenador</p>
+          {% if simulation.coordenador_exibido %}
+          <p class="text-base sm:text-lg md:text-xl font-bold text-gray-900 truncate" title="{{ simulation.coordenador_exibido_completo }}">{{ simulation.coordenador_exibido }}</p>
+          {% else %}
           <p class="text-base sm:text-lg md:text-xl font-bold text-gray-900 truncate">{{ simulation.coordinator|default:"—"|first_word }}</p>
+          {% endif %}
         </div>
         <i class="fas fa-user-tie text-primary text-lg sm:text-xl md:text-2xl opacity-20 flex-shrink-0"></i>
       </div>

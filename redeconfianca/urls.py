@@ -158,6 +158,7 @@ urlpatterns = [
     path('reports/', include('core.reports_urls')),  # Sistema de denúncias
     path('groups/', include('core.group_urls')),  # Sistema de gerenciamento de grupos
     path('', include('core.urls')),  # Inclui marketplace, dashboard, training
+    path('api/mobile/v1/', include('api_mobile.urls')),  # app mobile (Expo)
     path('api/', include(router.urls)),
     path('api/public/', include(public_router.urls)),  # APIs públicas para produção
     path('api-auth/', include('rest_framework.urls')),

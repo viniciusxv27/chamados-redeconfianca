@@ -13,6 +13,7 @@ urlpatterns = [
     path('acessos/', views.acessos, name='acessos'),
     path('<str:codigo>/', views.competencia, name='competencia'),
     path('<str:codigo>/salvar/', views.salvar, name='salvar'),
+    path('<str:codigo>/dividir/', views.dividir, name='dividir'),
     path('<str:codigo>/preencher/', views.preencher, name='preencher'),
     path('<str:codigo>/fechar/', views.fechar, name='fechar'),
     path('<str:codigo>/excel/', views.baixar_excel, name='excel'),

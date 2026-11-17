@@ -418,6 +418,8 @@ t('contestada procedente sai como Procedente sem motivo', por_venda.get('108', {
   and por_venda['108']['Motivo Reprovação(**)'] == '')
 t('valores incorretos: Valor Plano ajustado para 30,00', por_venda.get('101', {}).get('Valor Plano(**)') == '30,00')
 t('Serviço(*) sai como o Serviço_Técnico da venda', por_venda['101']['Serviço(*)'] == 'Alta Controle')
+t('ID Serviço fica logo depois de ID Venda e traz o ID do serviço', cab.index('ID Serviço') == cab.index('ID Venda') + 1
+  and por_venda['101']['ID Serviço'] == 'S2')
 resumo = json.loads(unquote(r['X-Resumo']))
 t('linha incorreta fica fora do arquivo e vai para os manuais', '102' not in por_venda and any(m['id_venda'] == '102' for m in resumo['manuais']))
 t('resumo marca a contestada', any(x.get('contestada') for x in resumo['incluidas']))

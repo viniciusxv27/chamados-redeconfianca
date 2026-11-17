@@ -184,7 +184,7 @@ html.dark .fb-novo { color: #A5B4FC; }
           <td data-label="Valor" class="num valor">R$ {{ f.valor|floatformat:"2g" }}</td>
           <td data-label="Vendedor / PDV" style="font-size:12px">{{ f.vendedor }}<span class="sub">{{ f.pdv }}</span></td>
           <td data-label="Data" style="font-size:12px;white-space:nowrap">{{ f.data_da_venda|date:"d/m/Y" }}</td>
-          <td data-label="Agendamento" style="font-size:12px;white-space:nowrap">{{ f.data_agendamento|date:"d/m/Y"|default:"—" }}</td>
+          <td data-label="Agendamento" style="font-size:12px;white-space:nowrap">{% if fb_pode.status_alterar %}<input type="date" class="fb-ag-input" value="{{ f.data_agendamento|date:'Y-m-d' }}" data-mudar-agenda data-antes="{{ f.data_agendamento|date:'Y-m-d' }}" min="2000-01-01" max="2100-12-31" aria-label="Agendamento da venda {{ f.numero_da_venda }}" title="Data de agendamento (vazio limpa)" style="font-size:12px;padding:2px 4px;border:1px solid var(--fb-borda,#d1d5db);border-radius:6px;background:transparent;color:inherit">{% else %}{{ f.data_agendamento|date:"d/m/Y"|default:"—" }}{% endif %}</td>
           <td data-label="Status" class="centro cel-status">{% if fb_pode.status_alterar %}<select class="fb-st-select" data-st="{{ f.status }}" data-mudar-status aria-label="Status da venda {{ f.numero_da_venda }}">{% for k, l in status_choices %}<option value="{{ k }}" {% if k == f.status %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>{% else %}<span class="st-pill" data-st="{{ f.status }}">{{ f.get_status_display }}</span>{% endif %}{% if f.status_manual %}<span class="sub fb-manual" title="Status definido à mão: a importação da Esteira não troca{% if f.status_esteira and f.status_esteira != f.status %} (a Esteira diz: {{ f.status_planilha_raw }}){% endif %}"><i class="fas fa-hand" aria-hidden="true"></i> manual</span>{% endif %}{% if f.coluna == 'nao_localizado' %}<span class="sub" title="Fora da última planilha: no kanban fica na coluna Não localizado">não localizado</span>{% endif %}</td>
           <td data-label="Retorno Myrella" class="retorno cel-retorno" title="{{ f.retorno_myrella }}">{{ f.retorno_myrella|truncatechars:60 }}</td>
           <td class="num cel-acao"><a href="{% url 'fibras:detail' f.pk %}" class="fb-abrir">Abrir <i class="fas fa-arrow-right" aria-hidden="true"></i></a></td>
@@ -209,6 +209,8 @@ html.dark .fb-novo { color: #A5B4FC; }
 {% include 'fibras/_fb_comum.html' %}
 <span id="fbCsrf" hidden data-token="{{ csrf_token }}"></span>
 {% url 'fibras:change_status_ajax' 0 as url_status_modelo %}
+{% url 'fibras:change_agendamento_ajax' 0 as url_agenda_modelo %}
+<span id="fbUrlAgenda" hidden data-url="{{ url_agenda_modelo }}"></span>
 <span id="fbUrlStatus" hidden data-url="{{ url_status_modelo }}"></span>
 <script>
 (function () {
@@ -307,9 +309,28 @@ html.dark .fb-novo { color: #A5B4FC; }
       .then(function () { sel.disabled = false; });
   });
 
+  /* Agendamento na própria linha: grava ao escolher a data (vazio limpa). */
+  var urlAgenda = (document.getElementById('fbUrlAgenda') || { dataset: {} }).dataset.url || '';
+  tbody.addEventListener('change', function (e) {
+    var inp = e.target.closest('[data-mudar-agenda]'); if (!inp) return;
+    var tr = inp.closest('tr[data-pk]'), antes = inp.dataset.antes || '';
+    inp.disabled = true;
+    var corpo = new FormData(); corpo.append('data_agendamento', inp.value);
+    fetch(urlAgenda.replace(/\/0\/agendamento\/ajax\/$/, '/' + tr.dataset.pk + '/agendamento/ajax/'), {
+      method: 'POST', body: corpo, credentials: 'same-origin', headers: { 'X-CSRFToken': FB.csrf() || tokenCsrf, 'X-Requested-With': 'XMLHttpRequest' }
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok && j.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) throw new Error(res.j.error || 'Não foi possível gravar o agendamento.');
+        inp.value = inp.dataset.antes = res.j.data_agendamento; tr.dataset.agenda = res.j.data_agendamento;
+        FB.toast('Venda ' + tr.dataset.venda + ': agendamento ' + (res.j.data_agendamento_fmt || 'removido') + '.', true);
+      })
+      .catch(function (err) { inp.value = antes; FB.toast(err.message, false); })
+      .then(function () { inp.disabled = false; });
+  });
+
   /* Linha inteira abre a fibra (o link "Abrir" continua sendo o alvo acessível) */
   tbody.addEventListener('click', function (e) {
-    if (e.target.closest('a, button, select')) return;
+    if (e.target.closest('a, button, select, input')) return;
     var tr = e.target.closest('tr[data-url]');
     if (tr && !(window.getSelection && String(window.getSelection()))) window.location.href = tr.dataset.url;
   });

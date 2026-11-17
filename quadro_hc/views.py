@@ -182,6 +182,14 @@ def previsto(request, dados):
     return JsonResponse({'ok': True, 'msg': f'HC previsto salvo: {total} pessoa(s).' if total else 'HC previsto zerado.'})
 
 
+@_api
+def meta_proporcional(request, dados):
+    """Select "Meta" do consultor: 100%, 80% ou 60% da meta cheia (usado ao dividir a meta da loja)."""
+    m = servicos.salvar_meta_proporcional(dict(dados), request.user)
+    nome = servicos.nome_completo(m.colaborador)
+    return JsonResponse({'ok': True, 'percentual': m.percentual, 'msg': f'{nome}: {m.get_percentual_display()}.'})
+
+
 @login_required
 def acessos(request):
     """SUPERADMIN escolhe quem vê e quem gerencia o quadro."""

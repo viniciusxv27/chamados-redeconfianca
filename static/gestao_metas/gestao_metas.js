@@ -215,6 +215,78 @@
       if (prox) { prox.focus(); if (prox.select) prox.select(); }
     });
   });
+  // ---------- Botão Salvar da linha: grava a meta e divide entre os consultores do Quadro de HC ----------
+  var urlDividir = tela.dataset.urlDividir;
+  function escapar(t) {
+    return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function retorno(painel, html, classe) {
+    var box = painel.querySelector('[data-divisao-retorno]');
+    if (!box) return;
+    box.className = 'gm-aviso ' + (classe || 'ok');
+    box.innerHTML = html;
+    box.hidden = false;
+  }
+  tela.querySelectorAll('[data-dividir]').forEach(function (botao) {
+    botao.addEventListener('click', function () {
+      var tr = botao.closest('tr');
+      var painel = botao.closest('.gm-painel');
+      var nomeLoja = tr.querySelector('.loja strong').textContent;
+      var campos = {};
+      tr.querySelectorAll('.gm-entrada').forEach(function (e) { campos[e.dataset.campo] = e.value; });
+      botao.disabled = true;
+      pendentes += 1;
+      aviso(painel, 'Salvando e dividindo a meta da ' + nomeLoja + '…', 'salvando');
+      fetch(urlDividir, {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf, 'Accept': 'application/json' },
+        body: JSON.stringify({ loja: tr.dataset.loja, pilar: painel.dataset.pilar, campos: campos })
+      }).then(function (r) {
+        return r.json().catch(function () { return { ok: false, erro: 'Resposta inválida (' + r.status + ').' }; });
+      }).then(function (resp) {
+        pendentes -= 1;
+        botao.disabled = false;
+        var l = resp.linha || {};
+        if (painel.dataset.pilar === 'fixa' && tr._fixa && resp.linha) {
+          tr.querySelector('[data-c=nova_meta]').textContent = br(l.nova_meta);
+          tr._fixa.nova_meta = l.nova_meta;
+          comparar(tr, l.nova_meta);
+          recalcularTotais(painel);
+        }
+        if (!resp.ok) {
+          aviso(painel, resp.erro || 'Não salvou.', 'erro');
+          retorno(painel, '<i class="fas fa-triangle-exclamation" style="margin-top:2px"></i><span><strong>' +
+            escapar(nomeLoja) + ':</strong> ' + escapar(resp.erro || 'Não salvou.') + '</span>', 'erro');
+          return;
+        }
+        var d = resp.divisao;
+        var casas = d.casas;
+        var itens = d.itens.map(function (it) {
+          return '<li>' + escapar(it.nome) + ' <small>(' + it.percentual + '%)</small>: <strong>' + br(it.meta, casas) + '</strong></li>';
+        }).join('');
+        var extra = '';
+        if (d.qtd_cns != null && d.qtd_cns !== d.n) {
+          extra = ' <em>Atenção: a linha diz ' + d.qtd_cns + ' CN' + (d.qtd_cns === 1 ? '' : 's') + ' e o Quadro de HC tem ' + d.n + '.</em>';
+        }
+        retorno(painel, '<i class="fas fa-users" style="margin-top:2px"></i><div><strong>' + escapar(resp.loja_nome) + ' · ' +
+          escapar(resp.pilar_nome) + ':</strong> ' + br(d.total, casas) + ' dividido entre ' + d.n + ' consultor' +
+          (d.n === 1 ? '' : 'es') + ' (base ' + br(d.base, 2) + ').' + extra + '<ul class="gm-divisao-lista">' + itens + '</ul></div>', 'ok');
+        var resumo = tr.querySelector('[data-divisao-resumo]');
+        if (resumo) {
+          resumo.innerHTML = '<i class="fas fa-users"></i> ÷ ' + d.n + ' consultor' + (d.n === 1 ? '' : 'es');
+          resumo.title = d.itens.map(function (it) { return it.nome + ' (' + it.percentual + '%): ' + br(it.meta, casas); }).join(' · ');
+        }
+        if (!pendentes) aviso(painel, 'Tudo salvo às ' + resp.salvo_em + '.', '');
+      }).catch(function () {
+        pendentes -= 1;
+        botao.disabled = false;
+        aviso(painel, 'Sem conexão: a meta não foi dividida. Tente de novo.', 'erro');
+      });
+    });
+  });
+
   window.addEventListener('beforeunload', function (ev) {
     if (pendentes > 0) { ev.preventDefault(); ev.returnValue = ''; }
   });

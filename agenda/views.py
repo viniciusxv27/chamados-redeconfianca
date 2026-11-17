@@ -2503,16 +2503,27 @@ def _montar_e_transcrever(t, client, salvar, salvar_progresso, partes_novas, per
 
 
 def _analisar_e_concluir(t, client, texto, salvar):
+    from . import tarefas as tarefas_reuniao
+
     t.etapa = 'analise'
     salvar('etapa')
-    analysis = _generate_transcription_analysis(
-        client, t.title, texto, analysis_context=_build_participant_roles_context(t.participant_roles))
+    contexto = _build_participant_roles_context(t.participant_roles)
+    # Etapa só de tarefas (agenda/tarefas.py), em paralelo com a análise geral:
+    # percorre a transcrição inteira em pedaços. Se falhar, valem as ações da análise.
+    extracao = tarefas_reuniao.ExtracaoEmParalelo(
+        client, t.title, texto, timezone.localdate(t.created_at) if t.created_at else None, contexto)
+    try:
+        analysis = _generate_transcription_analysis(client, t.title, texto, analysis_context=contexto)
+    except BaseException:
+        extracao.abandonar()
+        raise
 
     t.formatted_transcription = analysis['formatted_transcription']
     t.summary = analysis['summary']
     t.sections = analysis['sections']
     t.key_decisions = analysis['key_decisions']
-    t.action_items = analysis['action_items']
+    t.action_items = tarefas_reuniao.tarefas_da_reuniao(
+        analysis['action_items'], extracao, rotulo=f'Transcrição {t.pk}')
     t.participants_identified = analysis['participants_identified']
     t.sentiment = analysis['sentiment']
     t.meeting_type_detected = analysis['meeting_type_detected']
@@ -2531,7 +2542,7 @@ def _analisar_e_concluir(t, client, texto, salvar):
                                     default=str).encode()).hexdigest()
     if (t.progresso or {}).get('tarefas_de') != marca:
         with transaction.atomic():
-            t.tasks_created.clear()
+            # Troca as tarefas antigas que ninguém tocou; as mexidas ficam (sem duplicar).
             _create_tasks_from_transcription(t, t.owner)
             t.progresso = {**(t.progresso or {}), 'tarefas_de': marca}
             salvar('progresso')
@@ -2582,45 +2593,10 @@ def _prioritize_processing_transcriptions(api_key=None, exclude_id=None, limit=2
 
 
 def _create_tasks_from_transcription(transcription, user):
-    """Cria TaskActivity para cada action_item da transcrição."""
-    from core.models import TaskActivity
+    """Cria TaskActivity para cada action_item da transcrição (regra em agenda/tarefas.py)."""
+    from .tarefas import criar_tarefas_da_transcricao
 
-    PRIORITY_MAP = {
-        'high': 'HIGH',
-        'medium': 'MEDIUM',
-        'low': 'LOW',
-    }
-
-    action_items = transcription.action_items or []
-    for item in action_items:
-        task_text = item.get('task', '') if isinstance(item, dict) else str(item)
-        if not task_text:
-            continue
-
-        priority = 'MEDIUM'
-        deadline = None
-        if isinstance(item, dict):
-            priority = PRIORITY_MAP.get(item.get('priority', ''), 'MEDIUM')
-            deadline_str = item.get('deadline')
-            if deadline_str:
-                try:
-                    deadline = datetime.fromisoformat(deadline_str)
-                except (ValueError, TypeError):
-                    deadline = None
-
-        task = TaskActivity.objects.create(
-            title=task_text[:200],
-            description=(
-                f"Tarefa gerada automaticamente da transcrição: {transcription.title}\n\n"
-                f"Responsável mencionado: {item.get('responsible', 'A definir') if isinstance(item, dict) else 'A definir'}"
-            ),
-            assigned_to=user,
-            created_by=user,
-            priority=priority,
-            due_date=deadline,
-            status='PENDING',
-        )
-        transcription.tasks_created.add(task)
+    return criar_tarefas_da_transcricao(transcription, user)
 
 
 @login_required
@@ -2660,12 +2636,34 @@ def _contexto_impulso(user, tasks):
 
     if not tasks or not is_impulso_member(user):
         return {'impulso_disponivel': False}
+    from impulso.models import Meta
+    from impulso.utils import get_adms_lojas, get_colaboradores
+
     vivas = importacao.importacoes_vivas(user, [task.pk for task in tasks])
+    sou_gestor = is_impulso_manager(user)
+    # "Enviar para o Impulso de <pessoa>": abre o formulário de meta do Impulso
+    # preenchido. Para quem dá para criar segue a tela de lá — o gestor cria
+    # para qualquer colaborador; os demais, para quem é de ADM's LOJAS.
+    para_ids = set((get_colaboradores() if sou_gestor else get_adms_lojas())
+                   .exclude(id=user.id).values_list('id', flat=True))
+    # Meta que a tarefa já virou no Impulso do responsável (não recusada).
+    de_outros = {}
+    outros = [t for t in tasks if t.assigned_to_id and t.assigned_to_id != user.id]
+    if outros:
+        for meta in (Meta.objects
+                     .filter(tarefa_origem_id__in=[t.pk for t in outros],
+                             colaborador_id__in={t.assigned_to_id for t in outros})
+                     .exclude(aprovacao=Meta.Aprovacao.RECUSADA)
+                     .order_by('-id')):
+            de_outros.setdefault((meta.tarefa_origem_id, meta.colaborador_id), meta)
     for task in tasks:
         task.meta_impulso = vivas.get(task.pk)
+        task.meta_impulso_responsavel = de_outros.get((task.pk, task.assigned_to_id))
+        task.impulso_para_responsavel = task.assigned_to_id in para_ids
     return {
         'impulso_disponivel': True,
-        'impulso_sou_gestor': is_impulso_manager(user),
+        'impulso_para_ids': sorted(para_ids),
+        'impulso_sou_gestor': sou_gestor,
         'impulso_gestores': list(importacao.gestores_para(user)),
         'impulso_hoje': timezone.localdate(),
     }

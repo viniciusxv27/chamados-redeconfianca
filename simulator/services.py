@@ -1904,6 +1904,56 @@ def get_gerente_de_vendas_do_setor(user) -> Optional[User]:
     return candidatos[0]
 
 
+COORDENADOR_DE_VENDAS = 'COORDENADOR DE VENDAS'
+
+
+def coordenadores_de_vendas_da_loja(sector) -> List[User]:
+    """Quem tem cargo COORDENADOR DE VENDAS (ativo) e cobre esta loja — só para EXIBIR na tela.
+
+    Ninguém da coordenação tem a loja como setor principal (ficam em Comercial/Escritório) e o
+    M2M ``sectors`` tem lojas antigas e, no Escritório, quase todas. Então, do mais forte ao
+    mais fraco, vale o primeiro grupo não vazio:
+      1. setor principal = a loja;
+      2. a loja no M2M ``sectors`` E na carteira de /simulator/admin/stores/;
+      3. a loja só na carteira;
+      4. a loja só no M2M.
+    Mais de um no mesmo grupo: todos, em ordem alfabética. Não mexe no cálculo da coordenação.
+    """
+    if not sector or 'loja' not in (getattr(sector, 'name', '') or '').lower():
+        return []
+    # O banco só pré-filtra; quem decide é o cargo normalizado (espaços e caixa).
+    candidatos = [c for c in User.objects.filter(is_active=True, job_title__icontains='COORDENADOR')
+                  .prefetch_related('sectors') if COORDENADOR_DE_VENDAS in _cargo(c)]
+    if not candidatos:
+        return []
+    na_carteira = set(CoordinatorStoreAccess.objects.filter(
+        coordinator__in=candidatos, sectors=sector).values_list('coordinator_id', flat=True))
+    no_m2m = {c.pk for c in candidatos if any(s.pk == sector.pk for s in c.sectors.all())}
+    grupos = (
+        {c.pk for c in candidatos if c.sector_id == sector.pk},
+        no_m2m & na_carteira,
+        na_carteira,
+        no_m2m,
+    )
+    for grupo in grupos:
+        if grupo:
+            escolhidos = [c for c in candidatos if c.pk in grupo]
+            return sorted(escolhidos, key=lambda c: (normalize_text(c.get_full_name() or c.email), c.pk))
+    return []
+
+
+def coordenador_para_exibir(user) -> Tuple[str, str]:
+    """(primeiros nomes, nomes completos) dos coordenadores de vendas da loja de ``user``.
+
+    Vazio quando a loja não tem — a tela segue com a coordenação do cálculo.
+    """
+    coords = coordenadores_de_vendas_da_loja(getattr(user, 'sector', None))
+    coords = [c for c in coords if c.pk != getattr(user, 'pk', None)]
+    curto = ', '.join((c.first_name or c.get_full_name() or c.email).split(' ')[0] for c in coords)
+    completo = ', '.join(c.get_full_name() or c.email for c in coords)
+    return curto, completo
+
+
 def meta_fixa_da_coordenacao(realized, projection, coord_name) -> float:
     """Meta de FIXA da coordenação em QUANTIDADE: soma das metas oficiais das lojas dela.
 
@@ -1960,6 +2010,10 @@ def compute_gerente_simulation(
         if isinstance(totais.get(campo), (int, float)):
             totais[campo] = totais[campo] * taxa
     sim.update({
+        # A conta é a do gerente de vendas, mas a tela é de quem foi selecionado: sem isto o
+        # card "Usuário" mostrava o gerente de vendas da loja (17/11/2026).
+        'user_name': user.get_full_name() or user.first_name or user.email,
+        'first_name': user.first_name or (user.get_full_name() or user.email).split(' ')[0],
         'is_gerente_operacional': True,
         'gerente_de_vendas_base': f"{base.get_full_name() or base.email} ({' '.join((base.job_title or '').split())})",
         'percentual_operacional': taxa,

@@ -12,7 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .models import Fibra, FibraIncidente, FibraChat, FibraChatMessage
+from .models import Fibra, FibraIncidente, FibraChat, FibraChatMessage, FibraStatusHistory
 from .permissoes import exige, fibras_visiveis, pode
 from .services import change_status, import_planilha_xlsx, sync_fibras
 
@@ -318,6 +318,42 @@ def change_status_ajax(request, pk: int):
         'pk': fibra.pk,
         'status': fibra.status,
         'status_label': fibra.get_status_display(),
+    })
+
+
+@login_required
+@exige('status.alterar')
+@require_POST
+def change_agendamento_ajax(request, pk: int):
+    """Edita a data de agendamento na própria linha da lista (mesma permissão de mudar o status).
+
+    Vazio limpa a data. Fica no histórico da venda; a próxima importação/cruzamento da Esteira
+    volta a gravar a DATA_AGENDA dela por cima.
+    """
+    from datetime import date as _date
+    fibra = get_object_or_404(fibras_visiveis(request.user), pk=pk)
+    bruto = (request.POST.get('data_agendamento') or '').strip()
+    nova = None
+    if bruto:
+        try:
+            nova = _date.fromisoformat(bruto)
+        except ValueError:
+            return JsonResponse({'ok': False, 'error': 'Data de agendamento inválida.'}, status=400)
+        if not (2000 <= nova.year <= 2100):
+            return JsonResponse({'ok': False, 'error': 'Data de agendamento fora do intervalo aceito.'}, status=400)
+    antiga = fibra.data_agendamento
+    if nova != antiga:
+        fibra.data_agendamento = nova
+        fibra.save(update_fields=['data_agendamento', 'last_synced_at'])
+        fmt = lambda d: d.strftime('%d/%m/%Y') if d else 'sem data'  # noqa: E731
+        FibraStatusHistory.objects.create(
+            fibra=fibra, status_anterior=fibra.status, status_novo=fibra.status, alterado_por=request.user,
+            retorno=f'Agendamento alterado na lista: {fmt(antiga)} para {fmt(nova)}')
+    return JsonResponse({
+        'ok': True,
+        'pk': fibra.pk,
+        'data_agendamento': nova.isoformat() if nova else '',
+        'data_agendamento_fmt': nova.strftime('%d/%m/%Y') if nova else '',
     })
 
 

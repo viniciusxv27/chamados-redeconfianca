@@ -61,6 +61,9 @@ from auditoria_sap.models import (LinhaAuditoria, MarcacaoAuditoria,
 from auditoria_sap.permissions import e_gestor, pode_ver
 from users.models import Sector
 
+# 17/11/2026: a leitura também traz as vendas do Vivo GO sem SAP (teste_sap_nao_lancadas_sem_nf.py); aqui, nenhuma.
+mock.patch.object(mysql, 'ler_vendas_sem_sap', return_value=[]).start()
+
 User = get_user_model()
 D = Decimal
 ok = fail = 0
@@ -483,7 +486,9 @@ try:
     valor = linha_tipo('zz-tipo-valor-0000000001', 'VALOR', D('25.40'))
     produto = linha_tipo('zz-tipo-produto-00000002', 'PRODUTO', D('3.00'))
     serial = linha_tipo('zz-tipo-serial-000000003', 'SERIAL ERRADO NO VIVO GO')
-    grande = linha_tipo('zz-valor-grande-00000003', 'SEM NF', D('25.40'))   # usada adiante, no aviso ao gestor
+    # usada adiante, no aviso ao gestor. Venda própria (…000005): na mesma venda do serial, o SEM NF
+    # passaria na frente e levaria o serial para a aba Sem NF (regra de 17/11/2026).
+    grande = linha_tipo('zz-valor-grande-00000005', 'SEM NF', D('25.40'))
     ausente = linha_tipo('zz-tipo-ausente-00000004', 'SERIAL AUSENTE NO VIVO GO')
     todas_ids = {l.pk for l in c.get('/sap/?grupo=todos&situacao=todas').context['pagina'].paginator.object_list}
     t('valor, produto e os outros tipos saem da tela', valor.pk not in todas_ids and produto.pk not in todas_ids)

@@ -27,7 +27,7 @@ from .formato import doc_vivogo, linha_vivogo, valor_vivogo
 MODELO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "modelo_importacao_ged.csv")
 
 COLUNAS_PADRAO = [
-    "Filial", "Data Venda(*)", "Data Ativação(**)", "Status BKO(*)(**)", "Serviço(*)", "ID Venda", "Modelo", "IMEI",
+    "Filial", "Data Venda(*)", "Data Ativação(**)", "Status BKO(*)(**)", "Serviço(*)", "ID Venda", "ID Serviço", "Modelo", "IMEI",
     "Plano", "Valor Plano(**)", "Plano Antigo", "Valor Plano Antigo(**)", "Vencimento Fatura(**)", "Vendedor", "Cliente",
     "CPF/CNPJ", "Nº Acesso(*)", "Nº Portado", "Servico Instalado", "Data Agendada de Instalação", "Armário",
     "Data de Instalação", "Situação do serviço(**)", "Receita", "Status GED", "Sim Card", "COD", "Fidelização",
@@ -142,7 +142,7 @@ def linha_base(v):
     return {
         "Filial": v["pdv"], "Data Venda": _data(v["data_venda"]), "Data Ativação": _data(v["data_ativacao"]),
         "Status BKO": v["status_bko"] or "Não avaliado", "Serviço": (v["servico"] or "").strip() or servico_vivogo(v),
-        "ID Venda": v["id_venda"],
+        "ID Venda": v["id_venda"], "ID Serviço": v["id_servico"],
         "Modelo": "", "IMEI": "", "Plano": v["plano"] or "", "Valor Plano": _num(v["valor_plano"]),
         "Plano Antigo": v["plano_antigo"] or "-", "Valor Plano Antigo": _num(v["valor_plano_antigo"]),
         "Vencimento Fatura": v["vencimento"] or "", "Vendedor": v["vendedor"] or "", "Cliente": v["cliente"] or "",

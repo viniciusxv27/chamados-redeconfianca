@@ -36,7 +36,8 @@
             {% for a in inativados %}
             <li class="p-4 space-y-3 text-sm">
                 <div><a href="{% url 'acess:ficha' a.colaborador_id %}" class="font-semibold hover:text-amber-700">{{ a.colaborador.nome }}</a>
-                    <span class="text-[11px] text-gray-500">· {{ a.colaborador.local.name|default:"sem local" }}{% if a.colaborador.login %} · login {{ a.colaborador.login }}{% endif %} · inativado no portal em {{ a.inativado_em|date:"d/m/Y H:i" }}</span></div>
+                    <span class="text-[11px] text-gray-500">· {{ a.colaborador.local.name|default:"sem local" }}{% if a.colaborador.login %} · login {{ a.colaborador.login }}{% endif %} · inativado no portal em {{ a.inativado_em|date:"d/m/Y H:i" }}</span>
+                    {% with dem=a.user.demission_date|default:a.colaborador.user.demission_date %}<span class="text-[11px] font-semibold text-gray-700" data-demissao>· data de demissão: {% if dem %}{{ dem|date:"d/m/Y" }}{% else %}<span class="font-normal text-gray-400">não informada</span>{% endif %}</span>{% endwith %}</div>
                 <div class="grid sm:grid-cols-3 gap-2">
                     <form method="post" action="{% url 'acess:inativacao_decidir' a.id %}" class="space-y-1.5 rounded-lg border border-gray-100 p-2" onsubmit="return confirm('Desligar {{ a.colaborador.nome|escapejs }} hoje?')">
                         {% csrf_token %}<input type="hidden" name="decisao" value="imediato"><input type="hidden" name="voltar" value="{{ request.get_full_path }}">

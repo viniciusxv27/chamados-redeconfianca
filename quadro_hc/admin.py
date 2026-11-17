@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Carteira, MovimentacaoHC, ObservacaoHC, VagaHC
+from .models import Carteira, MetaProporcional, MovimentacaoHC, ObservacaoHC, VagaHC
 
 
 @admin.register(Carteira)
@@ -18,3 +18,10 @@ class MovimentacaoHCAdmin(admin.ModelAdmin):
 
 admin.site.register(ObservacaoHC)
 admin.site.register(VagaHC)
+
+
+@admin.register(MetaProporcional)
+class MetaProporcionalAdmin(admin.ModelAdmin):
+    list_display = ('colaborador', 'percentual', 'atualizado_por', 'atualizado_em')
+    list_filter = ('percentual',)
+    raw_id_fields = ('colaborador', 'atualizado_por')

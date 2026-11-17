@@ -1,0 +1,6 @@
+{% comment %}Select "Meta" do consultor (100/80/60% da meta cheia): o Gerenciamento de metas usa ao dividir a meta da loja.{% endcomment %}
+{% if p.e_consultor %}<select class="meta-pct{% if p.meta_pct != 100 %} reduzida{% endif %}" data-meta-pct="{{ p.id }}" data-valor="{{ p.meta_pct }}" aria-label="Meta de {{ p.nome }}" title="Meta do consultor: usada ao dividir a meta da loja no Gerenciamento de metas" {% if not pode_gerenciar %}disabled{% endif %}>
+  <option value="100" {% if p.meta_pct == 100 %}selected{% endif %}>Meta de 100%</option>
+  <option value="80" {% if p.meta_pct == 80 %}selected{% endif %}>Meta de 80%</option>
+  <option value="60" {% if p.meta_pct == 60 %}selected{% endif %}>Meta de 60%</option>
+</select>{% endif %}

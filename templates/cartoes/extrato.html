@@ -43,25 +43,25 @@
 
     <!-- Números + gráficos -->
     <div class="lg:col-span-2 flex flex-col gap-4">
-      <div class="grid grid-cols-2 xl:grid-cols-4 gap-3">
-        <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+      <div class="grid grid-cols-2 2xl:grid-cols-4 gap-3">
+        <div class="min-w-0 overflow-hidden bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
           <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Total</p>
-          <p class="text-xl xl:text-2xl font-bold text-gray-900 mt-1 tabular-nums whitespace-nowrap">{{ total|brl_zero }}</p>
+          <p class="text-lg sm:text-xl font-bold text-gray-900 mt-1 tabular-nums break-words leading-tight">{{ total|brl_zero }}</p>
           <p class="text-[11px] text-gray-400 mt-0.5">{% if inicio or fim %}{{ inicio|date:"d/m/Y"|default:"início" }} a {{ fim|date:"d/m/Y"|default:"hoje" }}{% else %}todo o histórico{% endif %}</p>
         </div>
-        <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+        <div class="min-w-0 overflow-hidden bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
           <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Lançamentos</p>
-          <p class="text-2xl font-bold text-gray-900 mt-1 tabular-nums">{{ quantidade }}</p>
+          <p class="text-xl sm:text-2xl font-bold text-gray-900 mt-1 tabular-nums">{{ quantidade }}</p>
           <p class="text-[11px] text-gray-400 mt-0.5">ticket médio {{ ticket_medio|brl_zero }}</p>
         </div>
-        <button type="button" data-filtrar="extSemFoto" class="text-left bg-white border border-gray-200 rounded-2xl p-4 shadow-sm hover:border-purple-300 hover:shadow transition" title="Mostrar só esses no extrato">
+        <button type="button" data-filtrar="extSemFoto" class="min-w-0 overflow-hidden text-left bg-white border border-gray-200 rounded-2xl p-4 shadow-sm hover:border-purple-300 hover:shadow transition" title="Mostrar só esses no extrato">
           <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Sem comprovante <i class="fas fa-filter text-[9px] text-gray-300"></i></p>
-          <p class="text-2xl font-bold mt-1 tabular-nums {% if sem_comprovante %}text-amber-600{% else %}text-emerald-600{% endif %}">{{ sem_comprovante }}</p>
+          <p class="text-xl sm:text-2xl font-bold mt-1 tabular-nums {% if sem_comprovante %}text-amber-600{% else %}text-emerald-600{% endif %}">{{ sem_comprovante }}</p>
           <p class="text-[11px] text-gray-400 mt-0.5">sem foto nem anexo</p>
         </button>
-        <button type="button" data-filtrar="extSemChamado" class="text-left bg-white border border-gray-200 rounded-2xl p-4 shadow-sm hover:border-purple-300 hover:shadow transition" title="Mostrar só esses no extrato">
+        <button type="button" data-filtrar="extSemChamado" class="min-w-0 overflow-hidden text-left bg-white border border-gray-200 rounded-2xl p-4 shadow-sm hover:border-purple-300 hover:shadow transition" title="Mostrar só esses no extrato">
           <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Sem chamado <i class="fas fa-filter text-[9px] text-gray-300"></i></p>
-          <p class="text-2xl font-bold mt-1 tabular-nums {% if sem_chamado %}text-amber-600{% else %}text-emerald-600{% endif %}">{{ sem_chamado }}</p>
+          <p class="text-xl sm:text-2xl font-bold mt-1 tabular-nums {% if sem_chamado %}text-amber-600{% else %}text-emerald-600{% endif %}">{{ sem_chamado }}</p>
           <p class="text-[11px] text-gray-400 mt-0.5">gasto sem chamado aberto</p>
         </button>
       </div>

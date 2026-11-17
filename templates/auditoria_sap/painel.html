@@ -109,7 +109,7 @@ O ciclo: alguém marca "resolvido". Até a próxima leitura do SAP a linha fica
                     <td class="px-3 py-2.5 text-gray-800">{% if linha.resolvida_por %}{{ linha.resolvida_por.full_name }}{% else %}—{% endif %}</td>
                     <td class="px-3 py-2.5 text-gray-700 whitespace-nowrap">{{ linha.pdv|loja|title|default:"—" }}</td>
                     <td class="px-3 py-2.5">
-                        <a href="{% url 'auditoria_sap:lista' %}?situacao=todas&presenca=todas&q={{ linha.id_venda|default:linha.num_fat_sap|urlencode }}" class="text-gray-800 hover:text-sky-700">{{ linha.tipo_erro|default:"—" }}</a>
+                        <a href="{% url 'auditoria_sap:lista' %}?situacao=todas&presenca=todas&q={{ linha.id_venda|default:linha.num_fat_sap|urlencode }}" class="text-gray-800 hover:text-sky-700">{{ linha.tipo_principal|default:linha.tipo_erro|default:"—" }}</a>
                         <span class="text-xs text-gray-400">· #{{ linha.id_venda|default:"—" }}{% if linha.diferenca_em_reais %} · {{ linha.diferenca_em_reais|brl }}{% endif %}</span>
                         {% if linha.observacao %}<p class="text-[11px] text-gray-400 italic truncate max-w-xs" title="{{ linha.observacao }}">“{{ linha.observacao }}”</p>{% endif %}
                     </td>
@@ -136,7 +136,7 @@ O ciclo: alguém marca "resolvido". Até a próxima leitura do SAP a linha fica
         <div class="px-5 py-2.5 grid grid-cols-2 md:grid-cols-6 gap-x-3 gap-y-1 items-center">
             <p class="text-sm text-gray-800 font-medium truncate">{{ linha.pdv|loja|title|default:"—" }}</p>
             <p class="text-xs text-gray-500">{{ linha.data_venda|date:"d/m/Y" }} · #{{ linha.id_venda|default:"—" }}</p>
-            <p class="text-xs text-gray-600 truncate md:col-span-2" title="{{ linha.tipo_erro }}">{{ linha.tipo_erro|default:"—" }}</p>
+            <p class="text-xs text-gray-600 truncate md:col-span-2" title="{{ linha.tipo_erro }}">{{ linha.tipo_principal|default:linha.tipo_erro|default:"—" }}</p>
             <p class="text-xs text-gray-500 md:col-span-2">
                 <i class="fas fa-user-check text-gray-400 mr-1"></i>{% if linha.resolvida_por %}{{ linha.resolvida_por.full_name }}{% else %}—{% endif %}
                 em {{ linha.resolvida_em|date:"d/m H:i" }}
@@ -228,9 +228,9 @@ O ciclo: alguém marca "resolvido". Até a próxima leitura do SAP a linha fica
         </div>
         <div class="p-4 space-y-3">
             {% for t in por_tipo %}
-            <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&tipo={{ t.tipo_erro|urlencode }}" class="block group">
+            <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&tipo={{ t.tipo_principal|urlencode }}{% if 'grupo=' not in query %}&grupo=todos{% endif %}" class="block group">
                 <div class="flex items-baseline justify-between gap-3">
-                    <p class="text-sm text-gray-700 group-hover:text-sky-700">{{ t.tipo_erro|default:"—" }}</p>
+                    <p class="text-sm text-gray-700 group-hover:text-sky-700">{{ t.tipo_principal|default:"—" }}</p>
                     <p class="text-xs text-gray-500 tabular"><strong class="text-gray-800">{{ t.abertas }}</strong> aberta{{ t.abertas|pluralize }} · {{ t.tratadas }} tratada{{ t.tratadas|pluralize }}</p>
                 </div>
                 <div class="sap-barra mt-1 flex">

@@ -1,4 +1,5 @@
 import os
+import re
 import pathlib
 import sys
 import tempfile
@@ -235,6 +236,18 @@ try:
                      'last_login', 'date_joined', 'menu_favoritos'):
         t(f'{proibido} não é editável', f'name="{proibido}"' not in html)
     t('comentário Django não vazou', '{#' not in html and '#}' not in html)
+    m = re.search(r'<select id="pdv" name="pdv".*?</select>', html, re.S)
+    sel_pdv = m.group(0) if m else ''
+    opcoes = re.findall(r'<option value="([^"]*)"( selected)?>', sel_pdv)
+    t('PDV é um select', bool(sel_pdv) and '<input type="text"\n                                       id="pdv"' not in html)
+    t('PDV: opção vazia primeiro', opcoes[:1] == [('', '')], opcoes[:2])
+    t('PDV: só setores com Loja no nome (e o PDV antigo)', {o[0] for o in opcoes} == {'', 'ZZ Loja Edição', 'ZZ Loja Dois', 'PDV9'}, opcoes)
+    t('PDV antigo fora da lista segue selecionado', ('PDV9', ' selected') in opcoes, opcoes)
+    h_novo = c.get('/users/manage/users/create/').content.decode()
+    m2 = re.search(r'<select id="pdv" name="pdv".*?</select>', h_novo, re.S)
+    ops2 = re.findall(r'<option value="([^"]*)"( selected)?>', m2.group(0)) if m2 else []
+    t('criar: PDV é select com opção vazia e as lojas', ops2 and ops2[0] == ('', '') and ('ZZ Loja Edição', '') in ops2
+      and ('PDV9', '') not in ops2, ops2)
     t('contato e dependente antigos vêm preenchidos',
       'value="Mãe"' in html and 'value="Filho Antigo"' in html)
 

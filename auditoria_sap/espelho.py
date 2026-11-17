@@ -8,14 +8,16 @@ O que é do SAP o espelho sobrescreve; o que é do portal (resolvida, quem
 marcou, observação) nunca é tocado aqui.
 """
 import logging
+import re
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.utils import timezone
 
 from . import mysql
-from .models import LinhaAuditoria, SincronizacaoAuditoria, chave_de
+from .models import (TIPO_NAO_LANCADA_NO_SAP, TIPOS_SERIAL, LinhaAuditoria, SincronizacaoAuditoria,
+                     chave_de)
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +118,68 @@ def valores_da_linha(bruta):
     return valores
 
 
+def _so_letras_e_numeros(valor):
+    return re.sub(r'[^0-9A-Z]', '', _texto(valor).upper())
+
+
+def linhas_nao_lancadas_no_sap(brutas):
+    """Itens lançados no Vivo GO e não no SAP, no formato das linhas da view (17/11/2026).
+
+    A vw_auditoria_visao_geral só olha do SAP para o Vivo GO; o lado de lá vem da
+    vw_conferencia_vendas_produtos (``mysql.ler_vendas_sem_sap``), no mesmo período
+    da auditoria (a venda mais antiga que ela trouxe).
+
+    Fica de fora o item que a auditoria já explica como serial errado/ausente: o
+    serial no Vivo GO está errado, então ele "não acha" o SAP, mas a venda está lá
+    (casada por CPF + SKU + data). A ponte é a venda do Vivo GO (ID_VENDA) com o
+    mesmo SKU ou o mesmo serial — medido em 17/11/2026: 382 de 1.546 itens.
+    """
+    datas = [d for d in (_data(b.get('DATA_VENDA')) for b in brutas) if d]
+    desde = min(datas) if datas else timezone.localdate() - timedelta(days=90)
+    explicadas = set()
+    for bruta in brutas:
+        if _texto(bruta.get('TIPO_ERRO')) not in TIPOS_SERIAL:
+            continue
+        venda = _texto(bruta.get('ID_VENDA'))
+        for campo, coluna in (('sku', 'SKU_VIVOGO'), ('serial', 'SERIAL_VIVOGO')):
+            valor = _so_letras_e_numeros(bruta.get(coluna))
+            if venda and valor:
+                explicadas.add((venda, campo, valor))
+    linhas = []
+    for item in mysql.ler_vendas_sem_sap(desde):
+        venda = _texto(item.get('ID_VENDA'))
+        sku = _so_letras_e_numeros(item.get('SKU'))
+        seriais = {_so_letras_e_numeros(item.get('IMEI_CONSULTA')), _so_letras_e_numeros(item.get('IMEI_ORIGINAL'))} - {''}
+        if (venda, 'sku', sku) in explicadas or any((venda, 'serial', s) in explicadas for s in seriais):
+            continue
+        valor = _decimal(item.get('RECEITA_VIVOGO'))
+        serial = _texto(item.get('IMEI_ORIGINAL')) or _texto(item.get('IMEI_CONSULTA'))
+        pdv = _texto(item.get('PDV'))
+        linhas.append({
+            'TIPO_ERRO': TIPO_NAO_LANCADA_NO_SAP,
+            'DATA_VENDA': item.get('DATA_VENDA'),
+            'PDV': pdv,
+            'LOJA_VIVOGO': pdv,
+            'ID_VENDA': venda,
+            'NOME_CLIENTE': item.get('NOME_CLIENTE'),
+            'DOCUMENTO_VIVOGO': item.get('CPF_CLIENTE_VIVOGO'),
+            'PRODUTO_VIVOGO': item.get('NOME_COMERCIAL_PRODUTO'),
+            'TIPO_PRODUTO': item.get('TIPO_PRODUTO'),
+            'SKU_VIVOGO': item.get('SKU'),
+            'SERIAL_VIVOGO': serial,
+            'VALOR_VIVO_GO': valor,
+            # Mesmo sinal da view (SAP − Vivo GO): o SAP não tem nada desse item.
+            'DIFERENCA_VALOR': -valor if valor else None,
+            'SITUACAO_VALOR': 'VENDA NÃO ENCONTRADA NO SAP',
+            'DIFERENCA_EXPLICITA': (f'LANÇADA NO VIVO GO E NÃO NO SAP | SERIAL VIVO GO = {serial or "—"} '
+                                    f'NÃO ESTÁ NA ZS103'),
+            'QTD_VENDIDA': item.get('QTD_VENDIDA'),
+            'VENDEDOR': item.get('VENDEDOR'),
+            'ORIGEM': 'vw_conferencia_vendas_produtos',
+        })
+    return linhas
+
+
 def _mudou(linha, valores):
     for campo, valor in valores.items():
         if getattr(linha, campo) != valor:
@@ -133,6 +197,15 @@ def sincronizar(por=None):
             por=por if getattr(por, 'pk', None) else None,
             erro=str(exc)[:2000], segundos=round(time.monotonic() - comeco, 1))
         raise
+
+    # Lançadas no Vivo GO e não no SAP: se essa leitura falhar, a auditoria segue e
+    # as linhas desse tipo que já estão no espelho ficam como estão (não "saem").
+    leu_nao_lancadas = True
+    try:
+        brutas = list(brutas) + linhas_nao_lancadas_no_sap(brutas)
+    except Exception:                                 # noqa: BLE001 — a auditoria já foi lida
+        leu_nao_lancadas = False
+        logger.warning('Auditoria SAP: vendas do Vivo GO sem SAP não lidas agora', exc_info=True)
 
     agora = timezone.now()
     existentes = {linha.chave: linha for linha in LinhaAuditoria.objects.all()}
@@ -168,7 +241,8 @@ def sincronizar(por=None):
             alteradas, CAMPOS_DO_SAP + ['ativa', 'visto_em', 'sumiu_em'], batch_size=500)
 
     sumiram = [linha for chave, linha in existentes.items()
-               if chave not in vistas and linha.ativa]
+               if chave not in vistas and linha.ativa
+               and (leu_nao_lancadas or linha.tipo_erro != TIPO_NAO_LANCADA_NO_SAP)]
     for linha in sumiram:
         linha.ativa = False
         linha.sumiu_em = agora

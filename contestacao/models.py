@@ -205,6 +205,18 @@ class Contestation(models.Model):
         verbose_name='Venda editada por'
     )
     sale_value_edited_at = models.DateTimeField(null=True, blank=True, verbose_name='Data da edição da venda')
+    # Contestação feita pela equipe (17/11/2026): o CN responde as próprias
+    # vendas e só o gerente envia. ``requester`` continua sendo o dono da venda
+    # (o CN); estes dois dizem quem escreveu o motivo/anexou a evidência — o
+    # gerente pode fazer pelo CN — e quem apertou o botão de enviar. Nulos nas
+    # contestações de antes, quando quem preenchia e quem enviava era o próprio
+    # solicitante.
+    preenchido_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='contestations_preenchidas', verbose_name='Preenchida por')
+    enviado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='contestations_enviadas', verbose_name='Enviada por')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
 
@@ -282,6 +294,13 @@ class ContestationHistory(models.Model):
         # calculada a partir do último 'synced', e sincronizar a base de
         # pagamento não pode reabrir aquele prazo.
         ('synced_pagamento', 'Base de Pagamento Sincronizada'),
+        # Parte de cada CN no ciclo (sem contestação ligada: a venda ainda não
+        # virou contestação). ``user`` é quem fez de verdade; ``extra_data``
+        # guarda para quem (o CN dono da venda) e a venda.
+        ('nao_contesta', 'Venda respondida como Não (com justificativa)'),
+        ('nao_desfeito', 'Resposta Não desfeita'),
+        ('cn_pronto', 'Parte do CN marcada como pronta'),
+        ('cn_reaberto', 'Parte do CN reaberta'),
     ]
 
     contestation = models.ForeignKey(
@@ -518,3 +537,72 @@ class EnvioResumoDestinatario(models.Model):
 
     def __str__(self):
         return f'{self.nome} – {self.get_situacao_display()}'
+
+
+class RespostaNaoContesta(models.Model):
+    """O "Não" de uma venda: quem responde diz que ela não vai ser contestada.
+
+    Antes o botão "Não" só escondia a linha no navegador de quem clicou — não
+    ficava registro nenhum e ninguém precisava explicar. Agora a resposta é da
+    venda (uma por venda, valendo para a loja toda) e a justificativa é
+    obrigatória. ``cn`` é o dono da venda (o vendedor, quando tem cadastro no
+    portal); ``preenchido_por`` é quem respondeu de verdade — o gerente pode
+    responder pelo CN.
+    """
+
+    exclusion = models.OneToOneField(
+        ExclusionRecord, on_delete=models.CASCADE, related_name='resposta_nao',
+        verbose_name='Venda')
+    justificativa = models.TextField(verbose_name='Justificativa')
+    cn = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='respostas_nao_contestacao', verbose_name='CN (dono da venda)')
+    preenchido_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='respostas_nao_preenchidas', verbose_name='Respondido por')
+    criado_em = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
+    atualizado_em = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
+
+    class Meta:
+        verbose_name = 'Venda respondida como Não'
+        verbose_name_plural = 'Vendas respondidas como Não'
+        ordering = ['-atualizado_em']
+
+    def __str__(self):
+        return f'Não – venda {self.exclusion_id}'
+
+
+class ParteDoCN(models.Model):
+    """O CN terminou a parte dele no ciclo ("pronto").
+
+    Um por vendedor e loja dentro do lote. O vendedor é identificado como vem
+    na planilha (``filial`` + ``vendedor``), porque é isso que a base traz; o
+    ``cn`` é o usuário do portal com aquele nome, quando existe. O gerente só
+    consegue enviar as contestações da loja quando todos os CNs ativos com
+    venda na base estão prontos — e "pronto" só vale enquanto todas as vendas
+    dele continuam respondidas (Sim com motivo e evidência, ou Não com
+    justificativa).
+    """
+
+    lote = models.ForeignKey(
+        ExclusionSyncBatch, on_delete=models.CASCADE, related_name='partes_dos_cns',
+        verbose_name='Ciclo (lote)')
+    filial = models.CharField(max_length=100, verbose_name='Filial')
+    vendedor = models.CharField(max_length=200, verbose_name='Vendedor (como na planilha)')
+    cn = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='partes_contestacao', verbose_name='CN')
+    marcado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='partes_contestacao_marcadas', verbose_name='Marcado por')
+    marcado_em = models.DateTimeField(auto_now=True, verbose_name='Marcado em')
+
+    class Meta:
+        verbose_name = 'Parte do CN no ciclo'
+        verbose_name_plural = 'Partes dos CNs no ciclo'
+        constraints = [
+            models.UniqueConstraint(fields=['lote', 'filial', 'vendedor'], name='uniq_parte_cn_lote_filial_vendedor'),
+        ]
+
+    def __str__(self):
+        return f'{self.vendedor} ({self.filial}) – lote {self.lote_id}'

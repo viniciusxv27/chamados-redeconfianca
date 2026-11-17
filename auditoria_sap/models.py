@@ -177,21 +177,63 @@ class MarcacaoAuditoria(models.Model):
 LIMITE_VALOR_DESPREZIVEL = Decimal('1.00')
 
 
+TIPO_SEM_NF = 'SEM NF'
+# Item lançado no Vivo GO cujo serial não está no SAP (17/11/2026). A view da auditoria
+# não traz esse lado: o espelho monta a linha a partir da vw_conferencia_vendas_produtos
+# (auditoria_sap/espelho.py, ``linhas_nao_lancadas_no_sap``).
+TIPO_NAO_LANCADA_NO_SAP = 'VENDA NÃO ENCONTRADA NO SAP'
+TIPOS_SERIAL = ('SERIAL ERRADO NO VIVO GO', 'SERIAL AUSENTE NO VIVO GO')
+
 # O que a loja de fato precisa ajustar (28/10/2026). Os outros tipos da auditoria
 # (valor, produto, documento, data, loja, bônus fabricante) continuam no espelho,
 # mas saem da Visão SAP. Cada grupo é uma aba.
 GRUPOS_DA_TELA = (
-    ('serial', 'Serial não encontrado', ('SERIAL ERRADO NO VIVO GO', 'SERIAL AUSENTE NO VIVO GO')),
+    ('serial', 'Serial não encontrado', TIPOS_SERIAL),
     ('vivogo', 'Lançado no SAP e não no Vivo GO', ('VENDA NÃO ENCONTRADA NO VIVO GO',)),
-    ('sem_nf', 'Sem NF', ('SEM NF',)),
+    ('nao_sap', 'Lançadas no Vivo GO e não no SAP', (TIPO_NAO_LANCADA_NO_SAP,)),
+    ('sem_nf', 'Sem NF', (TIPO_SEM_NF,)),
 )
 TIPOS_DA_TELA = tuple(t for _c, _r, tipos in GRUPOS_DA_TELA for t in tipos)
 
 
+def q_sem_nf():
+    """A linha conta como "Sem NF" — o erro que vem SEMPRE na frente (17/11/2026).
+
+    Vale quando o tipo já é SEM NF, quando a nota da própria linha está "SEM NF"
+    (a view manda serial errado e venda não encontrada com a NF pendente) ou
+    quando outra linha da mesma venda está sem NF (a venda tem vários erros).
+    """
+    irma_sem_nf = LinhaAuditoria.objects.filter(
+        models.Q(tipo_erro=TIPO_SEM_NF) | models.Q(status_nf__iexact=TIPO_SEM_NF),
+        id_venda=models.OuterRef('id_venda'), ativa=models.OuterRef('ativa'))
+    return (models.Q(tipo_erro=TIPO_SEM_NF) | models.Q(status_nf__iexact=TIPO_SEM_NF)
+            | (~models.Q(id_venda='') & models.Exists(irma_sem_nf)))
+
+
+def tipo_principal():
+    """O erro que a tela mostra para a linha: "SEM NF" se ela está sem nota, senão o tipo da view."""
+    return models.Case(models.When(q_sem_nf(), then=models.Value(TIPO_SEM_NF)),
+                       default=models.F('tipo_erro'), output_field=models.CharField())
+
+
+def com_tipo_principal(qs):
+    """A consulta com ``tipo_principal`` — é por ele que a tela conta, filtra e mostra."""
+    return qs.annotate(tipo_principal=tipo_principal())
+
+
 def q_da_tela(grupo=''):
-    """Só os tipos que a Visão SAP mostra; com ``grupo``, só os daquela aba."""
-    tipos = dict((c, t) for c, _r, t in GRUPOS_DA_TELA).get(grupo, TIPOS_DA_TELA)
-    return models.Q(tipo_erro__in=tipos)
+    """Só os tipos que a Visão SAP mostra; com ``grupo``, só os daquela aba.
+
+    A aba vai pelo erro principal: linha sem NF cai em "Sem NF" mesmo que a view
+    a mande como serial errado ou venda não encontrada — e sai da outra aba.
+    """
+    tela = models.Q(tipo_erro__in=TIPOS_DA_TELA)
+    tipos = dict((c, t) for c, _r, t in GRUPOS_DA_TELA).get(grupo)
+    if tipos is None:
+        return tela
+    if grupo == 'sem_nf':
+        return tela & q_sem_nf()
+    return models.Q(tipo_erro__in=tipos) & ~q_sem_nf()
 
 
 def q_valor_desprezivel():
@@ -402,3 +444,84 @@ class CobrancaRenova(models.Model):
         verbose_name = 'Cobrança de Renova no WhatsApp'
         verbose_name_plural = 'Cobranças de Renova no WhatsApp'
         ordering = ['-criado_em']
+
+
+# ── Automação SAP (o app da loja) ──────────────────────────────────────────────
+# O SUPERADMIN publica aqui cada versão nova do AutomacaoSAP (o .zip da pasta
+# inteira). O app, ao abrir, pergunta ao portal qual é a versão atual e se
+# atualiza sozinho; ninguém precisa mais baixar e copiar a pasta à mão.
+
+def _caminho_automacao(instancia, nome):
+    return f'automacao_sap/AutomacaoSAP_v{instancia.versao}.zip'
+
+
+def versao_em_tupla(texto):
+    """'1.2.10' → (1, 2, 10). Texto que não é versão vira () e perde de qualquer outra."""
+    try:
+        partes = tuple(int(p) for p in str(texto or '').strip().lstrip('vV').split('.'))
+    except ValueError:
+        return ()
+    return partes if 1 <= len(partes) <= 4 else ()
+
+
+class VersaoAutomacaoSAP(models.Model):
+    versao = models.CharField('Versão', max_length=20, unique=True)
+    arquivo = models.FileField(upload_to=_caminho_automacao, max_length=200)
+    sha256 = models.CharField(max_length=64)
+    tamanho = models.BigIntegerField(default=0)
+    notas = models.TextField('O que mudou', blank=True)
+    publicada = models.BooleanField(default=True, db_default=True,
+                                    help_text='Só versão publicada é oferecida às lojas. Despublicar volta todo mundo para a anterior.')
+    enviada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='+')
+    enviada_em = models.DateTimeField(auto_now_add=True)
+    downloads = models.PositiveIntegerField(default=0, db_default=0)
+    atualizacoes = models.PositiveIntegerField(default=0, db_default=0,
+                                               help_text='Quantas vezes o app de uma loja baixou esta versão sozinho.')
+
+    class Meta:
+        verbose_name = 'Versão da Automação SAP'
+        verbose_name_plural = 'Versões da Automação SAP'
+        ordering = ['-enviada_em']
+
+    def __str__(self):
+        return f'Automação SAP {self.versao}'
+
+    @property
+    def tupla(self):
+        return versao_em_tupla(self.versao)
+
+    @classmethod
+    def atual(cls):
+        """A maior versão publicada (por número, não pela data de envio)."""
+        publicadas = [v for v in cls.objects.filter(publicada=True) if v.tupla]
+        return max(publicadas, key=lambda v: v.tupla, default=None)
+
+
+class ChaveAutomacaoSAP(models.Model):
+    """A chave que o app manda ao perguntar pela versão (uma linha só).
+
+    Não é segredo forte — vai dentro do app —, mas impede que qualquer um na
+    internet ache e baixe a ferramenta que grava no SAP.
+    """
+
+    chave = models.CharField(max_length=64)
+    trocada_em = models.DateTimeField(auto_now=True)
+    trocada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='+')
+
+    class Meta:
+        verbose_name = 'Chave da Automação SAP'
+        verbose_name_plural = 'Chave da Automação SAP'
+
+    @staticmethod
+    def nova_chave():
+        import secrets
+        return secrets.token_urlsafe(24)
+
+    @classmethod
+    def get(cls):
+        obj = cls.objects.filter(pk=1).first()
+        if obj is None:
+            obj, _ = cls.objects.get_or_create(pk=1, defaults={'chave': cls.nova_chave()})
+        return obj

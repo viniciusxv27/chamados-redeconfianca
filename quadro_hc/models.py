@@ -185,3 +185,27 @@ class AcessoQuadroHC(models.Model):
 
     def __str__(self):
         return f'{self.user} · {self.get_papel_display()}'
+
+
+class MetaProporcional(models.Model):
+    """Quanto da meta cheia o consultor recebe (100%, 80% ou 60%) — usado ao dividir a meta da loja.
+
+    Sem linha aqui = meta de 100%. A divisão em si mora no Gerenciamento de metas
+    (``gestao_metas.servicos.dividir_meta_loja``).
+    """
+    CHEIA = 100
+    PERCENTUAIS = [(100, 'Meta de 100%'), (80, 'Meta de 80%'), (60, 'Meta de 60%')]
+
+    colaborador = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                       related_name='meta_proporcional_hc')
+    percentual = models.PositiveSmallIntegerField(choices=PERCENTUAIS, default=CHEIA)
+    atualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                       related_name='+')
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Meta proporcional do consultor'
+        verbose_name_plural = 'Metas proporcionais dos consultores'
+
+    def __str__(self):
+        return f'{self.colaborador} · {self.percentual}%'

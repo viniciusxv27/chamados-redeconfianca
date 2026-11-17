@@ -55,6 +55,14 @@
 
         <form method="post" class="space-y-4" id="impMetaForm" enctype="multipart/form-data">
             {% csrf_token %}
+            {% if tarefa_agenda %}
+            {% comment %}Veio do "Enviar para o Impulso de <pessoa>" da transcrição: a meta guarda a tarefa de origem.{% endcomment %}
+            <input type="hidden" name="tarefa" value="{{ tarefa_agenda.pk }}">
+            <div class="flex items-start gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-900">
+                <i class="fas fa-clipboard-check mt-0.5 text-emerald-600"></i>
+                <p class="min-w-0 break-words">Tarefa da reunião{% with t=tarefa_agenda.source_transcription.first %}{% if t %} <strong>{{ t.title }}</strong>{% endif %}{% endwith %}. Confira os campos: a meta fica ligada a esta tarefa.</p>
+            </div>
+            {% endif %}
 
             {% if sou_superadmin %}
             {% comment %}
@@ -80,7 +88,7 @@
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <option value="">Selecione…</option>
                     {% for c in colaboradores %}
-                    <option value="{{ c.id }}">{{ c.get_full_name|default:c.email }}</option>
+                    <option value="{{ c.id }}"{% if c.id == preencher_colaborador %} selected{% endif %}>{{ c.get_full_name|default:c.email }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -150,7 +158,7 @@
                     {% if gestores_do_setor %}<option value="">Para mim</option>{% endif %}
                     <optgroup label="ADM's LOJAS">
                         {% for c in adms_lojas %}
-                        <option value="{{ c.id }}" data-nome="{{ c.get_full_name|default:c.email }}">{{ c.get_full_name|default:c.email }}{% if c.sector_id %} — {{ c.sector.name }}{% endif %}</option>
+                        <option value="{{ c.id }}" data-nome="{{ c.get_full_name|default:c.email }}"{% if c.id == preencher_colaborador %} selected{% endif %}>{{ c.get_full_name|default:c.email }}{% if c.sector_id %} — {{ c.sector.name }}{% endif %}</option>
                         {% endfor %}
                     </optgroup>
                 </select>
@@ -231,11 +239,11 @@
 
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Título *</label>
-                <input type="text" name="titulo" required maxlength="200" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Ex.: Reduzir tempo de resposta dos chamados">
+                <input type="text" name="titulo" required maxlength="200" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Ex.: Reduzir tempo de resposta dos chamados"{% if preenchido.titulo %} value="{{ preenchido.titulo }}"{% endif %}>
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Descrição (clara, por textos) *</label>
-                <textarea name="descricao" required rows="4" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Descreva a meta de forma clara e objetiva…"></textarea>
+                <textarea name="descricao" required rows="4" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Descreva a meta de forma clara e objetiva…">{{ preenchido.descricao|default:'' }}</textarea>
             </div>
             {% include 'impulso/_descricao_midia_campos.html' %}
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -308,7 +316,7 @@
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Prazo *</label>
-                    <input type="date" name="prazo" required min="{{ hoje|date:'Y-m-d' }}"
+                    <input type="date" name="prazo" required min="{{ hoje|date:'Y-m-d' }}"{% if preenchido.prazo %} value="{{ preenchido.prazo|date:'Y-m-d' }}"{% endif %}
                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <p class="text-xs text-gray-400 mt-1">A partir de hoje ({{ hoje|date:'d/m/Y' }}).</p>
                 </div>
@@ -603,7 +611,9 @@ document.addEventListener('DOMContentLoaded', impChecarArea);
 
     // Rascunho por usuário: duas contas na mesma máquina não podem herdar o
     // texto uma da outra.
-    const CHAVE = 'impulsoMetaRascunho:{{ request.user.id }}';
+    // Aberto a partir de uma tarefa da agenda, o rascunho é só daquela tarefa —
+    // senão um rascunho antigo pisaria no que veio preenchido.
+    const CHAVE = 'impulsoMetaRascunho:{{ request.user.id }}{% if tarefa_agenda %}:tarefa{{ tarefa_agenda.pk }}{% endif %}';
     const VALIDADE_HORAS = 48;
 
     const status = document.getElementById('impRascunhoStatus');

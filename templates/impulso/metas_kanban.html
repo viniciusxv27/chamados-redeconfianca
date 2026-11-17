@@ -22,15 +22,19 @@
             </div>
         </form>
         {% endif %}
-        {% if filtra_criador %}
-        {% comment %}"Criado por" — só o SUPERADMIN. Trocar mantém os outros filtros.{% endcomment %}
+        {% if mostra_a_fazer_vinicius %}
+        {% comment %}Desmarcar manda a_fazer_vinicius=0 (o hidden): quem abre com a caixa marcada por padrão não a vê remarcar sozinha.{% endcomment %}
         <form method="get" class="inline-flex items-center" data-filtro-a-fazer-vinicius>
             {% for chave, valor in request.GET.items %}{% if chave != 'a_fazer_vinicius' %}<input type="hidden" name="{{ chave }}" value="{{ valor }}">{% endif %}{% endfor %}
+            <input type="hidden" name="a_fazer_vinicius" value="0">
             <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer {% if a_fazer_vinicius %}border-orange-300 bg-orange-50 text-orange-800 font-semibold{% else %}border-gray-200 text-gray-700 hover:bg-gray-50{% endif %}">
                 <input type="checkbox" name="a_fazer_vinicius" value="1" onchange="this.form.submit()" class="rounded text-orange-600 focus:ring-orange-400" {% if a_fazer_vinicius %}checked{% endif %}>
                 A fazer Vinicius
             </label>
         </form>
+        {% endif %}
+        {% if filtra_criador %}
+        {% comment %}"Criado por" — só o SUPERADMIN. Trocar mantém os outros filtros.{% endcomment %}
         <form method="get" class="flex items-center gap-2 w-full sm:w-auto min-w-0">
             {% for chave, valor in manter_no_criador.items %}
             <input type="hidden" name="{{ chave }}" value="{{ valor }}">
@@ -126,7 +130,7 @@ Ficam fora do filtro de mês — são pedidos esperando resposta, não tarefas d
 
 {% if a_fazer_vinicius %}
 <style>
-    /* Cards da coluna "A Fazer Vinicius": vermelhos, para se destacarem do resto do Kanban. */
+    /* Cards criados pelo Vinicius (na coluna dele e nas colunas de status): vermelhos, para se destacarem do resto do Kanban. */
     .imp-card.imp-card-vinicius { background:#FEE2E2 !important; border-color:#F87171 !important; border-left:4px solid #DC2626 !important; }
     .imp-card.imp-card-vinicius a { color:#991B1B; }
     html.dark .imp-card.imp-card-vinicius { background:rgba(220,38,38,.22) !important; border-color:rgba(248,113,113,.55) !important; border-left-color:#EF4444 !important; }

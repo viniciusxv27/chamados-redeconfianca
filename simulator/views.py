@@ -39,6 +39,7 @@ from .services import (
     compute_gerente_simulation,
     compute_coordenador_simulation,
     compute_aparte_simulation,
+    coordenador_para_exibir,
     update_factor_sets_from_post,
     get_business_days_info,
     build_simulador_prefill,
@@ -303,6 +304,19 @@ def simulator_dashboard(request):
                 real_v = (row.get('quantity') if row.get('key') == 'fixa' else row.get('proj')) or 0
                 gap = meta_v - real_v
                 row['daily_needed'] = (gap / remaining_business_days) if (remaining_business_days > 0 and gap > 0) else 0
+
+        # Cards "Usuário" e "Coordenador" (17/11/2026), em toda visão: o nome é sempre o da pessoa
+        # selecionada, e o coordenador é quem tem cargo COORDENADOR DE VENDAS na loja dela. Só
+        # exibição — simulation['coordinator'] segue sendo a coordenação do cálculo (e a reserva).
+        # Coordenador e sniper continuam mostrando a própria coordenação.
+        if simulation and not simulation.get('error'):
+            simulation['user_name'] = target_user.get_full_name() or target_user.first_name or target_user.email
+            simulation['first_name'] = target_user.first_name or simulation['user_name'].split(' ')[0]
+            if target_role != ROLE_COORDENADOR and not simulation.get('is_sniper'):
+                curto, completo = coordenador_para_exibir(target_user)
+                if curto:
+                    simulation['coordenador_exibido'] = curto
+                    simulation['coordenador_exibido_completo'] = completo
 
         if view_mode == VIEW_SIMULADOR and standard_role and simulation and not simulation.get('error'):
             daily_metas = build_simulador_metas(simulation)

@@ -169,3 +169,19 @@ def ler_vendas_vivogo(desde):
     return _consultar(
         "SELECT ID_VENDA, CPF_VIVOGO_NORMALIZADO, CPF_SAP_NORMALIZADO, NUM_FAT_SAP, PDV, NOME_CLIENTE "
         "FROM vw_conferencia_vendas_produtos WHERE DATA_VENDA >= %s", (desde,))
+
+
+def ler_vendas_sem_sap(desde):
+    """Itens vendidos no Vivo Go cujo serial (IMEI/ICCID) não está no SAP, desde a data.
+
+    Vem da vw_conferencia_vendas_produtos: cada produto do Vivo Go procurado na
+    zs103_final pelo serial normalizado, só nos dias que o SAP já tem fatura (sem
+    falso alarme no dia que ainda não subiu). Produto sem serial (loja virtual,
+    recarga) sai como "SEM IMEI/ICCID" e não entra. ~15 s para três meses.
+    """
+    return _consultar(
+        "SELECT PDV, DATA_VENDA, ID_VENDA, NOME_CLIENTE, CPF_CLIENTE_VIVOGO, NOME_COMERCIAL_PRODUTO, "
+        "TIPO_PRODUTO, SKU, IMEI_ORIGINAL, IMEI_CONSULTA, RECEITA_VIVOGO, QTD_VENDIDA, VENDEDOR "
+        "FROM vw_conferencia_vendas_produtos "
+        "WHERE ORIGEM_REGISTRO = 'VIVOGO' AND STATUS_LOCALIZACAO = 'NÃO ENCONTRADO NA SAP' "
+        "AND DATA_VENDA >= %s", (desde,))

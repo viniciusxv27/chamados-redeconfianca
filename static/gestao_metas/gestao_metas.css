@@ -149,3 +149,11 @@ select.gm-entrada { width: 78px; text-align: left; }
   .gm-rolagem.cartoes .gm-entrada.curta { width: 70px; }
   .gm-salvo { margin-left: 0; width: 100%; }
 }
+
+/* Botão Salvar da linha: divide a meta da loja entre os consultores do Quadro de HC. */
+.gm-divide { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+.gm-divide .gm-botao.pequeno { height: 26px; padding: 0 9px; font-size: 11.5px; gap: 5px; }
+.gm-divide small { white-space: nowrap; }
+.gm-divisao-lista { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.gm-divisao-lista li { font-variant-numeric: tabular-nums; }
+.gm-aviso[hidden] { display: none; }

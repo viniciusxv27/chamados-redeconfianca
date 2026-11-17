@@ -92,14 +92,25 @@
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"><i class="fas fa-dollar-sign mr-1"></i> Paga</span>
                             {% elif h.action == 'synced' %}
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800"><i class="fas fa-sync mr-1"></i> Sincronização</span>
+                            {% elif h.action == 'nao_contesta' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"><i class="fas fa-hand mr-1"></i> Respondida Não</span>
+                            {% elif h.action == 'cn_pronto' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800"><i class="fas fa-flag-checkered mr-1"></i> CN pronto</span>
+                            {% else %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">{{ h.get_action_display }}</span>
                             {% endif %}
                         </td>
-                        <td class="px-4 py-2.5 text-sm text-gray-900 font-medium">{{ h.user.full_name|default:"Sistema" }}</td>
+                        <td class="px-4 py-2.5 text-sm text-gray-900 font-medium">
+                            {{ h.user.full_name|default:"Sistema" }}
+                            {% if h.extra_data.em_nome_do_cn %}<span class="block text-xs font-normal text-gray-500">por {{ h.extra_data.para_cn_nome|default:h.extra_data.vendedor }}</span>{% endif %}
+                        </td>
                         <td class="px-4 py-2.5 text-sm">
                             {% if h.contestation %}
                             <a href="{% url 'contestacao:contestation_detail' h.contestation.pk %}" class="text-indigo-600 hover:underline">
                                 #{{ h.contestation.pk }} – {{ h.contestation.exclusion.vendedor }}
                             </a>
+                            {% elif h.extra_data.vendedor %}
+                            <span class="text-gray-600">Venda de {{ h.extra_data.vendedor }}{% if h.extra_data.filial %} ({{ h.extra_data.filial }}){% endif %}</span>
                             {% else %}
                             <span class="text-gray-400">–</span>
                             {% endif %}

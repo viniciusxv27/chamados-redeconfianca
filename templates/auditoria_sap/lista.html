@@ -76,9 +76,12 @@
             </div>
 
             <div class="col-span-2 mt-2 lg:mt-0">
-                <span class="sap-chip {% if 'SEM NF' in linha.tipo_erro %}sap-erro-1{% elif 'NÃO ENCONTRADA' in linha.tipo_erro %}sap-erro-2{% else %}sap-erro-3{% endif %}">
-                    {{ linha.tipo_erro }}
+                <span class="sap-chip {% if 'SEM NF' in linha.tipo_principal %}sap-erro-1{% elif 'NÃO ENCONTRADA' in linha.tipo_principal %}sap-erro-2{% else %}sap-erro-3{% endif %}">
+                    {{ linha.tipo_principal }}
                 </span>
+                {% if linha.tipo_principal != linha.tipo_erro %}
+                <p class="text-[11px] text-gray-500 mt-1" title="Sem NF vem na frente: a venda também tem este erro">também: {{ linha.tipo_erro|lower|capfirst }}</p>
+                {% endif %}
                 {% if linha.status_nf %}
                 <p class="text-[11px] text-gray-400 mt-1">NF {{ linha.status_nf|title }}</p>
                 {% endif %}

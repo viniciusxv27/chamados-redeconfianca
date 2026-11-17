@@ -85,6 +85,7 @@ INSTALLED_APPS = [
     'acess',  # Confiança Acess: esteira dos acessos corporativos (só SUPERADMIN + liberados)
     'maps',  # Mapa de localização (módulo oculto, restrito à administração)
     'cursos',
+    'api_mobile',  # API do app mobile (Expo) — token por aparelho
     'quiz',
     'curriculos',  # Banco de Talentos (currículos do RH)
     'reunioes',  # Reuniões com sala de vídeo e ata

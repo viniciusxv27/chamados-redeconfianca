@@ -110,6 +110,8 @@ def _pode_ver_meta(user, meta):
     # SUPERADMIN do portal (por hierarquia, nem sempre `is_superuser`) enxerga
     # qualquer meta: é ele quem avalia e aprova no lugar do gestor ausente.
     return (e_superadmin(user) or meta.gestor_id == user.id
+            # Quem acompanha o "A fazer Vinicius" (User 47) abre tudo o que ele criou.
+            or (user.id in IDS_A_FAZER_VINICIUS_MARCADO and meta.created_by_id == ID_VINICIUS)
             or meta.colaborador_id == user.id
             or meta.solicitada_por_id == user.id
             # Gestor abre a meta de quem está em qualquer setor dele — senão a
@@ -226,6 +228,24 @@ def _por_prazo(metas, hoje=None):
 # A coluna à parte do SUPERADMIN: o "A Fazer" do que o Vinicius criou (User 41).
 PARAM_A_FAZER_VINICIUS = 'a_fazer_vinicius'
 ID_VINICIUS = 41
+# Quem abre o Kanban com a caixa já marcada (17/11/2026: pedido para o User 47).
+# Desmarcar manda `a_fazer_vinicius=0`, então a escolha dele vale até voltar a marcar.
+IDS_A_FAZER_VINICIUS_MARCADO = frozenset({47})
+
+
+def _ve_a_fazer_vinicius(user):
+    """Quem tem a caixa "A fazer Vinicius": o SUPERADMIN e quem abre com ela marcada."""
+    return e_superadmin(user) or user.id in IDS_A_FAZER_VINICIUS_MARCADO
+
+
+def _a_fazer_vinicius_marcado(request):
+    """A caixa está marcada? Sem o parâmetro na URL, vale o padrão da pessoa."""
+    if not _ve_a_fazer_vinicius(request.user):
+        return False
+    valor = request.GET.get(PARAM_A_FAZER_VINICIUS)
+    if valor is None:
+        return request.user.id in IDS_A_FAZER_VINICIUS_MARCADO
+    return valor == '1'
 
 FILTROS_KANBAN = ('colaborador', 'criadas_por_mim', 'criado_por', PARAM_A_FAZER_VINICIUS, filtros_impulso.PARAM_NOME,
                   filtros_impulso.PARAM_SETOR, filtros_impulso.PARAM_MES)
@@ -401,25 +421,44 @@ def metas_kanban(request):
     metas = abertas + concluidas
     equipe_ids = _marcar_cards(metas, user, gestor)
 
-    # A coluna "A Fazer Vinicius" traz TUDO o que ele criou e ainda não foi concluído —
-    # qualquer status em aberto, de qualquer mês e sem os outros filtros da tela
-    # (05/11/2026: "deve mostrar tudo criado pelo vinicius"). O card sai da coluna
-    # comum para não aparecer duas vezes; concluída continua na "Concluída".
-    a_fazer_vinicius = e_superadmin(user) and request.GET.get(PARAM_A_FAZER_VINICIUS) == '1'
+    # Com "A fazer Vinicius" marcado entra TUDO o que ele criou e ainda não foi
+    # concluído — de qualquer mês e sem os outros filtros da tela (05/11/2026:
+    # "deve mostrar tudo criado pelo vinicius"). O que está em A Fazer vai para a
+    # coluna "A Fazer Vinicius"; o resto fica na coluna do SEU status (17/11/2026),
+    # sempre com o card vermelho. Cada card aparece uma vez só; concluída segue o
+    # recorte da "Concluída" (paginada) e fica vermelha se for dele.
+    a_fazer_vinicius = _a_fazer_vinicius_marcado(request)
     dele = []
     if a_fazer_vinicius:
+        ja_na_tela = {m.id: m for m in metas}
+        # Quem abre com a caixa marcada (User 47) vê TODAS as do Vinicius, mesmo as
+        # de colaborador fora da equipe dele (17/11/2026: "liberar todas").
+        base = (Meta.objects.filter(aprovacao=Meta.Aprovacao.APROVADA) if user.id in IDS_A_FAZER_VINICIUS_MARCADO
+                else _metas_do_usuario(user))
         dele = _por_entrega_e_prioridade(
-            _metas_do_usuario(user).select_related('colaborador', 'gestor').prefetch_related('itens')
+            base.select_related('colaborador', 'gestor').prefetch_related('itens')
             .filter(created_by_id=ID_VINICIUS).exclude(status=Meta.Status.CONCLUIDA))
-        _marcar_cards(dele, user, gestor)
+        # Só os que o recorte da tela não trouxe passam pelo _marcar_cards de novo.
+        novos = [m for m in dele if m.id not in ja_na_tela]
+        if novos:
+            _marcar_cards(novos, user, gestor)
+        dele = [ja_na_tela.get(m.id, m) for m in dele]
+        for m in metas:
+            m.card_vinicius = m.created_by_id == ID_VINICIUS
+        for m in dele:
+            m.card_vinicius = True
     ids_dele = {m.id for m in dele}
     colunas = []
     for status in Meta.KANBAN_STATUSES:
         do_status = [m for m in metas if m.status == status.value and m.id not in ids_dele]
+        dele_no_status = [m for m in dele if m.status == status.value]
         e_concluida = status == Meta.Status.CONCLUIDA
         if a_fazer_vinicius and status == Meta.Status.A_FAZER:
-            colunas.append({'status': status.value, 'label': 'A Fazer Vinicius', 'metas': dele, 'total': len(dele),
-                            'restantes': 0, 'grupos': _por_prazo(dele), 'destaque': True})
+            colunas.append({'status': status.value, 'label': 'A Fazer Vinicius', 'metas': dele_no_status,
+                            'total': len(dele_no_status), 'restantes': 0, 'grupos': _por_prazo(dele_no_status),
+                            'destaque': True})
+        elif dele_no_status:
+            do_status = _por_entrega_e_prioridade(do_status + dele_no_status)
         colunas.append({
             'status': status.value,
             'label': status.label,
@@ -455,6 +494,7 @@ def metas_kanban(request):
         'criadas_por_mim': request.GET.get('criadas_por_mim') == '1',
         # Filtro "Criado por": só o SUPERADMIN vê o seletor (e só para ele vale).
         'filtra_criador': e_superadmin(user),
+        'mostra_a_fazer_vinicius': _ve_a_fazer_vinicius(user),
         'a_fazer_vinicius': a_fazer_vinicius,
         'criadores': _criadores_de_metas(user) if e_superadmin(user) else None,
         'criado_por_id': _criado_por_do_kanban(request),
@@ -485,6 +525,9 @@ def metas_kanban_concluidas(request):
     total = concluidas_qs.count()
     metas = list(concluidas_qs.prefetch_related('itens')[inicio:inicio + CONCLUIDAS_POR_VEZ])
     _marcar_cards(metas, user, gestor)
+    if _a_fazer_vinicius_marcado(request):
+        for m in metas:
+            m.card_vinicius = m.created_by_id == ID_VINICIUS
     # Um render só: por card, os processadores de contexto do portal rodariam de novo a cada um.
     html = render_to_string('impulso/_cards_concluidas.html',
                             {'metas': metas, 'col': {'status': Meta.Status.CONCLUIDA.value}}, request=request)
@@ -601,6 +644,53 @@ def _gestores_da_area_por_colaborador(quem):
     return mapa
 
 
+def _tarefa_da_agenda(user, tarefa_id):
+    """Tarefa de uma ata de reunião (agenda) que `user` enxerga, ou None.
+
+    Da tela da transcrição sai o "Enviar para o Impulso de <pessoa>": o
+    formulário de meta abre preenchido com a tarefa e a meta guarda de onde veio.
+    Só vale tarefa de transcrição que a pessoa pode ver.
+    """
+    try:
+        tarefa_id = int(tarefa_id)
+    except (TypeError, ValueError):
+        return None
+    from agenda.views import _visible_transcriptions_for_user   # tardio: evita import circular
+    from core.models import TaskActivity
+    return (TaskActivity.objects
+            .filter(pk=tarefa_id,
+                    source_transcription__in=_visible_transcriptions_for_user(user))
+            .first())
+
+
+def _tarefa_ja_no_impulso(request, pessoa, tarefa):
+    """Se a tarefa já está no Impulso da pessoa (meta não recusada), leva até ela.
+
+    A mesma regra do "Importar para o Impulso": a mesma pessoa não recebe a
+    mesma tarefa duas vezes. Quem não pode abrir a meta volta para a reunião.
+    """
+    if pessoa is None or tarefa is None:
+        return None
+    from .importacao import importacoes_vivas
+    existente = importacoes_vivas(pessoa, [tarefa.pk]).get(tarefa.pk)
+    if existente is None:
+        return None
+    messages.info(request, f'Esta tarefa já está no Impulso de {pessoa.get_full_name() or pessoa.email}.')
+    if _pode_ver_meta(request.user, existente):
+        return redirect('impulso:meta_detail', meta_id=existente.id)
+    origem = tarefa.source_transcription.first()
+    return redirect(f'/agenda/transcricoes/{origem.pk}/' if origem else 'impulso:metas_kanban')
+
+
+def _voltar_ao_form_da_meta(request):
+    """Volta ao formulário depois de um erro sem perder a tarefa da agenda."""
+    url = reverse('impulso:meta_create')
+    tarefa = request.POST.get('tarefa')
+    if tarefa and str(tarefa).isdigit():
+        url += '?' + urlencode({'tarefa': tarefa, 'colaborador': request.POST.get('colaborador') or ''})
+    return redirect(url)
+
+
 @impulso_member_required
 def meta_create(request):
     """Cria a meta (gestor) ou solicita uma ao gestor do próprio setor (colaborador).
@@ -677,7 +767,7 @@ def meta_create(request):
                             f'{colaborador.get_full_name() or colaborador.email} é de outra '
                             f'área e não há gestor do Impulso cadastrado nela para aprovar '
                             f'a demanda. Fale com o RH para ajustar o cadastro.')
-                        return redirect('impulso:meta_create')
+                        return _voltar_ao_form_da_meta(request)
                     # Fora da área, a escolha livre acima não vale: quem fica
                     # com a meta é um gestor da área do colaborador, que é
                     # quem precisa aprovar. Deixar o criador apontar alguém de
@@ -701,7 +791,7 @@ def meta_create(request):
                             f'{colaborador.get_full_name() or colaborador.email} para aprovar. '
                             f'Escolha outro gestor responsável ou desmarque '
                             f'"Enviar para aprovação do Gestor".')
-                        return redirect('impulso:meta_create')
+                        return _voltar_ao_form_da_meta(request)
                     gestor = (gestores_da_area.filter(
                         id=_int_or_none(request.POST.get('gestor_aprovador'))).first()
                         or gestores_da_area.first())
@@ -716,12 +806,12 @@ def meta_create(request):
                 if colaborador is None:
                     messages.error(request, "Para outra pessoa, a atividade só pode ser criada "
                                             "para quem está em ADM's LOJAS.")
-                    return redirect('impulso:meta_create')
+                    return _voltar_ao_form_da_meta(request)
                 gestor = get_gestores().filter(
                     id=_int_or_none(request.POST.get('gestor_aprovador'))).first()
                 if not gestor:
                     messages.error(request, 'Escolha o gestor que vai aprovar e avaliar a atividade.')
-                    return redirect('impulso:meta_create')
+                    return _voltar_ao_form_da_meta(request)
                 # SUPERADMIN criando direto: já nasce aprovada por ele.
                 pedido_adm = precisa_aprovacao = not sa_direto
             else:
@@ -734,7 +824,7 @@ def meta_create(request):
                 if not gestor:
                     messages.error(request, 'Escolha o gestor.' if sou_adm_loja
                                    else 'Escolha um gestor do seu setor.')
-                    return redirect('impulso:meta_create')
+                    return _voltar_ao_form_da_meta(request)
 
                 # A pessoa decide se a atividade dela precisa passar pelo gestor.
                 # Sem autorização, ela entra no Kanban na hora.
@@ -751,7 +841,7 @@ def meta_create(request):
         if not (colaborador and titulo and descricao and prazo):
             campo = 'colaborador, título, descrição e prazo' if sou_gestor else 'título, descrição e prazo'
             messages.error(request, f'Preencha {campo}.')
-            return redirect('impulso:meta_create')
+            return _voltar_ao_form_da_meta(request)
 
         # O `min` do campo de data é só sugestão do navegador — um POST direto
         # passa por cima dele. Meta que nasce vencida entraria no Kanban já na
@@ -759,11 +849,18 @@ def meta_create(request):
         hoje = timezone.localdate()
         if prazo < hoje:
             messages.error(request, 'O prazo não pode ser anterior a hoje.')
-            return redirect('impulso:meta_create')
+            return _voltar_ao_form_da_meta(request)
         foto, audio, erro_midia = _midia_da_descricao(request)
         if erro_midia:
             messages.error(request, erro_midia)
-            return redirect('impulso:meta_create')
+            return _voltar_ao_form_da_meta(request)
+
+        # Veio de uma tarefa da agenda: a mesma pessoa não recebe a mesma
+        # tarefa duas vezes enquanto a primeira vale (a regra do "Importar").
+        tarefa_origem = _tarefa_da_agenda(request.user, request.POST.get('tarefa'))
+        ja_tem = _tarefa_ja_no_impulso(request, colaborador, tarefa_origem)
+        if ja_tem is not None:
+            return ja_tem
 
         # Gestor criando para a própria área: aprovada. Para outra área, vai
         # para o gestor de lá. Colaborador: depende do que ele escolheu.
@@ -782,6 +879,7 @@ def meta_create(request):
             decidida_por=request.user if aprovada_pelo_sa else None,
             decidida_em=timezone.now() if aprovada_pelo_sa else None,
             created_by=request.user,
+            tarefa_origem=tarefa_origem,
         )
         if aviso_dia_util:
             messages.info(request, aviso_dia_util)
@@ -914,7 +1012,35 @@ def meta_create(request):
                 'gestores': aprovadores,
             }
 
+    # "Enviar para o Impulso de <pessoa>" (tela da transcrição): abre preenchido
+    # com a tarefa e a pessoa escolhida. Quem pode criar para quem segue as
+    # regras de sempre — a pessoa só vem marcada se estiver na lista da tela.
+    tarefa_agenda = _tarefa_da_agenda(request.user, request.GET.get('tarefa'))
+    preenchido = {}
+    if tarefa_agenda is not None:
+        hoje = timezone.localdate()
+        prazo_tarefa = tarefa_agenda.due_date
+        if prazo_tarefa is not None and hasattr(prazo_tarefa, 'date'):
+            prazo_tarefa = timezone.localtime(prazo_tarefa).date() if timezone.is_aware(prazo_tarefa) else prazo_tarefa.date()
+        preenchido = {
+            'titulo': (tarefa_agenda.title or '')[:200],
+            'descricao': tarefa_agenda.description or tarefa_agenda.title or '',
+            'prazo': prazo_tarefa if prazo_tarefa and prazo_tarefa >= hoje else None,
+        }
+    try:
+        preencher_colaborador = int(request.GET.get('colaborador') or 0)
+    except ValueError:
+        preencher_colaborador = 0
+    if tarefa_agenda is not None and preencher_colaborador:
+        ja_tem = _tarefa_ja_no_impulso(
+            request, User.objects.filter(pk=preencher_colaborador).first(), tarefa_agenda)
+        if ja_tem is not None:
+            return ja_tem
+
     context = {
+        'tarefa_agenda': tarefa_agenda,
+        'preenchido': preenchido,
+        'preencher_colaborador': preencher_colaborador,
         'sou_gestor': sou_gestor,
         'sou_superadmin': sou_superadmin,
         # SUPERADMIN gestor que pede aprovação sendo ele o gestor responsável:

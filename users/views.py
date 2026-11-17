@@ -997,6 +997,7 @@ def create_user_view(request):
             'sectors': Sector.objects.all(),
             'hierarchy_choices': request.user.assignable_hierarchy_choices(),
             'user': request.user,
+            'pdv_opcoes': _pdv_choices(pdv), 'pdv_atual': pdv,
             'job_title_choices': _job_title_choices(),
             'state_choices': User.STATE_CHOICES,
         }
@@ -1108,6 +1109,7 @@ def create_user_view(request):
         'sectors': Sector.objects.all(),
         'hierarchy_choices': request.user.assignable_hierarchy_choices(),
         'user': request.user,
+        'pdv_opcoes': _pdv_choices(), 'pdv_atual': '',
         'job_title_choices': _job_title_choices(),
         'state_choices': User.STATE_CHOICES,
     }
@@ -1399,6 +1401,7 @@ def edit_user_view(request, user_id):
         'sectors': Sector.objects.all(),
         'hierarchy_choices': request.user.assignable_hierarchy_choices(),
         'user': request.user,
+        'pdv_opcoes': _pdv_choices(user_to_edit.pdv), 'pdv_atual': user_to_edit.pdv,
         'job_title_choices': _job_title_choices(user_to_edit.job_title),
         'state_choices': User.STATE_CHOICES,
         'historico_alteracoes': historico,
@@ -1938,6 +1941,19 @@ def _erros_de_tamanho_e_data(values):
             erros.append(f'A data "{legivel}" em "{User._meta.get_field(chave).verbose_name}" não existe. '
                           'Confira o dia, o mês e o ano.')
     return erros
+
+
+def _pdv_choices(atual=''):
+    """Opções do select de PDV: os setores "Loja ..." (o valor gravado é o nome do setor).
+
+    O PDV é texto livre e muita gente tem a grafia antiga ("MONTSERRAT", "GLÓRIA"). Se o PDV atual
+    não está na lista, entra como opção também, para salvar a tela não apagar o dado.
+    """
+    nomes = list(Sector.objects.filter(name__icontains='Loja').order_by('name').values_list('name', flat=True))
+    atual = (atual or '').strip()
+    if atual and atual not in nomes:
+        nomes.append(atual)
+    return nomes
 
 
 def _job_title_choices(atual=''):

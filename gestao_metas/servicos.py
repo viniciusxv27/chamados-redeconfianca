@@ -552,3 +552,132 @@ def recalcular_fixa(competencia, user=None, origem='Recalculado'):
 def sem_acento(texto):
     texto = unicodedata.normalize('NFKD', str(texto or ''))
     return ''.join(c for c in texto if not unicodedata.combining(c))
+
+
+# ---------------------------------------------------------------------------
+# Divisão da meta da loja entre os consultores (botão "Salvar" da linha)
+# ---------------------------------------------------------------------------
+CHEIA = 100
+
+
+def dividir_meta_loja(total, consultores, casas=2):
+    """Divide ``total`` entre ``consultores`` = [(chave, percentual), …] → [(chave, percentual, parte), …].
+
+    - base = total ÷ N (N = todos os consultores);
+    - quem tem meta de 80% (60%) fica com 0,8 (0,6) × base, arredondado para baixo;
+    - o que sobra (total − proporcionais) vai, em partes iguais, para quem tem meta cheia (100%),
+      que fica com base + sobra ÷ cheios;
+    - ninguém com 100%: o total é dividido proporcionalmente ao percentual de cada um;
+    - arredondamento: ``casas`` = 2 (centavos) ou 0 (quantidade inteira). A soma bate
+      exatamente com o total: o resto que o arredondamento deixa sai uma unidade (centavo ou
+      inteiro) por vez a partir do primeiro cheio da lista (sem cheio, a partir do primeiro).
+
+    Função pura (sem banco): a ordem da saída é a da entrada.
+    """
+    unidade = Decimal(1).scaleb(-int(casas))
+    total = Decimal(str(total)) if not isinstance(total, Decimal) else total
+    if total < 0:
+        raise ValueError('A meta não pode ser negativa.')
+    total = total.quantize(unidade)
+    itens = [(chave, int(pct)) for chave, pct in consultores]
+    if not itens:
+        return []
+    if any(p <= 0 or p > CHEIA for _, p in itens):
+        raise ValueError('Percentual de meta inválido.')
+
+    def para_baixo(valor):
+        return valor.quantize(unidade, rounding='ROUND_FLOOR')
+
+    n = len(itens)
+    cheios = [i for i, (_, p) in enumerate(itens) if p == CHEIA]
+    partes = [Decimal(0)] * n
+    if cheios:
+        base = total / n
+        for i, (_, p) in enumerate(itens):
+            if p != CHEIA:
+                partes[i] = para_baixo(base * p / CHEIA)
+        resto = total - sum(partes)  # sobra dos reduzidos + a base de cada cheio
+        cada = para_baixo(resto / len(cheios))
+        for i in cheios:
+            partes[i] = cada
+        recebem = cheios
+    else:
+        soma_pct = sum(p for _, p in itens)
+        for i, (_, p) in enumerate(itens):
+            partes[i] = para_baixo(total * p / soma_pct)
+        recebem = list(range(n))
+    falta = total - sum(partes)
+    k = 0
+    while falta > 0:
+        partes[recebem[k % len(recebem)]] += unidade
+        falta -= unidade
+        k += 1
+    return [(chave, p, partes[i]) for i, (chave, p) in enumerate(itens)]
+
+
+def total_para_dividir(competencia, loja, pilar):
+    """(total, casas): Fixa divide a nova meta (quantidade inteira); os outros pilares, a meta em R$."""
+    m = MetaLoja.objects.filter(competencia=competencia, loja=loja, pilar=pilar).first()
+    if pilar == 'fixa':
+        return (Decimal(m.nova_meta) if m and m.nova_meta is not None else None), 0
+    return (m.meta if m else None), 2
+
+
+@transaction.atomic
+def dividir_e_gravar(competencia, loja, pilar, user, hoje=None):
+    """Pega os consultores da loja no Quadro de HC e grava a meta de cada um (refaz a divisão inteira)."""
+    from quadro_hc.servicos import consultores_da_loja
+
+    from .models import MetaConsultor
+    if competencia.fechada:
+        raise PermissionError('A competência está fechada.')
+    if pilar not in dict(PILARES):
+        raise ValueError('Pilar desconhecido.')
+    total, casas = total_para_dividir(competencia, loja, pilar)
+    if total is None:
+        raise ValueError('Defina a meta da loja antes de salvar.' if pilar != 'fixa' else
+                         'A Fixa ainda não tem nova meta (meta R$ e ticket médio): nada a dividir.')
+    if not loja.setor_id:
+        raise ValueError('A loja {} não está ligada a um setor do portal (aba Lojas): não dá para achar os '
+                         'consultores no Quadro de HC.'.format(loja.nome))
+    consultores = consultores_da_loja(loja.setor_id, hoje)
+    if not consultores:
+        raise ValueError('O Quadro de HC não tem consultor na {}.'.format(loja.setor.name))
+    partes = dividir_meta_loja(total, [(c['user'], c['percentual']) for c in consultores], casas)
+    antes = MetaConsultor.objects.filter(competencia=competencia, loja=loja, pilar=pilar)
+    n_antes = antes.count()
+    antes.delete()
+    autor = user if getattr(user, 'is_authenticated', False) else None
+    MetaConsultor.objects.bulk_create([
+        MetaConsultor(competencia=competencia, loja=loja, pilar=pilar, colaborador=u,
+                      colaborador_nome=(u.get_full_name() or u.username)[:200], percentual=pct, meta=parte,
+                      meta_loja=total, qtd_consultores=len(partes), gerado_por=autor)
+        for u, pct, parte in partes])
+    registrar(competencia, loja, pilar, 'divisao_consultores',
+              '{} consultor(es)'.format(n_antes) if n_antes else '',
+              '{} consultor(es) · {}'.format(len(partes), _txt(total)), user, 'Botão Salvar (Quadro de HC)')
+    n = len(partes)
+    base = total / n
+    return {
+        'total': float(total), 'casas': casas, 'n': n, 'base': float(base),
+        'cheios': sum(1 for _, p, _v in partes if p == CHEIA),
+        'itens': [{'id': u.id, 'nome': u.get_full_name() or u.username, 'percentual': p, 'meta': float(v)}
+                  for u, p, v in partes],
+        'qtd_cns': (MetaLoja.objects.filter(competencia=competencia, loja=loja, pilar='fixa')
+                    .values_list('qtd_cns', flat=True).first() if pilar == 'fixa' else None),
+    }
+
+
+def divisoes_da_competencia(competencia):
+    """{(loja_id, pilar): [MetaConsultor, …]} — para a tela mostrar o que já foi dividido."""
+    from django.db import DatabaseError
+
+    from .models import MetaConsultor
+    mapa = {}
+    try:
+        with transaction.atomic():  # servidor sem a tabela (migrate pendente) não derruba a tela
+            for mc in MetaConsultor.objects.filter(competencia=competencia).order_by('id'):
+                mapa.setdefault((mc.loja_id, mc.pilar), []).append(mc)
+    except DatabaseError:
+        return {}
+    return mapa

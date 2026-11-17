@@ -15,9 +15,9 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from .espelho import sincronizar, ultima_sincronizacao
-from .models import (GRUPOS_DA_TELA, LIMITE_VALOR_DESPREZIVEL, LinhaAuditoria, SincronizacaoAuditoria,
-                     filtro_aguardando_leitura, filtro_resolvidas_pendentes, inicio_da_ultima_leitura, q_da_tela,
-                     q_valor_desprezivel)
+from .models import (GRUPOS_DA_TELA, LIMITE_VALOR_DESPREZIVEL, TIPO_NAO_LANCADA_NO_SAP, LinhaAuditoria,
+                     SincronizacaoAuditoria, com_tipo_principal, filtro_aguardando_leitura,
+                     filtro_resolvidas_pendentes, inicio_da_ultima_leitura, q_da_tela, q_valor_desprezivel)
 from .mysql import SapIndisponivel
 from .permissions import e_gestor as _e_gestor
 from .permissions import (CHAVE_GESTOR, gestores_escolhidos, lojas_visiveis, nome_da_loja, normalizar_loja,
@@ -159,8 +159,11 @@ def filtrar(filtros, corte=None, pdvs=None):
     """A consulta do espelho já com os filtros da tela (e só as lojas de quem vê).
 
     Divergência de valor abaixo de R$ 1 fica de fora de tudo (``q_valor_desprezivel``).
+    Cada linha leva o ``tipo_principal`` (SEM NF na frente de tudo): é ele que o
+    filtro de tipo, as contagens e a lista usam.
     """
-    qs = LinhaAuditoria.objects.filter(q_da_tela('' if filtros.get('grupo', 'todos') == 'todos' else filtros['grupo']))
+    qs = com_tipo_principal(LinhaAuditoria.objects.filter(
+        q_da_tela('' if filtros.get('grupo', 'todos') == 'todos' else filtros['grupo'])))
     qs = qs.exclude(q_valor_desprezivel())
     if pdvs is not None:
         qs = qs.filter(pdv__in=pdvs)
@@ -177,7 +180,7 @@ def filtrar(filtros, corte=None, pdvs=None):
     elif filtros['situacao'] == 'aguardando':
         qs = qs.filter(filtro_aguardando_leitura(corte if corte is not None else inicio_da_ultima_leitura()))
     if filtros['tipo']:
-        qs = qs.filter(tipo_erro=filtros['tipo'])
+        qs = qs.filter(tipo_principal=filtros['tipo'])
     if filtros['loja']:
         # A loja escolhida pega todas as grafias dela no SAP ("ITAIM PAULISTA" e "L220").
         alvo = normalizar_loja(filtros['loja'])
@@ -213,7 +216,7 @@ def ordenar(qs, ordem):
     if ordem == 'loja':
         return qs.order_by('pdv', '-data_venda', 'id_venda')
     if ordem == 'tipo':
-        return qs.order_by('tipo_erro', '-data_venda', 'id_venda')
+        return qs.order_by('tipo_principal', '-data_venda', 'id_venda')
     return qs.order_by('-data_venda', 'pdv', 'id_venda')
 
 
@@ -251,8 +254,16 @@ def _contexto_comum(request, filtros, pdvs=None):
         visiveis = visiveis.filter(pdv__in=pdvs)
     # As abas, com o que está aberto em cada uma nos demais filtros (mês, loja, busca…).
     sem_aba = filtrar({**filtros, 'grupo': 'todos', 'tipo': ''}, pdvs=pdvs)
-    contagem = dict(sem_aba.values_list('tipo_erro').annotate(n=Count('id')).values_list('tipo_erro', 'n'))
+    contagem = dict(sem_aba.order_by().values_list('tipo_principal').annotate(n=Count('id'))
+                    .values_list('tipo_principal', 'n'))
     grupos = [{'chave': c, 'rotulo': r, 'n': sum(contagem.get(t, 0) for t in tipos)} for c, r, tipos in GRUPOS_DA_TELA]
+    # Lançadas no Vivo GO e não no SAP: além das linhas (itens), quantas vendas e quanto dinheiro.
+    nao_sap = sem_aba.filter(tipo_principal=TIPO_NAO_LANCADA_NO_SAP).aggregate(
+        vendas=Count('id_venda', distinct=True),
+        valor=Coalesce(Sum('valor_vivogo'), Value(ZERO), output_field=DecimalField(max_digits=16, decimal_places=2)))
+    for g in grupos:
+        if g['chave'] == 'nao_sap':
+            g.update(nao_sap)
     tipos_da_aba = dict((c, t) for c, _r, t in GRUPOS_DA_TELA).get(filtros['grupo'])
     atual = timezone.localdate().strftime('%Y-%m')
     com_venda = {m.strftime('%Y-%m') for m in (visiveis.exclude(data_venda__isnull=True)
@@ -275,8 +286,8 @@ def _contexto_comum(request, filtros, pdvs=None):
         'query_sem_grupo': _query_sem(request, 'grupo', 'tipo', 'pagina'),
         'total_grupos': sum(g['n'] for g in grupos),
         # Tipo do erro só faz sentido dentro da aba (Serial tem dois: errado e ausente).
-        'tipos': (visiveis.filter(tipo_erro__in=tipos_da_aba) if tipos_da_aba else visiveis)
-                  .exclude(tipo_erro='').values_list('tipo_erro', flat=True).distinct().order_by('tipo_erro'),
+        'tipos': (com_tipo_principal(visiveis.filter(q_da_tela(filtros['grupo'])) if tipos_da_aba else visiveis)
+                  .exclude(tipo_erro='').values_list('tipo_principal', flat=True).distinct().order_by('tipo_principal')),
         'lojas': _lojas_do_filtro(visiveis),
         # O gerente vê só a loja dele: a tela diz isso em vez de oferecer um
         # filtro de loja com uma opção só.
@@ -384,10 +395,12 @@ def painel(request):
     maior_loja = max((l['total'] for l in por_loja), default=0)
 
     # Por tipo de erro.
-    por_tipo = list(base.values('tipo_erro')
+    por_tipo = list(base.order_by().values('tipo_principal')
                     .annotate(abertas=Count('id', filter=q_abertas), tratadas=Count('id', filter=Q(resolvida=True)),
                               valor=valor_aberto)
-                    .order_by('-abertas', 'tipo_erro'))
+                    .order_by('-abertas', 'tipo_principal'))
+    for tipo in por_tipo:
+        tipo['tipo_erro'] = tipo['tipo_principal']      # o nome antigo do quadro, para quem já lia por ele
     maior_tipo = max((t['abertas'] + t['tratadas'] for t in por_tipo), default=0)
 
     # Idade das abertas, pela data da venda.

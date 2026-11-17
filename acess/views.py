@@ -689,7 +689,8 @@ def desligamentos(request):
         pedidos=list(PedidoDesligamento.objects.filter(status=PedidoDesligamento.ABERTO)
                      .select_related('colaborador', 'colaborador__local', 'solicitante').order_by('criado_em')),
         inativados=list(AvisoInativacao.objects.filter(status=AvisoInativacao.PENDENTE)
-                        .select_related('colaborador', 'colaborador__local', 'user').order_by('inativado_em')),
+                        .select_related('colaborador', 'colaborador__local', 'colaborador__user', 'user')
+                        .order_by('inativado_em')),
         ativos=base.filter(status=Colaborador.ATIVO, desligamento_em__isnull=True).order_by('nome')))
 
 

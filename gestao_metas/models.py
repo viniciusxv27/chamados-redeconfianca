@@ -255,3 +255,36 @@ class ImportacaoMetas(models.Model):
 
     def __str__(self):
         return f'{self.get_tipo_display()} — {self.arquivo_nome}'
+
+
+class MetaConsultor(models.Model):
+    """A meta da loja num pilar dividida entre os consultores do Quadro de HC (botão "Salvar" da linha).
+
+    Refeita por inteiro a cada "Salvar": quem saiu da loja some, quem entrou
+    aparece. O percentual (100/80/60) é o do Quadro de HC no momento da divisão.
+    Fixa divide a nova meta (quantidade, inteira); os outros pilares, a meta em R$.
+    """
+
+    competencia = models.ForeignKey(Competencia, on_delete=models.CASCADE, related_name='metas_consultores')
+    loja = models.ForeignKey(LojaMeta, on_delete=models.CASCADE, related_name='metas_consultores')
+    pilar = models.CharField(max_length=12, choices=PILARES)
+    colaborador = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='metas_gestao_metas')
+    colaborador_nome = models.CharField(max_length=200, blank=True)
+    percentual = models.PositiveSmallIntegerField(default=100, help_text='Meta de 100%, 80% ou 60% (Quadro de HC).')
+    meta = models.DecimalField(max_digits=14, decimal_places=2)
+    meta_loja = models.DecimalField(max_digits=14, decimal_places=2, help_text='O total da loja que foi dividido.')
+    qtd_consultores = models.PositiveSmallIntegerField(default=0)
+    gerado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+')
+    gerado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['competencia', 'loja', 'pilar', 'id']
+        verbose_name = 'Meta do consultor'
+        verbose_name_plural = 'Metas dos consultores'
+        constraints = [models.UniqueConstraint(fields=['competencia', 'loja', 'pilar', 'colaborador'],
+                                               name='gestao_metas_meta_consultor_unica')]
+
+    def __str__(self):
+        return f'{self.competencia} {self.loja} {self.pilar} {self.colaborador_nome}'

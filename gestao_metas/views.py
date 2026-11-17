@@ -76,6 +76,10 @@ def competencia(request, codigo):
     comp = _competencia(codigo)
     dados, ctx = servicos.montar(comp)
     pilares = [{'chave': p, 'nome': nome, **dados[p]} for p, nome in PILARES]
+    divisoes = servicos.divisoes_da_competencia(comp)
+    for p in pilares:
+        for linha in p['linhas']:
+            linha['divisao'] = divisoes.get((linha['loja_id'], p['chave']), [])
     anterior = Competencia.objects.filter(mes__lt=comp.mes).order_by('-mes').first()
     seguinte = Competencia.objects.filter(mes__gt=comp.mes).order_by('mes').first()
     faltando = []
@@ -119,6 +123,41 @@ def salvar(request, codigo):
         return JsonResponse({'ok': False, 'erro': str(exc)}, status=400)
     linha = servicos.linha_da_loja(comp, loja, corpo.get('pilar'))
     return JsonResponse({'ok': True, 'linha': _json_linha(linha),
+                         'salvo_em': timezone.localtime().strftime('%H:%M:%S')})
+
+
+@login_required
+@exige(editar=True)
+@require_POST
+def dividir(request, codigo):
+    """Botão "Salvar" da linha: grava a meta da loja e a divide entre os consultores do Quadro de HC."""
+    comp = _competencia(codigo)
+    try:
+        corpo = json.loads(request.body or b'{}')
+    except ValueError:
+        return JsonResponse({'ok': False, 'erro': 'Pedido inválido.'}, status=400)
+    if comp.fechada:
+        return JsonResponse({'ok': False, 'erro': 'A competência está fechada: reabra para mudar.'}, status=409)
+    loja = LojaMeta.objects.filter(pk=corpo.get('loja')).select_related('setor').first()
+    pilar = corpo.get('pilar')
+    if loja is None:
+        return JsonResponse({'ok': False, 'erro': 'Loja não encontrada.'}, status=400)
+    campos = corpo.get('campos') or {}
+    try:
+        # O que está digitado na linha vale (o salvamento automático pode não ter chegado ainda).
+        for campo in servicos.CAMPOS_EDITAVEIS:
+            if campo in campos and (campo == 'meta' or pilar == 'fixa'):
+                servicos.salvar_campo(comp, loja, pilar, campo, campos[campo], request.user, origem='Botão Salvar')
+    except (ValueError, PermissionError) as exc:
+        return JsonResponse({'ok': False, 'erro': str(exc)}, status=400)
+    linha = _json_linha(servicos.linha_da_loja(comp, loja, pilar)) if pilar in dict(PILARES) else None
+    try:
+        divisao = servicos.dividir_e_gravar(comp, loja, pilar, request.user)
+    except (ValueError, PermissionError) as exc:
+        return JsonResponse({'ok': False, 'erro': 'Meta da loja salva, mas não foi dividida: {}'.format(exc),
+                             'linha': linha, 'salvo_em': timezone.localtime().strftime('%H:%M:%S')}, status=400)
+    return JsonResponse({'ok': True, 'linha': linha, 'divisao': divisao, 'loja_nome': loja.nome,
+                         'pilar_nome': dict(PILARES).get(pilar, pilar),
                          'salvo_em': timezone.localtime().strftime('%H:%M:%S')})
 
 

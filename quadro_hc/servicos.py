@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from users.models import Sector, User, UserChangeLog
 
-from .models import AjusteHC, Carteira, HCPrevisto, MovimentacaoHC, ObservacaoHC, VagaHC
+from .models import AjusteHC, Carteira, HCPrevisto, MetaProporcional, MovimentacaoHC, ObservacaoHC, VagaHC
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +182,7 @@ def historico_por_pessoa(ids, limite=6) -> dict:
     return saida
 
 
-def _pessoa(u, obs, hist, agendadas, hoje, ajuste=None, gerentes=frozenset()):
+def _pessoa(u, obs, hist, agendadas, hoje, ajuste=None, gerentes=frozenset(), metas=None):
     adm = u.admission_date
     exp1 = adm + timedelta(days=EXPERIENCIA_1) if adm else None
     exp2 = adm + timedelta(days=EXPERIENCIA_2) if adm else None
@@ -209,11 +209,14 @@ def _pessoa(u, obs, hist, agendadas, hoje, ajuste=None, gerentes=frozenset()):
         'novo': bool(adm and adm >= hoje - timedelta(days=30)),
         'setor_id': (ajuste.setor_id if ajuste and ajuste.setor_id else u.sector_id), 'setor_cadastro': u.sector_id,
         'iniciais': ''.join(x[:1] for x in nome_completo(u).split()[:2]).upper() or '?',
+        # Consultor tem o select "Meta" (100/80/60%) usado ao dividir a meta da loja no Gerenciamento de metas.
+        'e_consultor': grupo in GRUPOS_CONSULTOR,
+        'meta_pct': (metas or {}).get(u.id, MetaProporcional.CHEIA),
     }
 
 
-def montar_quadro(hoje=None) -> dict:
-    """Carteira → loja → pessoas (ordenadas por cargo), com vagas, observações e histórico."""
+def pessoas_do_quadro(hoje=None):
+    """(pessoas, fora, ajustes): quem entra no quadro (ativos + incluídos à mão, menos os excluídos à mão)."""
     hoje = hoje or timezone.localdate()
     ajustes = {a.colaborador_id: a for a in AjusteHC.objects.select_related('setor')}
     incluir = [cid for cid, a in ajustes.items() if a.situacao == AjusteHC.INCLUIR]
@@ -221,8 +224,76 @@ def montar_quadro(hoje=None) -> dict:
                    .select_related('sector').order_by('first_name', 'last_name'))
     fora = [u for u in pessoas if getattr(ajustes.get(u.id), 'situacao', '') == AjusteHC.EXCLUIR]
     pessoas = [u for u in pessoas if u not in fora]
+    return pessoas, fora, ajustes
+
+
+# ---------------------------------------------------------------------------
+# Meta proporcional do consultor (100%, 80% ou 60% da meta cheia)
+# ---------------------------------------------------------------------------
+GRUPOS_CONSULTOR = ('Consultor pleno', 'Consultor')
+
+
+def percentuais_de_meta(ids=None) -> dict:
+    """{user_id: percentual} de quem não está na meta cheia (quem não está aqui = 100%)."""
+    qs = MetaProporcional.objects.all()
+    if ids is not None:
+        qs = qs.filter(colaborador_id__in=list(ids))
+    try:
+        with transaction.atomic():  # savepoint: servidor sem a tabela (migrate pendente) não derruba a página
+            return dict(qs.values_list('colaborador_id', 'percentual'))
+    except DatabaseError:
+        return {}
+
+
+def consultores_da_loja(setor, hoje=None) -> list[dict]:
+    """Os consultores (consultor e consultor pleno) que o quadro mostra na loja, com o percentual de meta.
+
+    Mesma regra do quadro: ativos (demissão antiga com status de quem trabalha
+    conta), ajuste manual de função/loja/contar, gerente pelo grupo GERENTES
+    não é consultor.
+    """
+    hoje = hoje or timezone.localdate()
+    setor_id = getattr(setor, 'pk', setor)
+    pessoas, _fora, ajustes = pessoas_do_quadro(hoje)
+    gerentes = ids_gerentes_por_grupo()
+    saida = []
+    for u in pessoas:
+        aj = ajustes.get(u.id)
+        if ((aj.setor_id if aj and aj.setor_id else u.sector_id) != setor_id):
+            continue
+        if funcao_da_pessoa(u, aj, gerentes)[1] in GRUPOS_CONSULTOR:
+            saida.append(u)
+    pcts = percentuais_de_meta([u.id for u in saida])
+    saida.sort(key=lambda u: _norm(nome_completo(u)))
+    return [{'user': u, 'nome': nome_completo(u), 'percentual': pcts.get(u.id, MetaProporcional.CHEIA)} for u in saida]
+
+
+def salvar_meta_proporcional(dados: dict, autor) -> MetaProporcional:
+    """Grava o select "Meta" de um consultor do quadro (com quem alterou e quando)."""
+    pessoa = User.objects.filter(pk=dados.get('colaborador') or 0).select_related('sector').first()
+    if not pessoa:
+        raise ErroQuadro('Colaborador não encontrado.')
+    try:
+        pct = int(str(dados.get('percentual') or '').strip().rstrip('%'))
+    except ValueError:
+        pct = None
+    if pct not in dict(MetaProporcional.PERCENTUAIS):
+        raise ErroQuadro('Meta inválida: escolha 100%, 80% ou 60%.')
+    ajuste = AjusteHC.objects.filter(colaborador=pessoa).first()
+    if funcao_da_pessoa(pessoa, ajuste, ids_gerentes_por_grupo())[1] not in GRUPOS_CONSULTOR:
+        raise ErroQuadro('A meta proporcional é só para consultor.')
+    meta, _ = MetaProporcional.objects.update_or_create(
+        colaborador=pessoa, defaults={'percentual': pct, 'atualizado_por': autor})
+    return meta
+
+
+def montar_quadro(hoje=None) -> dict:
+    """Carteira → loja → pessoas (ordenadas por cargo), com vagas, observações e histórico."""
+    hoje = hoje or timezone.localdate()
+    pessoas, fora, ajustes = pessoas_do_quadro(hoje)
     gerentes = ids_gerentes_por_grupo()
     ids = [p.id for p in pessoas]
+    metas = percentuais_de_meta(ids)
     obs = dict(ObservacaoHC.objects.filter(colaborador_id__in=ids).values_list('colaborador_id', 'texto'))
     hist = historico_por_pessoa(ids)
     agendadas = defaultdict(list)
@@ -235,7 +306,7 @@ def montar_quadro(hoje=None) -> dict:
     por_setor = defaultdict(list)
     sem_loja = []
     for u in pessoas:
-        linha = _pessoa(u, obs, hist, agendadas, hoje, ajustes.get(u.id), gerentes)
+        linha = _pessoa(u, obs, hist, agendadas, hoje, ajustes.get(u.id), gerentes, metas)
         (por_setor[linha['setor_id']] if linha['setor_id'] else sem_loja).append(linha)
     previsto = defaultdict(dict)
     for h in HCPrevisto.objects.filter(quantidade__gt=0):
