@@ -1,0 +1,117 @@
+{% comment %}
+PDF e vídeo dos comunicados. Incluir uma vez por página, depois dos anexos.
+O PDF.js só é baixado quando um PDF aparece na tela, e cada PDF é desenhado na
+largura do seu quadro (funciona no celular e no app, onde <iframe> de PDF não abre).
+{% endcomment %}
+<script>
+(function () {
+    if (window.__comunicadoAnexos) { window.__comunicadoAnexos.procurar(); return; }
+    var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    var WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    var carregando = null;
+
+    function biblioteca() {
+        if (window.pdfjsLib) { return Promise.resolve(window.pdfjsLib); }
+        if (!carregando) {
+            carregando = new Promise(function (ok, falha) {
+                var s = document.createElement('script');
+                s.src = PDFJS;
+                s.onload = function () {
+                    if (!window.pdfjsLib) { falha(new Error('PDF.js não carregou')); return; }
+                    window.pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER;
+                    ok(window.pdfjsLib);
+                };
+                s.onerror = falha;
+                document.head.appendChild(s);
+            });
+        }
+        return carregando;
+    }
+
+    function desenharPagina(pdf, n, alvo, largura) {
+        return pdf.getPage(n).then(function (pagina) {
+            var base = pagina.getViewport({ scale: 1 });
+            var escala = Math.min(largura / base.width, 2.5);
+            var vista = pagina.getViewport({ scale: escala });
+            var dpr = window.devicePixelRatio || 1;
+            var canvas = document.createElement('canvas');
+            canvas.className = 'bg-white shadow-sm max-w-full';
+            canvas.style.width = vista.width + 'px';
+            canvas.style.height = vista.height + 'px';
+            canvas.width = Math.floor(vista.width * dpr);
+            canvas.height = Math.floor(vista.height * dpr);
+            var ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+            alvo.appendChild(canvas);
+            return pagina.render({ canvasContext: ctx, viewport: vista }).promise;
+        });
+    }
+
+    function abrir(quadro) {
+        if (quadro.dataset.pdfAberto) { return; }
+        quadro.dataset.pdfAberto = '1';
+        var paginas = quadro.querySelector('[data-pdf-paginas]');
+        var aviso = quadro.querySelector('[data-pdf-carregando]');
+        var contagem = quadro.querySelector('[data-pdf-contagem]');
+        var mais = quadro.querySelector('[data-pdf-mais]');
+        var falha = quadro.querySelector('[data-pdf-falha]');
+        var soPrimeira = quadro.dataset.soPrimeira === '1';
+        biblioteca().then(function (lib) {
+            return lib.getDocument({ url: quadro.dataset.comPdf, withCredentials: true }).promise;
+        }).then(function (pdf) {
+            if (aviso) { aviso.remove(); }
+            var total = pdf.numPages;
+            if (contagem) { contagem.textContent = total + (total === 1 ? ' página' : ' páginas'); }
+            var largura = Math.max((paginas.clientWidth || quadro.clientWidth || 600) - 16, 240);
+            var ate = soPrimeira ? 1 : total;
+            var cadeia = Promise.resolve();
+            function ate_(fim, de) {
+                for (var n = de; n <= fim; n++) {
+                    (function (n) { cadeia = cadeia.then(function () { return desenharPagina(pdf, n, paginas, largura); }); })(n);
+                }
+                return cadeia;
+            }
+            ate_(ate, 1);
+            if (soPrimeira && total > 1 && mais) {
+                mais.textContent = 'Ver as ' + total + ' páginas';
+                mais.classList.remove('hidden');
+                mais.addEventListener('click', function () {
+                    mais.classList.add('hidden');
+                    ate_(total, 2);
+                });
+            }
+            return cadeia;
+        }).catch(function (erro) {
+            console.error('PDF do comunicado não abriu:', erro);
+            if (aviso) { aviso.remove(); }
+            paginas.classList.add('hidden');
+            if (falha) { falha.classList.remove('hidden'); }
+        });
+    }
+
+    var olho = ('IntersectionObserver' in window) ? new IntersectionObserver(function (entradas) {
+        entradas.forEach(function (e) {
+            if (e.isIntersecting) { olho.unobserve(e.target); abrir(e.target); }
+        });
+    }, { rootMargin: '200px' }) : null;
+
+    function procurar() {
+        document.querySelectorAll('[data-com-pdf]').forEach(function (quadro) {
+            if (quadro.dataset.pdfVisto) { return; }
+            quadro.dataset.pdfVisto = '1';
+            if (olho) { olho.observe(quadro); } else { abrir(quadro); }
+        });
+    }
+
+    // Trocou de slide no carrossel: o vídeo que saiu de vista para de tocar.
+    document.addEventListener('click', function (e) {
+        var botao = e.target.closest && e.target.closest('button');
+        var carrossel = botao && botao.closest('[id^="carousel-"]');
+        if (!carrossel) { return; }
+        carrossel.querySelectorAll('video[data-com-video]').forEach(function (v) { v.pause(); });
+    }, true);
+
+    window.__comunicadoAnexos = { procurar: procurar };
+    procurar();
+})();
+</script>

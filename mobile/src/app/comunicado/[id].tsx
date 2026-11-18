@@ -13,6 +13,7 @@ import { useComunicado, useSituacaoComunicado } from '@/hooks/consultas';
 import { mensagemDoErro } from '@/services/api';
 import { useCores } from '@/providers/tema';
 import { dataHora } from '@/utils/formatar';
+import { abrirNoPortal } from '@/utils/links';
 
 export default function DetalheComunicado() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -89,6 +90,19 @@ export default function DetalheComunicado() {
               <Texto selectable style={{ fontSize: 16, lineHeight: 25 }}>
                 {data.texto}
               </Texto>
+              {data.anexos?.length ? (
+                <View className="gap-2">
+                  {data.anexos.map((anexo) => (
+                    <Botao
+                      key={anexo.id}
+                      titulo={anexo.tipo === 'pdf' ? `Abrir PDF: ${anexo.nome}` : `Assistir: ${anexo.nome}`}
+                      variante="secundario"
+                      icone={anexo.tipo === 'pdf' ? 'document-text-outline' : 'play-circle-outline'}
+                      onPress={() => void abrirNoPortal(anexo.url)}
+                    />
+                  ))}
+                </View>
+              ) : null}
             </Animated.View>
           </ScrollView>
 

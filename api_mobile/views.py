@@ -393,7 +393,7 @@ def comunicado(request, pk):
     c.viewed_by.add(request.user)
     lidos, curtidos = _marcas_de_comunicados(request.user, [c])
     imagens = [dados.url_absoluta(request, c.image)] if c.image else []
-    imagens += [dados.url_absoluta(request, i.image) for i in c.images.all().order_by('order')]
+    imagens += [dados.url_absoluta(request, i.image) for i in c.images.all().order_by('order') if i.e_imagem]
     return Response({
         **dados.comunicado_resumo(request, c, lidos, curtidos),
         'texto': dados.texto_do_html(c.message),

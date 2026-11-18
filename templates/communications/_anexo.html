@@ -1,0 +1,38 @@
+{% comment %}
+Um anexo do comunicado que não é imagem: vídeo (player) ou PDF (desenhado pelo PDF.js).
+Parâmetros: anexo (CommunicationImage), comm (o comunicado), primeira_pagina (True no feed:
+mostra só a 1ª página e um botão para ver as outras). O script fica em _anexos_script.html,
+incluído uma vez na página.
+{% endcomment %}
+{% if anexo.e_video %}
+<div class="bg-black rounded-lg overflow-hidden">
+    <video src="{{ anexo.image.url }}" controls playsinline preload="metadata"
+           class="block w-full max-h-[70vh] bg-black" data-com-video></video>
+</div>
+{% if anexo.caption %}<p class="text-xs text-gray-600 mt-1.5 px-1">{{ anexo.caption }}</p>{% endif %}
+{% elif anexo.e_pdf %}
+{% url 'communications:communication_attachment' comm.id anexo.id as url_do_pdf %}
+<div class="rounded-lg border border-gray-200 bg-gray-100 overflow-hidden" data-com-pdf="{{ url_do_pdf }}"
+     {% if primeira_pagina %}data-so-primeira="1"{% endif %}>
+    <div class="flex items-center gap-2 pl-3 pr-20 py-2 bg-white border-b border-gray-200">{% comment %}pr-20: o contador do carrossel fica no canto{% endcomment %}
+        <i class="fas fa-file-pdf text-red-500"></i>
+        <span class="flex-1 min-w-0 truncate text-sm font-medium text-gray-800">{{ anexo.nome }}</span>
+        <span class="text-xs text-gray-400 whitespace-nowrap" data-pdf-contagem></span>
+        <a href="{{ url_do_pdf }}" target="_blank" rel="noopener"
+           class="text-xs font-semibold text-red-600 hover:text-red-700 whitespace-nowrap">
+            <i class="fas fa-up-right-from-square mr-1"></i>Abrir
+        </a>
+    </div>
+    <div class="overflow-y-auto p-2 flex flex-col items-center gap-2" style="max-height: 70vh" data-pdf-paginas>
+        <div class="py-10 text-sm text-gray-400" data-pdf-carregando>
+            <i class="fas fa-spinner fa-spin mr-1"></i>Carregando o PDF…
+        </div>
+    </div>
+    <button type="button" class="hidden w-full py-2 text-sm font-medium text-red-600 bg-white border-t border-gray-200 hover:bg-red-50"
+            data-pdf-mais></button>
+    <div class="hidden p-6 text-center text-sm text-gray-600" data-pdf-falha>
+        Não deu para mostrar o PDF aqui.
+        <a href="{{ url_do_pdf }}" target="_blank" rel="noopener" class="font-semibold text-red-600 underline">Abrir o PDF</a>
+    </div>
+</div>
+{% endif %}

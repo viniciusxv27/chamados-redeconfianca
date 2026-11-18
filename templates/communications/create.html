@@ -240,8 +240,8 @@
                     <!-- Upload de Foto com Editor de Crop Melhorado -->
                     <div>
                         <label for="photo" class="block text-sm font-semibold text-gray-900 mb-2">
-                            <i class="fas fa-camera text-primary mr-1"></i>
-                            Foto do Comunicado
+                            <i class="fas fa-paperclip text-primary mr-1"></i>
+                            Imagens, vídeos ou PDF
                         </label>
                         
                         <!-- Upload nova foto -->
@@ -250,11 +250,11 @@
                                 <div class="flex flex-col items-center justify-center pt-5 pb-6" id="upload-area">
                                     <i class="fas fa-cloud-upload-alt text-gray-400 text-4xl mb-4"></i>
                                     <p class="mb-2 text-sm text-gray-500">
-                                        <span class="font-semibold">Clique para fazer upload</span> ou arraste a imagem
+                                        <span class="font-semibold">Clique para anexar</span> imagem, vídeo ou PDF
                                     </p>
-                                    <p class="text-xs text-gray-500">PNG, JPG ou JPEG (MAX. 5MB)</p>
+                                    <p class="text-xs text-gray-500">Imagem até 20 MB · vídeo (MP4, MOV, WEBM) até 100 MB · PDF até 30 MB</p>
                                 </div>
-                                <input id="photo" name="photos" type="file" class="hidden" accept="image/*" multiple onchange="previewImages(this)">
+                                <input id="photo" name="photos" type="file" class="hidden" accept="image/*,video/*,application/pdf,.pdf" multiple onchange="previewImages(this)">
                             </label>
                         </div>
                         
@@ -263,10 +263,10 @@
                             <div class="bg-gray-100 rounded-lg p-4">
                                 <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 space-y-2 sm:space-y-0">
                                     <div>
-                                        <p class="text-sm text-gray-600">Imagens selecionadas: <span id="images-count">0</span></p>
+                                        <p class="text-sm text-gray-600">Anexos selecionados: <span id="images-count">0</span></p>
                                         <p class="text-xs text-blue-600 mt-1">
                                             <i class="fas fa-info-circle mr-1"></i>
-                                            Arraste as imagens ou use as setas para ajustar a ordem do carrossel
+                                            Arraste os anexos ou use as setas para ajustar a ordem do carrossel
                                         </p>
                                     </div>
                                     <button type="button" onclick="removeAllPhotos()" class="bg-red-500 text-white px-3 py-1.5 rounded text-sm hover:bg-red-600 transition-colors">
@@ -279,7 +279,7 @@
                                 </div>
                             </div>
                         </div>
-                        <p class="text-sm text-gray-500 mt-1">Você pode selecionar múltiplas fotos. Elas serão exibidas como carrossel no comunicado. Máximo: 10 imagens.</p>
+                        <p class="text-sm text-gray-500 mt-1">Você pode selecionar vários arquivos. Eles aparecem como carrossel no comunicado, na ordem acima — o vídeo com player e o PDF com as páginas na própria tela. Máximo: 20 anexos.</p>
                     </div>
 
                     <!-- Mensagem -->
@@ -739,6 +739,16 @@ function toggleGroupRecipients() {
 
 let selectedFiles = [];
 let imageDataArray = [];
+const LIMITE_DO_ANEXO = { imagem: 20, video: 100, pdf: 30 };
+const ROTULO_DO_ANEXO = { imagem: 'imagem', video: 'vídeo', pdf: 'PDF' };
+
+function tipoDoAnexo(file) {
+    const nome = (file.name || '').toLowerCase();
+    if (file.type === 'application/pdf' || nome.endsWith('.pdf')) return 'pdf';
+    if ((file.type || '').startsWith('video/') || /\.(mp4|webm|mov|m4v|ogv)$/.test(nome)) return 'video';
+    if ((file.type || '').startsWith('image/') || /\.(jpe?g|png|gif|webp|bmp|avif|heic|heif)$/.test(nome)) return 'imagem';
+    return null;
+}
 
 function previewImages(input) {
     const preview = document.getElementById('photos-preview');
@@ -750,16 +760,21 @@ function previewImages(input) {
     if (input.files && input.files.length > 0) {
         const files = Array.from(input.files);
         
-        // Limitar a 10 imagens
         if (files.length > 20) {
-            alert('Máximo de 10 imagens permitidas.');
+            alert('Máximo de 20 anexos por comunicado.');
             return;
         }
         
-        // Validar tamanho dos arquivos
+        // Mesmos limites do servidor (communications/views.py, LIMITE_DO_ANEXO).
         for (let file of files) {
-            if (file.size > 5 * 1024 * 1024) {
-                alert(`Arquivo "${file.name}" muito grande. Máximo 5MB por imagem.`);
+            const tipo = tipoDoAnexo(file);
+            if (!tipo) {
+                alert(`"${file.name}" não é imagem, vídeo nem PDF.`);
+                return;
+            }
+            const limite = LIMITE_DO_ANEXO[tipo];
+            if (file.size > limite * 1024 * 1024) {
+                alert(`"${file.name}" tem ${(file.size / 1024 / 1024).toFixed(0)} MB — o limite para ${ROTULO_DO_ANEXO[tipo]} é ${limite} MB.`);
                 return;
             }
         }
@@ -771,10 +786,18 @@ function previewImages(input) {
         let loadedCount = 0;
         
         files.forEach((file, index) => {
-            const reader = new FileReader();
+            const tipo = tipoDoAnexo(file);
+            // Vídeo e PDF não passam pelo FileReader (seriam dezenas de MB em memória):
+            // o vídeo mostra o próprio quadro pela URL local e o PDF, um cartão.
+            const reader = tipo === 'imagem' ? new FileReader() : { readAsDataURL() { this.onload({ target: { result: tipo === 'video' ? URL.createObjectURL(file) : '' } }); } };
             
             reader.onload = function(e) {
                 imageDataArray[index] = e.target.result;
+                const miniatura = tipo === 'video'
+                    ? `<video src="${e.target.result}" muted playsinline preload="metadata" class="w-full h-32 object-cover rounded bg-black"></video>`
+                    : tipo === 'pdf'
+                    ? `<div class="w-full h-32 rounded bg-red-50 border border-red-100 flex flex-col items-center justify-center text-red-500"><i class="fas fa-file-pdf text-3xl"></i><span class="text-[11px] font-semibold mt-1">PDF</span></div>`
+                    : `<img src="${e.target.result}" alt="Preview ${index + 1}" class="w-full h-32 object-cover rounded">`;
                 
                 // Criar preview da imagem
                 const imageContainer = document.createElement('div');
@@ -794,7 +817,7 @@ function previewImages(input) {
                         </button>
                     </div>
                     <div class="aspect-w-16 aspect-h-9 mb-2 cursor-move" title="Arraste para reordenar">
-                        <img src="${e.target.result}" alt="Preview ${index + 1}" class="w-full h-32 object-cover rounded">
+                        ${miniatura}
                     </div>
                     <div class="flex items-center justify-between">
                         <span class="text-xs text-gray-600 truncate">${file.name}</span>

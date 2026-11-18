@@ -6,6 +6,7 @@ from django.contrib import messages
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST, require_http_methods
 from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.db import models
 from django.db.models import Q
 from django.core.paginator import Paginator
@@ -324,6 +325,65 @@ def communication_list(request):
     })
 
 
+# Anexos do comunicado: imagem, vídeo e PDF (18/11/2026).
+LIMITE_DO_ANEXO = {'imagem': 20 * 1024 * 1024, 'video': 100 * 1024 * 1024, 'pdf': 30 * 1024 * 1024}
+MAXIMO_DE_ANEXOS = 20
+EXTENSOES_IMAGEM = ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.avif', '.heic', '.heif')
+
+
+def _erro_do_anexo(arquivo):
+    """O que impede o arquivo de entrar no comunicado — ou None."""
+    import os
+    from .models import tipo_do_anexo
+    nome = arquivo.name or ''
+    ext = os.path.splitext(nome)[1].lower()
+    tipo = tipo_do_anexo(nome)
+    if tipo == 'imagem' and ext not in EXTENSOES_IMAGEM and not (arquivo.content_type or '').startswith('image/'):
+        return f'"{nome}" não é imagem, vídeo nem PDF.'
+    if not arquivo.size:
+        return f'"{nome}" chegou vazio.'
+    limite = LIMITE_DO_ANEXO[tipo]
+    if arquivo.size > limite:
+        rotulo = {'imagem': 'imagem', 'video': 'vídeo', 'pdf': 'PDF'}[tipo]
+        return (f'"{nome}" tem {arquivo.size / 1024 / 1024:.0f} MB — o limite para '
+                f'{rotulo} é {limite // 1024 // 1024} MB.')
+    if tipo == 'pdf':
+        inicio = arquivo.read(1024)
+        arquivo.seek(0)
+        if b'%PDF' not in inicio:
+            return f'"{nome}" não é um PDF válido.'
+    return None
+
+
+@login_required
+@xframe_options_sameorigin
+def communication_attachment_view(request, communication_id, anexo_id):
+    """Serve o anexo pelo próprio portal (inline).
+
+    O PDF é desenhado na tela pelo PDF.js, que precisa ler o arquivo da mesma origem
+    (o MinIO é outro endereço e não manda CORS). Também é o "abrir em tela cheia".
+    """
+    import mimetypes
+    import os
+
+    from django.http import FileResponse, Http404
+
+    from .models import CommunicationImage
+    anexo = get_object_or_404(CommunicationImage, pk=anexo_id, communication_id=communication_id)
+    if not anexo.image:
+        raise Http404('Anexo sem arquivo.')
+    try:
+        arquivo = anexo.image.open('rb')
+    except Exception:
+        raise Http404('Arquivo do anexo não encontrado.')
+    ext = os.path.splitext(anexo.image.name)[1].lower()
+    tipo = 'application/pdf' if anexo.e_pdf else (mimetypes.types_map.get(ext) or 'application/octet-stream')
+    nome = f'{(anexo.caption or "comunicado-" + str(communication_id))[:80]}{ext}'
+    resposta = FileResponse(arquivo, content_type=tipo, as_attachment=False, filename=nome)
+    resposta['Cache-Control'] = 'private, max-age=3600'
+    return resposta
+
+
 @login_required
 def communication_detail_view(request, communication_id):
     """View to display a single communication with details"""
@@ -459,6 +519,15 @@ def create_communication_view(request):
         active_from = request.POST.get('active_from')
         active_until = request.POST.get('active_until')
         
+        # Os anexos são conferidos antes de criar o comunicado: um arquivo recusado
+        # não pode deixar um comunicado pela metade (nem disparar o aviso no WhatsApp).
+        anexos = request.FILES.getlist('photos')
+        problema = (f'Máximo de {MAXIMO_DE_ANEXOS} anexos por comunicado.' if len(anexos) > MAXIMO_DE_ANEXOS
+                    else next((e for e in map(_erro_do_anexo, anexos) if e), None))
+        if problema:
+            messages.error(request, f'Comunicado não criado: {problema}')
+            return redirect('communications:create_communication')
+
         try:
             communication = Communication.objects.create(
                 title=title,
@@ -488,6 +557,9 @@ def create_communication_view(request):
                     # Processar cada imagem
                     for index, photo in enumerate(photos):
                         caption = request.POST.get(f'caption-{index}', '')
+                        if not caption and photo.name.lower().endswith('.pdf'):
+                            # O nome do arquivo some no upload (vira uuid): o do PDF fica como legenda.
+                            caption = photo.name.rsplit('.', 1)[0][:200]
                         CommunicationImage.objects.create(
                             communication=communication,
                             image=photo,

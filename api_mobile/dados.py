@@ -104,8 +104,20 @@ def chamado_resumo(request, t):
     }
 
 
+def anexos_do_comunicado(request, c):
+    """Vídeo e PDF do comunicado (as imagens vão no carrossel): o app abre pelo navegador."""
+    anexos = []
+    for i in c.images.all():
+        if i.e_imagem:
+            continue
+        url = url_absoluta(request, i.image)
+        if url:
+            anexos.append({'id': i.pk, 'tipo': i.tipo, 'nome': i.nome, 'url': url})
+    return anexos
+
+
 def comunicado_resumo(request, c, lidos=None, curtidos=None):
-    imagens = [url_absoluta(request, i.image) for i in c.images.all()]
+    imagens = [url_absoluta(request, i.image) for i in c.images.all() if i.e_imagem]
     if c.image:
         imagens.insert(0, url_absoluta(request, c.image))
     return {
@@ -117,6 +129,7 @@ def comunicado_resumo(request, c, lidos=None, curtidos=None):
         'texto_feed': texto_do_html(c.message, 600),
         'imagem': next((i for i in imagens if i), None),
         'imagens': [i for i in imagens if i],
+        'anexos': anexos_do_comunicado(request, c),
         'fixado': c.is_pinned,
         'obrigatorio': c.obrigatorio,
         'autor': pessoa(request, c.sender),

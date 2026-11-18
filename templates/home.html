@@ -460,10 +460,14 @@
                                     <div class="flex transition-transform duration-300 ease-in-out" id="carousel-inner-home-{{ comm.id }}" data-current="0">
                                         {% for image in comm.images.all %}
                                         <div class="w-full flex-shrink-0 relative">
+                                            {% if not image.e_imagem %}
+                                            {% include 'communications/_anexo.html' with anexo=image comm=comm primeira_pagina=True %}
+                                            {% else %}
                                             <div class="rc-skeleton rc-img-holder rounded-lg overflow-hidden">
                                                 <img src="{{ image.image.url }}" alt="{{ image.caption|default:'Imagem do comunicado' }}" loading="lazy" decoding="async" class="rc-img-fade w-full h-auto max-w-full object-contain bg-gray-50 rounded-lg">
                                             </div>
-                                            {% if image.caption %}
+                                            {% endif %}
+                                            {% if image.caption and image.e_imagem %}
                                             <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-75 text-white p-2">
                                                 <p class="text-xs">{{ image.caption }}</p>
                                             </div>
@@ -572,6 +576,7 @@
             </article>
             {% endfor %}
         </div>
+        {% include 'communications/_anexos_script.html' %}
         
         <!-- Load More Button -->
         {% if communications.has_next %}

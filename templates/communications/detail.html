@@ -76,8 +76,12 @@
                                 <div class="flex transition-transform duration-300 ease-in-out" id="carousel-inner-detail-{{ communication.id }}">
                                     {% for image in communication.images.all %}
                                     <div class="w-full flex-shrink-0 relative">
+                                        {% if not image.e_imagem %}
+                                        {% include 'communications/_anexo.html' with anexo=image comm=communication %}
+                                        {% else %}
                                         <img src="{{ image.image.url }}" alt="{{ image.caption|default:'Imagem do comunicado' }}" class="w-full h-auto max-h-64 sm:max-h-96 object-contain bg-gray-50">
-                                        {% if image.caption %}
+                                        {% endif %}
+                                        {% if image.caption and image.e_imagem %}
                                         <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-75 text-white p-2 sm:p-3">
                                             <p class="text-xs sm:text-sm">{{ image.caption }}</p>
                                         </div>
@@ -634,4 +638,5 @@ document.addEventListener('keydown', function(e) {
     }
 });
 </script>
+{% include 'communications/_anexos_script.html' %}
 {% endblock %}

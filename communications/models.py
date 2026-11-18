@@ -319,6 +319,27 @@ class CommunicationRead(models.Model):
         return f"{self.communication.title} - {self.user.full_name} - {self.get_status_display()}"
 
 
+# Anexo do comunicado (18/11/2026): além de imagem, vídeo e PDF. O arquivo continua no
+# mesmo campo ``image`` (no banco é só o caminho; a validação de imagem do ImageField
+# só roda em formulário, e este campo não passa por nenhum) — o tipo vem da extensão,
+# que ``upload_communication_attachment`` preserva. Sem migração.
+EXTENSOES_VIDEO = ('.mp4', '.webm', '.mov', '.m4v', '.ogv')
+EXTENSOES_PDF = ('.pdf',)
+TIPOS_DE_VIDEO = {'.mp4': 'video/mp4', '.m4v': 'video/mp4', '.webm': 'video/webm',
+                  '.mov': 'video/quicktime', '.ogv': 'video/ogg'}
+
+
+def tipo_do_anexo(nome):
+    """'pdf', 'video' ou 'imagem', pela extensão do arquivo."""
+    import os
+    ext = os.path.splitext(nome or '')[1].lower()
+    if ext in EXTENSOES_PDF:
+        return 'pdf'
+    if ext in EXTENSOES_VIDEO:
+        return 'video'
+    return 'imagem'
+
+
 class CommunicationImage(models.Model):
     communication = models.ForeignKey(
         Communication,
@@ -342,6 +363,32 @@ class CommunicationImage(models.Model):
     
     def __str__(self):
         return f"Imagem {self.order + 1} - {self.communication.title}"
+
+    @property
+    def tipo(self):
+        return tipo_do_anexo(self.image.name if self.image else '')
+
+    @property
+    def e_imagem(self):
+        return self.tipo == 'imagem'
+
+    @property
+    def e_video(self):
+        return self.tipo == 'video'
+
+    @property
+    def e_pdf(self):
+        return self.tipo == 'pdf'
+
+    @property
+    def tipo_do_video(self):
+        import os
+        return TIPOS_DE_VIDEO.get(os.path.splitext(self.image.name or '')[1].lower(), 'video/mp4')
+
+    @property
+    def nome(self):
+        """O que a tela mostra do arquivo: a legenda ou, sem ela, o tipo."""
+        return self.caption or {'pdf': 'Documento PDF', 'video': 'Vídeo'}.get(self.tipo, 'Imagem')
 
 
 class CommunicationComment(models.Model):

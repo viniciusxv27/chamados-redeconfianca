@@ -98,6 +98,8 @@ export type ComunicadoResumo = {
   texto_feed: string;
   imagem: string | null;
   imagens: string[];
+  /** Vídeo e PDF do comunicado: abrem no navegador do app. */
+  anexos?: AnexoComunicado[];
   fixado: boolean;
   obrigatorio: boolean;
   autor: Pessoa | null;
@@ -106,6 +108,8 @@ export type ComunicadoResumo = {
   curti: boolean;
   situacao: SituacaoComunicado;
 };
+
+export type AnexoComunicado = { id: number; tipo: 'video' | 'pdf'; nome: string; url: string };
 
 export type Comunicado = ComunicadoResumo & { texto: string };
 
