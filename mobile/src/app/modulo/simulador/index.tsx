@@ -23,6 +23,7 @@ export default function Simulador() {
 
   return (
     <TelaModulo
+      esqueleto="painel"
       titulo="Simulador"
       subtitulo={subtitulo}
       carregando={isPending}

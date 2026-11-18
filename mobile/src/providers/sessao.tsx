@@ -19,7 +19,8 @@ type Sessao = {
   estado: Estado;
   usuario: Usuario | null;
   bloqueio: Bloqueio | null;
-  entrar: (email: string, senha: string) => Promise<void>;
+  /** `antesDeTrocar`: animação de saída da tela de entrar, depois do login dar certo e antes de trocar de tela. */
+  entrar: (email: string, senha: string, antesDeTrocar?: () => Promise<void>) => Promise<void>;
   sair: () => Promise<void>;
   /** Pergunta de novo ao portal (perfil e bloqueio, sem cache). */
   conferir: () => Promise<void>;
@@ -74,10 +75,11 @@ export function ProvedorSessao({ children }: { children: ReactNode }) {
   useEffect(() => aoEncerrarSessao(() => void limpar()), [limpar]);
   useEffect(() => aoBloquear((b) => setBloqueio(b)), []);
 
-  const entrar = useCallback(async (email: string, senha: string) => {
+  const entrar = useCallback(async (email: string, senha: string, antesDeTrocar?: () => Promise<void>) => {
     const dados = await apiSessao.entrar(email.trim(), senha);
     definirToken(dados.token);
     await gravar(CHAVES.token, dados.token);
+    if (antesDeTrocar) await antesDeTrocar();
     setUsuario(dados.usuario);
     setBloqueio(dados.bloqueio);
     setEstado('logado');

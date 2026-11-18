@@ -1,11 +1,12 @@
 import { useMemo } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native';
+import { FlatList, RefreshControl, View } from 'react-native';
 
 import { CartaoComunicado } from '@/components/comunicados/cartao-comunicado';
 import { BarraDetalhe, CabecalhoGrande, Entrada, EsqueletoLista, EstadoErro, EstadoVazio, Tela } from '@/components/ui';
 import { marca } from '@/constants/theme';
 import { useComunicados } from '@/hooks/consultas';
 import { mensagemDoErro } from '@/services/api';
+import { EsqueletoRodape } from '@/components/ui/esqueleto';
 
 /** Mural: os comunicados que chegam para a pessoa (os mesmos da home do portal). */
 export default function Comunicados() {
@@ -31,11 +32,11 @@ export default function Comunicados() {
               <CartaoComunicado comunicado={item} />
             </Entrada>
           )}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: 32, gap: 14 }}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 40, gap: 18 }}
           onEndReachedThreshold={0.5}
           onEndReached={() => hasNextPage && !isFetchingNextPage && fetchNextPage()}
           refreshControl={<RefreshControl refreshing={isRefetching && !isFetchingNextPage} onRefresh={() => void refetch()} tintColor={marca[500]} colors={[marca[500]]} />}
-          ListFooterComponent={isFetchingNextPage ? <ActivityIndicator color={marca[500]} style={{ marginVertical: 16 }} /> : undefined}
+          ListFooterComponent={isFetchingNextPage ? <EsqueletoRodape /> : undefined}
           ListEmptyComponent={<EstadoVazio icone="megaphone-outline" titulo="Nenhum comunicado" texto="Os comunicados da rede aparecem aqui." />}
         />
       )}

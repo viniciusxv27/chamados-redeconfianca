@@ -29,6 +29,7 @@ export default function Comissao() {
 
   return (
     <TelaModulo
+      esqueleto="painel"
       titulo="Comissão"
       subtitulo={subtitulo}
       carregando={isPending}

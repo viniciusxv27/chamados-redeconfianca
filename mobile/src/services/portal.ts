@@ -106,8 +106,8 @@ export const chamados = {
 };
 
 export const comunicados = {
-  async listar(pagina: number) {
-    const { data } = await api.get<Pagina<ComunicadoResumo>>('/comunicados/', { params: { pagina } });
+  async listar(pagina: number, soFeed = false) {
+    const { data } = await api.get<Pagina<ComunicadoResumo>>('/comunicados/', { params: { pagina, ...(soFeed ? { fixados: 'nao' } : {}) } });
     return data;
   },
   async detalhe(id: number) {

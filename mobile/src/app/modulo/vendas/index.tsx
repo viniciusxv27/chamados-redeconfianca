@@ -11,7 +11,6 @@ import { useCores } from '@/providers/tema';
 import type { Escopo, Periodo } from '@/services/modulos/vendas';
 import { numero, reais } from '@/utils/dinheiro';
 import { tempoRelativo } from '@/utils/formatar';
-import { abrirNoPortal } from '@/utils/links';
 
 const PERIODOS: { valor: Periodo; rotulo: string }[] = [
   { valor: 'hoje', rotulo: 'Hoje' },
@@ -37,6 +36,7 @@ export default function InicioVendas() {
 
   return (
     <TelaModulo
+      esqueleto="painel"
       titulo="Vendas"
       subtitulo={d?.loja ?? 'Rede Confiança'}
       carregando={resumo.isPending}
@@ -165,10 +165,10 @@ function Atalhos({ pode, tabela }: { pode: { clientes: boolean; lancar: boolean;
     itens.push({
       chave: 'lancar',
       rotulo: 'Lançar venda',
-      detalhe: 'Abre no portal',
+      detalhe: 'Cliente, itens e pagamento',
       icone: 'add-circle-outline',
       cor: COR_VENDAS,
-      abrir: () => void abrirNoPortal('/vendas/nova/'),
+      abrir: () => router.push('/modulo/vendas/nova' as Href),
     });
   return (
     <View className="flex-row flex-wrap gap-3">

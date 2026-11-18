@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, ScrollView, View } from 'react-native';
+import { FlatList, RefreshControl, ScrollView, View } from 'react-native';
 
 import { CartaoConvite } from '@/components/modulos/impulso/cartao-convite';
 import { CartaoMeta } from '@/components/modulos/impulso/cartao-meta';
@@ -11,6 +11,7 @@ import { useKanban, useMaisConcluidas } from '@/hooks/modulos/impulso';
 import { mensagemDoErro } from '@/services/api';
 import type { CardMeta, Coluna, FiltroKanban, StatusMeta } from '@/services/modulos/impulso';
 import { abrirNoPortal } from '@/utils/links';
+import { EsqueletoRodape } from '@/components/ui/esqueleto';
 
 type Linha = { tipo: 'titulo'; chave: string; titulo: string; n: number } | { tipo: 'meta'; meta: CardMeta };
 
@@ -141,7 +142,7 @@ export default function MetasImpulso() {
             status === 'CONCLUIDA' && restantes > 0 ? (
               <View className="px-5 pt-2">
                 {mais.isFetching ? (
-                  <ActivityIndicator color={marca[500]} style={{ marginVertical: 12 }} />
+                  <EsqueletoRodape />
                 ) : (
                   <Botao
                     titulo={`Mostrar mais (${restantes})`}

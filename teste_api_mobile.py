@@ -185,6 +185,26 @@ try:
     t('início responde', r.status_code == 200 and 'chamados' in j and j['usuario']['id'] == ana.pk, r.content[:300])
     t('conta os chamados abertos por mim', j['chamados']['abertos_por_mim'] >= 2)
     t('traz o comunicado novo', any(c['id'] == todos.pk for c in j['comunicados']))
+    from compliments.models import Compliment
+    elogio = Compliment.objects.create(from_user=chefe, to_user=ana, rating=5, comment='ZZ Mandou muito bem no atendimento')
+    j = ca.get(f'{BASE}/inicio/').json()
+    e = next((x for x in j.get('elogios', []) if x['id'] == elogio.pk), None)
+    t('elogios recentes, como na home do portal', e is not None and e['estrelas'] == 5 and e['para_mim'] and e['url_web'], j.get('elogios'))
+    eb = next((x for x in cb.get(f'{BASE}/inicio/').json().get('elogios', []) if x['id'] == elogio.pk), None)
+    # A home só mostra "Ver detalhes" a quem recebeu (para_mim); o link existe para quem a tela de
+    # detalhe aceita (o Beto é SUPERVISOR e gerencia usuários — compliments/views.py:183).
+    t('quem não é o destinatário vê o elogio, sem o "Ver detalhes" da home', eb is not None and not eb['para_mim'], eb)
+    with mock.patch.object(type(beto), 'can_manage_users', lambda self: False):
+        eb2 = next((x for x in cb.get(f'{BASE}/inicio/').json().get('elogios', []) if x['id'] == elogio.pk), None)
+    t('e quem não pode abrir o detalhe não recebe o link', eb2 is not None and eb2['url_web'] is None, eb2)
+    t('saldo C$ escondido de SUPERVISOR (regra da home do portal)', j.get('saldo_cs') is None)
+    t('saldo C$ aparece para SUPERADMIN', cc.get(f'{BASE}/inicio/').json().get('saldo_cs') is not None)
+    # Só para a Ana: comunicado "para todos" dispara aviso para a rede inteira (lento).
+    fixado = Communication.objects.create(title='ZZ Fixado', message='x', sender=chefe, is_pinned=True)
+    fixado.recipients.add(ana)
+    feed = ca.get(f'{BASE}/comunicados/', {'fixados': 'nao'}).json()['resultados']
+    t('o feed da home não repete os fixados', all(not c['fixado'] for c in feed) and any(c['id'] == todos.pk for c in feed))
+    t('o post traz texto do feed e imagens', 'texto_feed' in feed[0] and isinstance(feed[0]['imagens'], list))
     r = ca.get(f'{BASE}/notificacoes/')
     aviso = next((n for n in r.json()['resultados'] if n['titulo'] == 'ZZ aviso'), None)
     t('notificação do sistema antigo aparece', aviso is not None and aviso['id'].startswith('c-'))

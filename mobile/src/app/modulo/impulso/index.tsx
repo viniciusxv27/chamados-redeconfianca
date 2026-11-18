@@ -20,6 +20,7 @@ export default function Impulso() {
 
   return (
     <TelaModulo
+      esqueleto="painel"
       titulo="Impulso"
       subtitulo={data ? `Mês de ${data.periodo.rotulo}` : 'Confiar · Conectar · Inovar'}
       carregando={isPending}

@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, RefreshControl, View } from 'react-native';
+import { RefreshControl, View } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -11,6 +11,7 @@ import { useChamados } from '@/hooks/consultas';
 import { mensagemDoErro } from '@/services/api';
 import type { FiltroChamados } from '@/services/portal';
 import type { ChamadoResumo } from '@/services/tipos';
+import { EsqueletoRodape } from '@/components/ui/esqueleto';
 
 const ESCOPOS: { valor: FiltroChamados['escopo']; rotulo: string }[] = [
   { valor: 'todos', rotulo: 'Todos' },
@@ -58,7 +59,7 @@ export default function Chamados() {
   return (
     <Tela topo>
       <CabecalhoGrande titulo="Chamados" subtitulo={isPending ? ' ' : `${total} ${total === 1 ? 'chamado' : 'chamados'}`} />
-      <View className="gap-3 px-5 pb-3">
+      <View style={{ gap: 14, paddingHorizontal: 20, paddingBottom: 8 }}>
         <Campo icone="search" placeholder="Buscar por título, texto ou #número" value={texto} onChangeText={setTexto} returnKeyType="search" autoCorrect={false} clearButtonMode="while-editing" />
         <Segmentado
           opcoes={[
@@ -93,11 +94,11 @@ export default function Chamados() {
           )}
           onScroll={aoRolar}
           scrollEventThrottle={16}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: 110, gap: 12 }}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 120, gap: 16 }}
           onEndReachedThreshold={0.4}
           onEndReached={() => hasNextPage && !isFetchingNextPage && fetchNextPage()}
           refreshControl={<RefreshControl refreshing={isRefetching && !isFetchingNextPage} onRefresh={() => void refetch()} tintColor={marca[500]} colors={[marca[500]]} />}
-          ListFooterComponent={isFetchingNextPage ? <ActivityIndicator color={marca[500]} style={{ marginVertical: 16 }} /> : undefined}
+          ListFooterComponent={isFetchingNextPage ? <EsqueletoRodape /> : undefined}
           ListEmptyComponent={
             <EstadoVazio
               icone={busca ? 'search-outline' : 'checkmark-done-circle-outline'}

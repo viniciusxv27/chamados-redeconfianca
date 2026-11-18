@@ -38,4 +38,6 @@ export async function apagar(chave: string): Promise<void> {
 export const CHAVES = {
   token: 'rc.token',
   tema: 'rc.tema',
+  /** E-mail lembrado na tela de entrar ("Lembrar meu e-mail"). Nunca a senha. */
+  email: 'rc.email',
 } as const;

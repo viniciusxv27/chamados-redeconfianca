@@ -23,7 +23,7 @@ export default function Modulos() {
     <Tela topo>
       <CabecalhoGrande titulo="Módulos" subtitulo="Portal" />
       <ScrollView
-        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} tintColor={marca[500]} colors={[marca[500]]} />}>
         {isPending ? (
           <View className="flex-row flex-wrap gap-3">
@@ -38,10 +38,10 @@ export default function Modulos() {
         ) : isError && !data ? (
           <EstadoErro mensagem={mensagemDoErro(error)} aoTentar={() => void refetch()} />
         ) : (
-          <View className="flex-row flex-wrap gap-3">
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14 }}>
             {itens.map((m, i) => (
               <Entrada key={m.chave} indice={i} style={{ flexBasis: '47%', flexGrow: 1 }}>
-                <Cartao onPress={() => router.push(m.rota as Href)} acessibilidade={`Abrir ${m.rotulo}`} style={{ padding: 16, gap: 12, minHeight: 132 }}>
+                <Cartao onPress={() => router.push(m.rota as Href)} acessibilidade={`Abrir ${m.rotulo}`} style={{ padding: 18, gap: 14, minHeight: 140 }}>
                   <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: comAlfa(m.cor, 0.14), alignItems: 'center', justifyContent: 'center' }}>
                     <Icone nome={m.icone as NomeIcone} tamanho={22} cor={m.cor} />
                   </View>

@@ -1,6 +1,6 @@
 import { router, type Href } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native';
+import { FlatList, RefreshControl, View } from 'react-native';
 
 import { CartaoSolicitacao } from '@/components/modulos/ponto/pecas';
 import { BarraDetalhe, BotaoIcone, CabecalhoGrande, Entrada, EsqueletoLista, EstadoErro, EstadoVazio, Segmentado, Tela } from '@/components/ui';
@@ -8,6 +8,7 @@ import { marca } from '@/constants/theme';
 import { useSolicitacoes } from '@/hooks/modulos/ponto';
 import { mensagemDoErro } from '@/services/api';
 import type { FiltroSolicitacoes, SolicitacaoResumo } from '@/services/modulos/ponto';
+import { EsqueletoRodape } from '@/components/ui/esqueleto';
 
 /** Minhas solicitações ao DP (o mesmo recorte de /ponto/solicitacoes/: só as da própria pessoa). */
 export default function MinhasSolicitacoes() {
@@ -59,7 +60,7 @@ export default function MinhasSolicitacoes() {
         onEndReachedThreshold={0.4}
         onEndReached={() => hasNextPage && !isFetchingNextPage && fetchNextPage()}
         refreshControl={<RefreshControl refreshing={isRefetching && !isFetchingNextPage} onRefresh={() => void refetch()} tintColor={marca[500]} colors={[marca[500]]} />}
-        ListFooterComponent={isFetchingNextPage ? <ActivityIndicator color={marca[500]} style={{ marginVertical: 16 }} /> : undefined}
+        ListFooterComponent={isFetchingNextPage ? <EsqueletoRodape /> : undefined}
         ListEmptyComponent={
           isPending || isError ? undefined : (
             <EstadoVazio

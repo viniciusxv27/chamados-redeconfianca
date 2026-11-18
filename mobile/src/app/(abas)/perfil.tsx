@@ -27,7 +27,7 @@ export default function Perfil() {
   return (
     <Tela topo>
       <CabecalhoGrande titulo="Perfil" />
-      <ScrollView contentContainerStyle={{ padding: 20, paddingTop: 4, gap: 20, paddingBottom: 40 }}>
+      <ScrollView contentContainerStyle={{ padding: 20, paddingTop: 8, gap: 26, paddingBottom: 48 }}>
         <Animated.View entering={FadeInDown.duration(400)}>
           <Cartao style={{ padding: 20, alignItems: 'center', gap: 10 }}>
             <Avatar nome={usuario?.nome ?? '?'} foto={usuario?.foto} tamanho={84} borda={marca[500]} />

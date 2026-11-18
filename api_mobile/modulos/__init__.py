@@ -20,8 +20,8 @@ from ..permissoes import SemBloqueio
 logger = logging.getLogger(__name__)
 
 # Ordem em que aparecem no app.
-CHAVES = ['impulso', 'ponto', 'agenda', 'contracheque', 'documentos', 'comissao', 'simulador', 'vendas',
-          'checklists', 'quadro_hc', 'cameras', 'usuarios']
+CHAVES = ['impulso', 'ponto', 'agenda', 'cursos', 'contracheque', 'documentos', 'comissao', 'simulador', 'vendas',
+          'power_bi', 'power_bi_metas', 'mercadinho', 'facilitador', 'checklists', 'quadro_hc', 'cameras', 'usuarios']
 
 
 def carregar(chave):

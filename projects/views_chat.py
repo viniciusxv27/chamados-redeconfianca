@@ -5,7 +5,7 @@ from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.db.models import Q
 from django.contrib import messages
-from django.db import models
+from django.db import models, transaction
 
 from .models import Activity
 from .models_chat import TaskChat, TaskChatMessage, SupportChat, SupportChatMessage, SupportAgent, SupportCategory, SupportChatRating, SupportChatFile, SupportTransferRequest
@@ -338,8 +338,25 @@ def get_support_chat(request, chat_id):
         'is_support_agent': is_support_agent,
         'is_superadmin': is_superadmin,
         'is_supervisor_or_higher': is_supervisor_or_higher,
-        'can_assume': can_assume
+        'can_assume': can_assume,
+        'impulso': _impulso_do_chamado(request.user, chat, can_assume, is_support_agent),
     })
+
+
+def _impulso_do_chamado(user, chat, can_assume, is_support_agent):
+    """Botão "Puxar para impulso e assumir": quem pode assumir (ou já é o atendente) e tem Impulso."""
+    try:
+        from impulso import chamados_suporte
+        if chat.status == 'FECHADO' or not chamados_suporte.pode_puxar(user):
+            return {'pode_puxar': False}
+        meta = chamados_suporte.meta_aberta(chat, user)
+        sou_atendente = chat.assigned_to_id == user.id
+        pode = (can_assume or sou_atendente
+                or (not chat.assigned_to_id and user.hierarchy in ('ADMIN', 'SUPERADMIN')))
+        return {'pode_puxar': bool(pode and meta is None and (is_support_agent or user.hierarchy in ('ADMIN', 'SUPERADMIN'))),
+                'meta_url': f'/impulso/metas/{meta.id}/' if meta else ''}
+    except Exception:  # noqa: BLE001 — o chamado abre mesmo se o Impulso falhar
+        return {'pode_puxar': False}
 
 
 @login_required
@@ -2464,6 +2481,45 @@ def assign_chat_to_agent(request, chat_id):
 
 @login_required
 @require_POST
+def pull_to_impulso(request, chat_id):
+    """"Puxar para impulso e assumir": assume o chamado (mesmas regras do Assumir) e cria a meta no Impulso
+    de quem clicou. Fechar o chamado conclui a meta (impulso/chamados_suporte.py)."""
+    from impulso import chamados_suporte
+
+    if not chamados_suporte.pode_puxar(request.user):
+        return JsonResponse({'success': False, 'error': 'Você não tem acesso ao Impulso.'}, status=403)
+    is_support_agent = hasattr(request.user, 'support_agent') and request.user.support_agent.is_active
+    if not (is_support_agent or request.user.hierarchy in ['ADMIN', 'SUPERADMIN']):
+        return JsonResponse({'success': False, 'error': 'Apenas agentes de suporte podem assumir atendimentos'}, status=403)
+    chat = get_object_or_404(SupportChat, id=chat_id)
+    if chat.status == 'FECHADO':
+        return JsonResponse({'success': False, 'error': 'Este chamado já está fechado.'}, status=400)
+    if request.user.hierarchy != 'SUPERADMIN' and chat.sector not in request.user.sectors.all():
+        return JsonResponse({'success': False, 'error': 'Você só pode assumir atendimentos do seu setor'}, status=403)
+    if chat.assigned_to and chat.assigned_to != request.user:
+        return JsonResponse({'success': False,
+                             'error': f'Este chat já está sendo atendido por {chat.assigned_to.get_full_name()}'}, status=400)
+
+    with transaction.atomic():
+        assumiu = chat.assigned_to_id is None
+        chat.assigned_to = request.user
+        if chat.status in ('ABERTO', 'AGUARDANDO'):
+            chat.status = 'EM_ANDAMENTO'
+        if not chat.started_at:
+            chat.started_at = timezone.now()
+        chat.save()
+        meta, criada = chamados_suporte.puxar(chat, request.user)
+        if assumiu or criada:
+            SupportChatMessage.objects.create(
+                chat=chat, user=request.user, is_internal=True,
+                message=(f'Atendimento assumido por {request.user.get_full_name()}' if assumiu else 'Chamado')
+                        + (' e puxado para o Impulso.' if criada else '.'))
+    return JsonResponse({'success': True, 'meta_id': meta.id, 'criada': criada,
+                         'redirect': '/impulso/metas/'})
+
+
+@login_required
+@require_POST
 def resolve_support_chat(request, chat_id):
     """Finaliza e fecha um chat de suporte"""
     try:
@@ -2513,6 +2569,7 @@ def close_support_chat(request, chat_id):
             }, status=403)
         
         chat.close_chat()  # Usa o método do model que define status e closed_at
+        chat.save()  # 18/11/2026: close_chat() só muda o objeto — sem isto o "Fechar ticket" não gravava nada
         
         # Criar mensagem automática
         SupportChatMessage.objects.create(

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, ScrollView, View } from 'react-native';
+import { FlatList, RefreshControl, ScrollView, View } from 'react-native';
 
 import { CartaoSolicitacao } from '@/components/modulos/ponto/pecas';
 import { BarraDetalhe, CabecalhoGrande, Campo, Chip, Entrada, EsqueletoLista, EstadoErro, EstadoVazio, Tela } from '@/components/ui';
@@ -7,6 +7,7 @@ import { marca } from '@/constants/theme';
 import { useCaixaDP } from '@/hooks/modulos/ponto';
 import { mensagemDoErro } from '@/services/api';
 import type { FiltroCaixa, SolicitacaoResumo } from '@/services/modulos/ponto';
+import { EsqueletoRodape } from '@/components/ui/esqueleto';
 
 const FILTROS: { valor: FiltroCaixa; rotulo: string; kpi?: 'aguardando' | 'devolvidas' | 'lancar' }[] = [
   { valor: 'pendentes', rotulo: 'Pendentes' },
@@ -68,7 +69,7 @@ export default function CaixaDP() {
         onEndReachedThreshold={0.4}
         onEndReached={() => hasNextPage && !isFetchingNextPage && fetchNextPage()}
         refreshControl={<RefreshControl refreshing={isRefetching && !isFetchingNextPage} onRefresh={() => void refetch()} tintColor={marca[500]} colors={[marca[500]]} />}
-        ListFooterComponent={isFetchingNextPage ? <ActivityIndicator color={marca[500]} style={{ marginVertical: 16 }} /> : undefined}
+        ListFooterComponent={isFetchingNextPage ? <EsqueletoRodape /> : undefined}
         ListEmptyComponent={isPending || isError ? undefined : <EstadoVazio icone="checkmark-done-circle-outline" titulo="Nada aqui" texto={busca ? `Nenhuma solicitação com "${busca}".` : 'Nenhuma solicitação neste filtro.'} />}
       />
     </Tela>

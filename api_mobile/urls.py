@@ -36,4 +36,9 @@ urlpatterns = [
     path('m/checklists/', include('api_mobile.modulos.checklists')),
     path('m/quadro_hc/', include('api_mobile.modulos.quadro_hc')),
     path('m/cameras/', include('api_mobile.modulos.cameras')),
+    path('m/cursos/', include('api_mobile.modulos.cursos')),
+    path('m/power_bi/', include('api_mobile.modulos.power_bi')),
+    path('m/power_bi_metas/', include('api_mobile.modulos.power_bi_metas')),
+    path('m/mercadinho/', include('api_mobile.modulos.mercadinho')),
+    path('m/facilitador/', include('api_mobile.modulos.facilitador')),
 ]

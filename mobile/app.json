@@ -33,7 +33,7 @@
         {
           "backgroundColor": "#0A0A0A",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 120
+          "imageWidth": 96
         }
       ],
       "expo-secure-store",
@@ -43,7 +43,8 @@
           "photosPermission": "O app usa suas fotos para anexar imagens aos chamados.",
           "cameraPermission": "O app usa a câmera para fotografar e anexar ao chamado."
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

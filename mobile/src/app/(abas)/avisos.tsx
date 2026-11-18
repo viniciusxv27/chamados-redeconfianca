@@ -54,7 +54,7 @@ export default function Avisos() {
               <ItemAviso aviso={item} />
             </Entrada>
           )}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32, gap: 8 }}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: 40, gap: 12 }}
           refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => void refetch()} tintColor={marca[500]} colors={[marca[500]]} />}
           ListEmptyComponent={<EstadoVazio icone="notifications-off-outline" titulo="Nenhum aviso" texto="Quando algo acontecer nos seus chamados ou no portal, você fica sabendo aqui." />}
         />

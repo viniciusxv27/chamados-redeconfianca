@@ -8,7 +8,7 @@ import * as WebBrowser from 'expo-web-browser';
 import type { ReactNode } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 
-import { BarraDetalhe, CabecalhoGrande, Cartao, Esqueleto, EsqueletoLista, EstadoErro, Icone, type NomeIcone, Tela, Texto } from '@/components/ui';
+import { BarraDetalhe, CabecalhoGrande, Cartao, Esqueleto, EsqueletoDetalhe, EsqueletoLista, EsqueletoPainel, EstadoErro, GrupoEsqueleto, Icone, type NomeIcone, Tela, Texto } from '@/components/ui';
 import { marca } from '@/constants/theme';
 import { mensagemDoErro } from '@/services/api';
 import { comAlfa } from '@/utils/formatar';
@@ -22,6 +22,7 @@ export function TelaModulo({
   erro,
   aoAtualizar,
   atualizando = false,
+  esqueleto = 'lista',
   children,
 }: {
   titulo: string;
@@ -31,17 +32,20 @@ export function TelaModulo({
   erro?: unknown;
   aoAtualizar?: () => void;
   atualizando?: boolean;
+  /** Forma do carregamento: lista de cartões, painel de números ou detalhe. */
+  esqueleto?: 'lista' | 'painel' | 'detalhe';
   children?: ReactNode;
 }) {
+  const carregandoEl = esqueleto === 'painel' ? <EsqueletoPainel /> : esqueleto === 'detalhe' ? <EsqueletoDetalhe /> : <EsqueletoLista quantos={4} />;
   return (
     <Tela>
       <BarraDetalhe direita={direita} />
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 40 }}
+        contentContainerStyle={{ paddingBottom: 56 }}
         refreshControl={aoAtualizar ? <RefreshControl refreshing={atualizando} onRefresh={aoAtualizar} tintColor={marca[500]} colors={[marca[500]]} /> : undefined}>
         <CabecalhoGrande titulo={titulo} subtitulo={subtitulo} />
-        <View className="gap-4 px-5">
-          {carregando ? <EsqueletoLista quantos={4} /> : erro ? <EstadoErro mensagem={mensagemDoErro(erro)} aoTentar={aoAtualizar} /> : children}
+        <View style={{ gap: 20, paddingHorizontal: 20 }}>
+          {carregando ? carregandoEl : erro ? <EstadoErro mensagem={mensagemDoErro(erro)} aoTentar={aoAtualizar} /> : children}
         </View>
       </ScrollView>
     </Tela>
@@ -51,7 +55,7 @@ export function TelaModulo({
 /** Número grande com rótulo (resumo no topo das telas de módulo). */
 export function Indicador({ rotulo, valor, detalhe, icone, cor = marca[500] }: { rotulo: string; valor: string; detalhe?: string; icone?: NomeIcone; cor?: string }) {
   return (
-    <Cartao style={{ flexBasis: '47%', flexGrow: 1, padding: 16, gap: 8 }}>
+    <Cartao style={{ flexBasis: '47%', flexGrow: 1, padding: 18, gap: 10 }}>
       {icone ? (
         <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: comAlfa(cor, 0.13), alignItems: 'center', justifyContent: 'center' }}>
           <Icone nome={icone} tamanho={18} cor={cor} />
@@ -75,7 +79,7 @@ export function Indicador({ rotulo, valor, detalhe, icone, cor = marca[500] }: {
 /** Linha rótulo → valor dentro de um cartão. */
 export function LinhaValor({ rotulo, valor, destaque, cor }: { rotulo: string; valor: string; destaque?: boolean; cor?: string }) {
   return (
-    <View className="flex-row items-center justify-between gap-3 py-2">
+    <View className="flex-row items-center justify-between gap-3" style={{ paddingVertical: 10 }}>
       <Texto variante="legenda" tom="suave" className="flex-1">
         {rotulo}
       </Texto>
@@ -89,11 +93,13 @@ export function LinhaValor({ rotulo, valor, destaque, cor }: { rotulo: string; v
 /** Esqueleto de bloco (enquanto um cartão específico carrega). */
 export function EsqueletoBloco({ linhas = 3 }: { linhas?: number }) {
   return (
-    <Cartao style={{ padding: 16, gap: 10 }}>
-      {Array.from({ length: linhas }, (_, i) => (
-        <Esqueleto key={i} largura={`${90 - i * 12}%`} />
-      ))}
-    </Cartao>
+    <GrupoEsqueleto>
+      <Cartao style={{ padding: 16, gap: 10 }}>
+        {Array.from({ length: linhas }, (_, i) => (
+          <Esqueleto key={i} largura={`${90 - i * 12}%`} />
+        ))}
+      </Cartao>
+    </GrupoEsqueleto>
   );
 }
 

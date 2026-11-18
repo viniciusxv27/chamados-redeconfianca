@@ -113,7 +113,10 @@ def comunicado_resumo(request, c, lidos=None, curtidos=None):
         'titulo': c.title,
         'cor_titulo': c.title_color or None,
         'resumo': texto_do_html(c.message, 180),
+        # O feed da home mostra o texto como post (mais longo) e o carrossel de imagens.
+        'texto_feed': texto_do_html(c.message, 600),
         'imagem': next((i for i in imagens if i), None),
+        'imagens': [i for i in imagens if i],
         'fixado': c.is_pinned,
         'obrigatorio': c.obrigatorio,
         'autor': pessoa(request, c.sender),
@@ -121,4 +124,25 @@ def comunicado_resumo(request, c, lidos=None, curtidos=None):
         'curtidas': len(c.liked_by.all()),
         'curti': bool(curtidos and c.pk in curtidos),
         'situacao': (lidos or {}).get(c.pk, 'NAO_VISUALIZADO'),
+    }
+
+
+def elogio(request, e):
+    """Elogio do feed da home (communications.views.home_feed → compliments.Compliment)."""
+    user = request.user
+    # "Ver detalhes" aparece na home só para quem recebeu (templates/home.html:396); a
+    # tela de detalhe aceita também quem fez e quem gerencia usuários (compliments/views.py:183).
+    pode_abrir = bool(
+        e.from_user_id == user.pk or e.to_user_id == user.pk
+        or (e.to_sector_id and e.to_sector_id == user.sector_id) or user.can_manage_users())
+    return {
+        'id': e.pk,
+        'de': pessoa(request, e.from_user),
+        'para_pessoa': pessoa(request, e.to_user) if e.to_user_id else None,
+        'para_setor': e.to_sector.name if e.to_sector_id else None,
+        'estrelas': e.rating,
+        'comentario': e.comment,
+        'criado_em': iso(e.created_at),
+        'para_mim': bool(e.to_user_id == user.pk or (e.to_sector_id and e.to_sector_id == user.sector_id)),
+        'url_web': f'/compliments/detail/{e.pk}/' if pode_abrir else None,
     }

@@ -159,6 +159,14 @@ def inicio(request):
     base = comunicados_visiveis(user).order_by('-created_at')
     fixados = list(base.filter(is_pinned=True)[:3])
     novos = list(base.filter(is_pinned=False)[:6])
+    # Elogios recentes: os mesmos 2 da home do portal (communications.views.home_feed).
+    try:
+        from compliments.models import Compliment
+        elogios = list(Compliment.objects.filter(is_active=True)
+                       .select_related('from_user', 'from_user__sector', 'to_user', 'to_user__sector', 'to_sector')
+                       .order_by('-created_at')[:2])
+    except Exception:  # noqa: BLE001 — sem o app de elogios a home segue
+        elogios = []
     lidos, curtidos = _marcas_de_comunicados(user, fixados + novos)
     pendentes = list(comunicados_pendentes(user).values('id', 'title')[:5])
     return Response({
@@ -167,6 +175,11 @@ def inicio(request):
         'chamados_recentes': [dados.chamado_resumo(request, t) for t in recentes],
         'comunicados_fixados': [dados.comunicado_resumo(request, c, lidos, curtidos) for c in fixados],
         'comunicados': [dados.comunicado_resumo(request, c, lidos, curtidos) for c in novos],
+        'elogios': [dados.elogio(request, e) for e in elogios],
+        # Saldo C$ no cartão do perfil: a home do portal esconde de PADRÃO, ADMINISTRATIVO e SUPERVISOR.
+        'saldo_cs': (str(user.balance_cs) if user.hierarchy not in ('PADRAO', 'ADMINISTRATIVO', 'SUPERVISOR')
+                     and getattr(user, 'balance_cs', None) is not None else None),
+        'pode_criar_comunicado': bool(user.can_manage_users()),
         'comunicados_obrigatorios': [{'id': c['id'], 'titulo': c['title']} for c in pendentes],
         'notificacoes_nao_lidas': _nao_lidas(user),
     })
@@ -356,7 +369,10 @@ def categorias(request):
 @authentication_classes([TokenMobileAuthentication])
 @permission_classes([SemBloqueio])
 def comunicados(request):
-    itens, pagina = _pagina(request, comunicados_visiveis(request.user).order_by('-is_pinned', '-created_at'))
+    qs = comunicados_visiveis(request.user)
+    if request.query_params.get('fixados') == 'nao':   # o "Feed de Comunicados" da home (sem os fixados)
+        qs = qs.filter(is_pinned=False)
+    itens, pagina = _pagina(request, qs.order_by('-is_pinned', '-created_at'))
     lidos, curtidos = _marcas_de_comunicados(request.user, itens)
     return Response({'resultados': [dados.comunicado_resumo(request, c, lidos, curtidos) for c in itens], **pagina})
 

@@ -1924,6 +1924,16 @@ function renderTicketDetails(data, forceScroll = false) {
                     <div class="support-info-card">
                         <h5 class="text-xs font-bold text-emerald-700 uppercase tracking-wide mb-3 flex items-center gap-2"><i class="fas fa-bolt"></i>Ações</h5>
                         <div class="space-y-2">
+                            ${data.impulso && data.impulso.pode_puxar ? `
+                            <button onclick="pullToImpulso(${data.chat.id})" data-puxar-impulso class="w-full bg-violet-600 hover:bg-violet-700 text-white py-2 px-4 rounded text-sm transition-colors">
+                                <i class="fas fa-rocket mr-2"></i>Puxar para impulso e assumir
+                            </button>
+                            ` : ''}
+                            ${data.impulso && data.impulso.meta_url ? `
+                            <a href="${data.impulso.meta_url}" data-meta-impulso class="block w-full text-center border border-violet-200 text-violet-700 hover:bg-violet-50 py-2 px-4 rounded text-sm transition-colors">
+                                <i class="fas fa-rocket mr-2"></i>Ver no Impulso (fecha junto com o chamado)
+                            </a>
+                            ` : ''}
                             ${canAssign ? `
                             <button onclick="assignToMe(${data.chat.id})" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded text-sm transition-colors">
                                 <i class="fas fa-hand-paper mr-2"></i>Assumir Atendimento
@@ -2046,6 +2056,31 @@ function getTimeAgo(dateString) {
     
     const diffInDays = Math.floor(diffInHours / 24);
     return `${diffInDays}d atrás`;
+}
+
+function pullToImpulso(chatId) {
+    if (!confirm('Assumir este chamado e colocá-lo no seu Impulso? Quando o chamado for fechado, a tarefa vai para Concluído.')) return;
+    const botao = document.querySelector('[data-puxar-impulso]');
+    if (botao) { botao.disabled = true; botao.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-2"></i>Puxando…'; }
+    fetch(`/projects/support/chat/${chatId}/impulso/`, {
+        method: 'POST',
+        headers: {'X-CSRFToken': getCsrfToken()}
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Chamado assumido e enviado para o seu Impulso!', 'success');
+            window.location.href = data.redirect || '/impulso/metas/';
+        } else {
+            if (botao) { botao.disabled = false; botao.innerHTML = '<i class="fas fa-rocket mr-2"></i>Puxar para impulso e assumir'; }
+            alert('Erro: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        if (botao) { botao.disabled = false; botao.innerHTML = '<i class="fas fa-rocket mr-2"></i>Puxar para impulso e assumir'; }
+        alert('Erro ao puxar para o Impulso');
+    });
 }
 
 function assignToMe(chatId) {

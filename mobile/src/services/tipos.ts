@@ -94,7 +94,10 @@ export type ComunicadoResumo = {
   titulo: string;
   cor_titulo: string | null;
   resumo: string;
+  /** Texto do post no feed da home (até ~600 caracteres). */
+  texto_feed: string;
   imagem: string | null;
+  imagens: string[];
   fixado: boolean;
   obrigatorio: boolean;
   autor: Pessoa | null;
@@ -104,7 +107,7 @@ export type ComunicadoResumo = {
   situacao: SituacaoComunicado;
 };
 
-export type Comunicado = ComunicadoResumo & { texto: string; imagens: string[] };
+export type Comunicado = ComunicadoResumo & { texto: string };
 
 export type Notificacao = {
   id: string;
@@ -131,6 +134,22 @@ export type Inicio = {
   comunicados: ComunicadoResumo[];
   comunicados_obrigatorios: { id: number; titulo: string }[];
   notificacoes_nao_lidas: number;
+  elogios: Elogio[];
+  /** Saldo C$ — só vem para quem vê no portal (fora PADRÃO/ADMINISTRATIVO/SUPERVISOR). */
+  saldo_cs: string | null;
+  pode_criar_comunicado: boolean;
+};
+
+export type Elogio = {
+  id: number;
+  de: Pessoa | null;
+  para_pessoa: Pessoa | null;
+  para_setor: string | null;
+  estrelas: number;
+  comentario: string;
+  criado_em: string;
+  para_mim: boolean;
+  url_web: string | null;
 };
 
 export type Opcao = { id: number; nome: string };

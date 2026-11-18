@@ -19,7 +19,7 @@ export function CartaoChamado({ chamado }: { chamado: ChamadoResumo }) {
       acessibilidade={`Chamado ${chamado.id}: ${chamado.titulo}, ${chamado.status_nome}`}
       style={{ overflow: 'hidden' }}>
       <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, backgroundColor: COR_STATUS[chamado.status] }} />
-      <View className="gap-3 p-4 pl-5">
+      <View style={{ gap: 14, padding: 18, paddingLeft: 22 }}>
         <View className="flex-row items-start gap-3">
           <View className="flex-1 gap-1">
             <Texto variante="legenda" tom="fraco">

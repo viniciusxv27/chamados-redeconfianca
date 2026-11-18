@@ -1,12 +1,20 @@
+/**
+ * Entrada de texto do app.
+ *
+ * Feito para o iPhone não "quebrar" com a Montserrat: o campo de uma linha tem
+ * ALTURA FIXA e o TextInput não tem padding vertical nem lineHeight — é a
+ * combinação que deixava o texto desalinhado/cortado no iOS. Ícone e olho da
+ * senha têm área própria (44 pt de toque). Foco = borda laranja mais forte;
+ * erro = borda vermelha + mensagem embaixo.
+ */
 import { type ComponentRef, forwardRef, useState } from 'react';
-import { Platform, TextInput, type TextInputProps, View } from 'react-native';
-import Animated, { useAnimatedStyle, useDerivedValue, withTiming, interpolateColor } from 'react-native-reanimated';
+import { Platform, Pressable, TextInput, type TextInputProps, View } from 'react-native';
 
-import { estado, fontes, marca, movimento, raios } from '@/constants/theme';
+import { estado, fontes, marca, raios } from '@/constants/theme';
 import { useCores } from '@/providers/tema';
+import { comAlfa } from '@/utils/formatar';
 
 import { Icone, type NomeIcone } from './icone';
-import { Pressionavel } from './pressionavel';
 import { Texto } from './texto';
 
 export type CampoProps = TextInputProps & {
@@ -16,50 +24,56 @@ export type CampoProps = TextInputProps & {
   ajuda?: string;
   /** Campo de senha com o olho para mostrar/esconder. */
   senha?: boolean;
+  /** "suave": cinza claro e bem arredondado, como os campos do login do portal. */
+  variante?: 'padrao' | 'suave';
 };
 
-/** Entrada de texto: borda acende em laranja no foco e fica vermelha no erro. */
 export const Campo = forwardRef<ComponentRef<typeof TextInput>, CampoProps>(function Campo(
-  { rotulo, erro, icone, ajuda, senha, multiline, style, onFocus, onBlur, ...resto },
+  { rotulo, erro, icone, ajuda, senha, variante = 'padrao', multiline, style, onFocus, onBlur, editable, ...resto },
   ref,
 ) {
   const cores = useCores();
   const [focado, setFocado] = useState(false);
   const [ver, setVer] = useState(false);
-  const foco = useDerivedValue(() => withTiming(focado ? 1 : 0, { duration: movimento.rapido }));
-  const borda = useAnimatedStyle(() => ({
-    borderColor: erro ? estado.perigo : interpolateColor(foco.get(), [0, 1], [cores.borda, marca[500]]),
-    boxShadow: focado && !erro ? `0px 0px 0px 3px ${marca[500]}22` : undefined,
-  }));
+  const suave = variante === 'suave';
+  const altura = suave ? 56 : 52;
+  const corBorda = erro ? estado.perigo : focado ? marca[500] : cores.borda;
 
   return (
-    <View className="gap-1.5">
+    <View style={{ gap: 8 }}>
       {rotulo ? (
-        <Texto variante="legenda" tom="suave" style={{ fontFamily: fontes.seminegrito }}>
+        <Texto variante="legenda" tom="suave" style={{ fontFamily: fontes.seminegrito, fontSize: 14 }}>
           {rotulo}
         </Texto>
       ) : null}
-      <Animated.View
-        style={[
-          {
-            flexDirection: 'row',
-            alignItems: multiline ? 'flex-start' : 'center',
-            gap: 10,
-            minHeight: 50,
-            paddingHorizontal: 14,
-            borderWidth: 1.5,
-            borderRadius: raios.md,
-            backgroundColor: cores.superficie,
-          },
-          borda,
-        ]}>
-        {icone ? <Icone nome={icone} tamanho={19} cor={focado ? marca[500] : cores.texto3} style={multiline ? { marginTop: 14 } : undefined} /> : null}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: multiline ? 'flex-start' : 'center',
+          height: multiline ? undefined : altura,
+          minHeight: multiline ? 128 : undefined,
+          paddingLeft: icone ? 4 : 16,
+          paddingRight: senha ? 4 : 16,
+          borderWidth: focado || erro ? 1.5 : 1,
+          borderColor: corBorda,
+          borderRadius: suave ? raios.lg : raios.md,
+          backgroundColor: focado && !erro ? comAlfa(marca[500], 0.04) : suave ? cores.superficie2 : cores.superficie,
+          opacity: editable === false ? 0.6 : 1,
+        }}>
+        {icone ? (
+          <View style={{ width: 44, height: multiline ? 48 : '100%', alignItems: 'center', justifyContent: 'center' }}>
+            <Icone nome={icone} tamanho={20} cor={erro ? estado.perigo : focado ? marca[500] : cores.texto3} />
+          </View>
+        ) : null}
         <TextInput
           ref={ref}
           placeholderTextColor={cores.texto3}
           selectionColor={marca[500]}
+          cursorColor={marca[500]}
           secureTextEntry={senha && !ver}
           multiline={multiline}
+          editable={editable}
+          underlineColorAndroid="transparent"
           onFocus={(e) => {
             setFocado(true);
             onFocus?.(e);
@@ -73,10 +87,11 @@ export const Campo = forwardRef<ComponentRef<typeof TextInput>, CampoProps>(func
               flex: 1,
               color: cores.texto,
               fontFamily: fontes.media,
-              fontSize: 15,
-              paddingVertical: multiline ? 14 : 12,
-              minHeight: multiline ? 120 : undefined,
-              textAlignVertical: multiline ? 'top' : 'center',
+              fontSize: 16,
+              ...(multiline
+                ? { paddingTop: 14, paddingBottom: 14, textAlignVertical: 'top' as const, minHeight: 128 }
+                : { height: '100%' as const, paddingVertical: 0 }),
+              ...(Platform.OS === 'android' ? { includeFontPadding: false } : null),
             },
             // No navegador, o contorno de foco é a borda laranja do próprio campo.
             Platform.OS === 'web' ? ({ outlineWidth: 0 } as object) : null,
@@ -85,11 +100,15 @@ export const Campo = forwardRef<ComponentRef<typeof TextInput>, CampoProps>(func
           {...resto}
         />
         {senha ? (
-          <Pressionavel onPress={() => setVer((v) => !v)} hitSlop={10} accessibilityLabel={ver ? 'Esconder senha' : 'Mostrar senha'}>
-            <Icone nome={ver ? 'eye-off-outline' : 'eye-outline'} tamanho={20} cor={cores.texto3} />
-          </Pressionavel>
+          <Pressable
+            onPress={() => setVer((v) => !v)}
+            accessibilityRole="button"
+            accessibilityLabel={ver ? 'Esconder senha' : 'Mostrar senha'}
+            style={{ width: 44, height: '100%', alignItems: 'center', justifyContent: 'center' }}>
+            <Icone nome={ver ? 'eye-off-outline' : 'eye-outline'} tamanho={21} cor={cores.texto3} />
+          </Pressable>
         ) : null}
-      </Animated.View>
+      </View>
       {erro ? (
         <Texto variante="legenda" tom="perigo">
           {erro}

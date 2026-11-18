@@ -15,8 +15,7 @@ O que vai para o balcão, pelo celular:
   (``vendas/orcamentos.py``: ler_campos → ja_enviado → criar). O servidor só grava;
   quem manda é o WhatsApp do próprio aparelho (``Orcamento.link_whatsapp_app``).
 
-Lançar venda fica no portal (a tela da web monta o JSON inteiro de
-``slv.registrar_venda``: cliente, IMEI, Renova, planos, pagamentos).
+- **Lançar venda** (``/lancar/…``): em ``vendas_lancar.py`` — o mesmo caminho da tela /vendas/nova/.
 """
 import copy
 
@@ -501,8 +500,15 @@ def orcamentos(request):
     })
 
 
+from . import vendas_lancar  # noqa: E402 — usa AUTH, PERM e _pedido_web daqui
+
 urlpatterns = [
     path('', resumo, name='vendas_resumo'),
+    path('lancar/', vendas_lancar.lancar, name='vendas_lancar'),
+    path('lancar/cliente/', vendas_lancar.cliente, name='vendas_lancar_cliente'),
+    path('lancar/produtos/', vendas_lancar.produtos, name='vendas_lancar_produtos'),
+    path('lancar/renova/', vendas_lancar.renova, name='vendas_lancar_renova'),
+    path('lancar/planos-fora/', vendas_lancar.planos_fora, name='vendas_lancar_planos_fora'),
     path('vendas/', vendas, name='vendas_lista'),
     path('vendas/<int:pk>/', venda, name='vendas_detalhe'),
     path('precos/', precos, name='vendas_precos'),

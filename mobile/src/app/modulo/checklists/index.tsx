@@ -19,6 +19,7 @@ export default function Checklists() {
 
   return (
     <TelaModulo
+      esqueleto="painel"
       titulo="Checklists"
       subtitulo={diaPorExtenso(data?.hoje ?? isoDoDia(new Date()))}
       carregando={isPending}

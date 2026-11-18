@@ -11,7 +11,7 @@ import { CHAVES, gravar, ler } from '@/services/armazenamento';
 
 export type PreferenciaTema = 'sistema' | 'claro' | 'escuro';
 
-type Tema = { preferencia: PreferenciaTema; escolher: (p: PreferenciaTema) => void; cores: Cores; escuro: boolean };
+type Tema = { preferencia: PreferenciaTema; escolher: (p: PreferenciaTema) => void; cores: Cores; escuro: boolean; /** A preferência guardada já foi lida (antes disso o esquema pode trocar). */ pronto: boolean };
 
 const Contexto = createContext<Tema | null>(null);
 
@@ -20,6 +20,7 @@ const PARA_NATIVEWIND = { sistema: 'system', claro: 'light', escuro: 'dark' } as
 export function ProvedorTema({ children }: { children: ReactNode }) {
   const { colorScheme, setColorScheme } = useEsquemaNativeWind();
   const [preferencia, setPreferencia] = useState<PreferenciaTema>('sistema');
+  const [pronto, setPronto] = useState(false);
 
   useEffect(() => {
     ler(CHAVES.tema).then((salvo) => {
@@ -29,6 +30,7 @@ export function ProvedorTema({ children }: { children: ReactNode }) {
       } else {
         setColorScheme('system');
       }
+      setPronto(true);
     });
   }, [setColorScheme]);
 
@@ -43,8 +45,8 @@ export function ProvedorTema({ children }: { children: ReactNode }) {
 
   const escuro = colorScheme === 'dark';
   const valor = useMemo(
-    () => ({ preferencia, escolher, cores: paleta(escuro ? 'escuro' : 'claro'), escuro }),
-    [preferencia, escolher, escuro],
+    () => ({ preferencia, escolher, cores: paleta(escuro ? 'escuro' : 'claro'), escuro, pronto }),
+    [preferencia, escolher, escuro, pronto],
   );
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;
 }

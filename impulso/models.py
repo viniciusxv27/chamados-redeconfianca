@@ -2206,3 +2206,26 @@ class ProjetoInteligencia(models.Model):
 
     def como_dict(self):
         return {'id': self.id, 'nome': self.nome, 'nota': self.nota, 'estagio': self.estagio}
+
+
+class ChamadoNoImpulso(models.Model):
+    """Chamado de suporte (/projects/support/) puxado para o Impulso de quem assumiu (18/11/2026).
+
+    Quem clica em "Puxar para impulso e assumir" vira o atendente e ganha uma meta em andamento; quando o
+    chamado é fechado, a meta vai sozinha para Concluída (impulso/chamados_suporte.py, pelo sinal do save).
+    """
+
+    chamado = models.ForeignKey('projects.SupportChat', on_delete=models.CASCADE, related_name='metas_impulso')
+    meta = models.OneToOneField(Meta, on_delete=models.CASCADE, related_name='chamado_suporte')
+    puxado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+')
+    puxado_em = models.DateTimeField(auto_now_add=True)
+    # Concluída pelo fechamento do chamado: se o chamado reabrir, a meta volta para Em Andamento.
+    concluida_pelo_chamado = models.BooleanField(default=False, db_default=False)
+
+    class Meta:
+        verbose_name = 'Chamado no Impulso'
+        verbose_name_plural = 'Chamados no Impulso'
+
+    def __str__(self):
+        return f'Chamado {self.chamado_id} → meta {self.meta_id}'

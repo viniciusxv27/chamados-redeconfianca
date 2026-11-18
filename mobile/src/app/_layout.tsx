@@ -9,19 +9,25 @@ import {
   Montserrat_800ExtraBold,
   useFonts,
 } from '@expo-google-fonts/montserrat';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useCallback, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { AberturaAnimada } from '@/components/navegacao/abertura-animada';
 import { ProvedorConsultas } from '@/providers/consultas';
 import { ProvedorSessao, useSessao } from '@/providers/sessao';
 import { ProvedorTema, useTema } from '@/providers/tema';
 
 SplashScreen.preventAutoHideAsync();
-SplashScreen.setOptions({ duration: 350, fade: true });
+// A splash nativa só some quando a abertura animada já está na tela (mesmo desenho: sem piscar).
+// (No Expo Go essa opção não existe — só em build próprio; lá ela é pulada para não poluir o log.)
+if (Constants.executionEnvironment !== ExecutionEnvironment.StoreClient) {
+  SplashScreen.setOptions({ duration: 150, fade: true });
+}
 
 export default function RaizDoApp() {
   const [fontesProntas] = useFonts({
@@ -37,11 +43,31 @@ export default function RaizDoApp() {
       <SafeAreaProvider>
         <ProvedorConsultas>
           <ProvedorTema>
-            <ProvedorSessao>{fontesProntas ? <Navegacao /> : null}</ProvedorSessao>
+            <ProvedorSessao>{fontesProntas ? <AppComAbertura /> : null}</ProvedorSessao>
           </ProvedorTema>
         </ProvedorConsultas>
       </SafeAreaProvider>
     </GestureHandlerRootView>
+  );
+}
+
+/**
+ * A abertura com a marca e, por baixo, o app. A primeira tela só monta quando a
+ * abertura começa a sair (sessão conferida e tema lido): assim a entrada dela
+ * acontece à vista, emendada na saída do logo — e não escondida atrás dele.
+ */
+function AppComAbertura() {
+  const { estado } = useSessao();
+  const tema = useTema();
+  const [revelar, setRevelar] = useState(false);
+  const [abertura, setAbertura] = useState(true);
+  const sair = useCallback(() => setRevelar(true), []);
+  const terminar = useCallback(() => setAbertura(false), []);
+  return (
+    <>
+      {revelar ? <Navegacao /> : null}
+      {abertura ? <AberturaAnimada pronto={estado !== 'carregando' && tema.pronto} aoSair={sair} aoTerminar={terminar} /> : null}
+    </>
   );
 }
 
@@ -53,10 +79,6 @@ export default function RaizDoApp() {
 function Navegacao() {
   const { estado, bloqueio } = useSessao();
   const { cores, escuro } = useTema();
-
-  useEffect(() => {
-    if (estado !== 'carregando') void SplashScreen.hideAsync();
-  }, [estado]);
 
   if (estado === 'carregando') return null;
   const logado = estado === 'logado';

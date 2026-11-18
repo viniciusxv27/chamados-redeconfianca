@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { FlatList, Modal, Pressable, View } from 'react-native';
+import { FlatList, Modal, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -91,7 +91,7 @@ export function Seletor({
       <Modal visible={aberto} transparent animationType="none" onRequestClose={() => setAberto(false)} statusBarTranslucent>
         {aberto ? (
           <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-            <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)} style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)' }}>
+            <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)} style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.45)' }]}>
               <Pressable style={{ flex: 1 }} onPress={() => setAberto(false)} accessibilityLabel="Fechar" />
             </Animated.View>
             <Animated.View

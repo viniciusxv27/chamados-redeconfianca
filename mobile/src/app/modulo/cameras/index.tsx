@@ -50,6 +50,7 @@ export default function Cameras() {
 
   return (
     <TelaModulo
+      esqueleto="painel"
       titulo="Câmeras"
       subtitulo="Lojas, alertas e indicadores"
       carregando={isPending}

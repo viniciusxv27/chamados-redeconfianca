@@ -214,3 +214,135 @@ export const vendas = {
     return data;
   },
 };
+
+// ── Lançar venda (/m/vendas/lancar/…: o mesmo caminho da tela /vendas/nova/) ──
+
+export type Opcao = { valor: string; rotulo: string };
+export type PessoaOpcao = { id: number; nome: string; detalhe: string | null };
+
+export type CamposServico = {
+  plano?: string[];
+  plano_anterior?: string[];
+  sem_plano?: boolean;
+  plano_fora?: boolean;
+  portabilidade?: boolean;
+  serial?: boolean;
+  adicional?: boolean;
+  titular?: boolean;
+  numero_novo?: boolean;
+};
+
+export type FormularioVenda = {
+  pode_outros: boolean;
+  sem_pdv: boolean;
+  loja: { id: number; nome: string } | null;
+  eu: PessoaOpcao;
+  lojas: { id: number; nome: string }[];
+  vendedores: PessoaOpcao[];
+  planos: { id: number; nome: string; segmentacao: string; valor: number }[];
+  adicionais: { id: number; tipo: string; nome: string; valor: number }[];
+  segmentacoes: Opcao[];
+  tipos_servico: (Opcao & { campos: CamposServico })[];
+  operadoras: Opcao[];
+  formas: (Opcao & { nsu: boolean; parcelas: boolean })[];
+  vivo_mais: number;
+  cond_base: string;
+  cond_pix: string;
+  rotulos_condicao: Record<string, string>;
+};
+
+export type ClienteBusca =
+  | { ok: false; erro: string }
+  | { ok: true; encontrado: false; cpf: string; cpf_formatado: string }
+  | {
+      ok: true;
+      encontrado: true;
+      cliente: {
+        cpf: string;
+        cpf_formatado: string;
+        nome: string;
+        telefone: string;
+        telefone_formatado: string;
+        cep: string;
+        logradouro: string;
+        numero: string;
+        complemento: string;
+        bairro: string;
+        cidade: string;
+        uf: string;
+        plano_id: number | null;
+        plano_nome: string;
+        segmentacao: string;
+        valor_pago: string;
+        origem: 'PORTAL' | 'VIVOGO';
+        ultima_compra: string;
+        pdv_ultimo: string;
+        qtd_vendas: number;
+      };
+      pre_analise: {
+        vazio: boolean;
+        plano: { nome: string; segmentacao: string; segmentacao_nome: string; valor: string; fonte: string } | null;
+        compras: { data: string; produto: string; valor: string; venda: number | null; pdv: string }[];
+      };
+    };
+
+export type ProdutoVenda = {
+  id: number;
+  categoria: string;
+  nome: string;
+  sku: string;
+  cor: string;
+  skus: { sku: string; cor: string }[];
+  sku_digitado: boolean;
+  valor: string;
+  categoria_slv: 'aparelho' | 'eletronico' | 'essencial';
+  valor_sugerido: string;
+  regra: string;
+  fabricante: string;
+  portfolio: string;
+  tipo: string;
+  exige_serial: boolean;
+  tabela: Record<string, Record<string, string>>;
+  grupos: string[];
+  grupo_padrao: string;
+  condicoes: Record<string, string[]>;
+};
+
+export type PlanoFora = { id: number; nome: string; valor: string; segmentacao: string };
+
+export type ErroDaVenda = { erro: string; erros: string[]; etapas: Partial<Record<'cliente' | 'produtos' | 'servicos' | 'pagamento', string[]>> };
+
+const LANCAR = `${BASE}/lancar`;
+
+export const lancar = {
+  async formulario() {
+    const { data } = await api.get<FormularioVenda>(`${LANCAR}/`);
+    return data;
+  },
+  async cliente(cpf: string) {
+    const { data } = await api.get<ClienteBusca>(`${LANCAR}/cliente/`, { params: { cpf } });
+    return data;
+  },
+  async produtos(q: string, segmentacao: string) {
+    const { data } = await api.get<{ results: ProdutoVenda[] }>(`${LANCAR}/produtos/`, { params: { q, segmentacao } });
+    return data.results;
+  },
+  /** O preço sugerido de novo para o plano do cliente (a web chama assim quando o plano muda). */
+  async produtosPorId(ids: number[], segmentacao: string) {
+    const { data } = await api.get<{ results: ProdutoVenda[] }>(`${LANCAR}/produtos/`, { params: { ids: ids.join(','), segmentacao } });
+    return data.results;
+  },
+  async renova(codigo: string) {
+    const { data } = await api.get<{ ok: boolean; codigo?: string; aparelho?: string; ja_usado?: boolean; erro?: string }>(`${LANCAR}/renova/`, { params: { codigo } });
+    return data;
+  },
+  async planosFora(q: string) {
+    const { data } = await api.get<{ ok: boolean; itens: PlanoFora[] }>(`${LANCAR}/planos-fora/`, { params: { q } });
+    return data.itens ?? [];
+  },
+  /** 201 → a venda; 400 → os erros por etapa (o ErroApi comum guarda só a mensagem, então o 400 vem como resposta). */
+  async gravar(payload: object): Promise<{ ok: true; id: number; url_web: string } | ({ ok: false } & ErroDaVenda)> {
+    const r = await api.post(`${LANCAR}/`, payload, { validateStatus: (s) => s === 201 || s === 400 });
+    return r.status === 201 ? r.data : { ok: false, ...(r.data as ErroDaVenda) };
+  },
+};

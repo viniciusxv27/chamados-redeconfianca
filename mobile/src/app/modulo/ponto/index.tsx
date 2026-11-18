@@ -36,6 +36,7 @@ export default function Ponto() {
   const r = resumo.data;
   return (
     <TelaModulo
+      esqueleto="painel"
       titulo="Ponto"
       subtitulo={diaPorExtenso(hoje)}
       carregando={resumo.isPending}

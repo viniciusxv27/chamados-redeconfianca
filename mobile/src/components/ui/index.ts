@@ -1,9 +1,10 @@
 export { Avatar } from './avatar';
 export { Botao } from './botao';
+export { BotaoGradiente } from './botao-gradiente';
 export { Campo } from './campo';
 export { Cartao } from './cartao';
 export { Chip } from './chip';
-export { Esqueleto, EsqueletoCartao, EsqueletoLista } from './esqueleto';
+export { Esqueleto, EsqueletoCartao, EsqueletoDetalhe, EsqueletoLista, EsqueletoPainel, EsqueletoRodape, GrupoEsqueleto } from './esqueleto';
 export { EstadoErro, EstadoVazio } from './estados';
 export { Icone, type NomeIcone } from './icone';
 export { Pressionavel } from './pressionavel';

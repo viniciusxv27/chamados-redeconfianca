@@ -18,6 +18,7 @@ export const chaves = {
   setores: ['setores'] as const,
   categorias: (setor: number) => ['categorias', setor] as const,
   comunicados: ['comunicados'] as const,
+  feed: ['comunicados', 'feed'] as const,
   comunicado: (id: number) => ['comunicado', id] as const,
   notificacoes: ['notificacoes'] as const,
   modulos: ['modulos'] as const,
@@ -86,6 +87,16 @@ export function useComunicados() {
   });
 }
 
+/** "Feed de Comunicados" da home: só os não fixados, 10 por vez ("Carregar mais", como no portal). */
+export function useFeed() {
+  return useInfiniteQuery({
+    queryKey: chaves.feed,
+    queryFn: ({ pageParam }) => comunicados.listar(pageParam, true),
+    initialPageParam: 1,
+    getNextPageParam: (ultima) => (ultima.tem_mais ? ultima.pagina + 1 : undefined),
+  });
+}
+
 export function useComunicado(id: number) {
   return useQuery({ queryKey: chaves.comunicado(id), queryFn: () => comunicados.detalhe(id), enabled: id > 0 });
 }
@@ -99,8 +110,9 @@ function aplicarNoComunicado(
   mudar: (c: ComunicadoResumo) => ComunicadoResumo,
 ) {
   cliente.setQueryData<Comunicado>(chaves.comunicado(id), (c) => (c ? (mudar(c) as Comunicado) : c));
-  cliente.setQueryData<PaginasComunicados>(chaves.comunicados, (dados) =>
-    dados
+  // Mural e feed da home (todas as listas que começam com 'comunicados').
+  cliente.setQueriesData<PaginasComunicados>({ queryKey: chaves.comunicados }, (dados) =>
+    dados?.pages
       ? { ...dados, pages: dados.pages.map((p) => ({ ...p, resultados: p.resultados.map((c) => (c.id === id ? mudar(c) : c)) })) }
       : dados,
   );

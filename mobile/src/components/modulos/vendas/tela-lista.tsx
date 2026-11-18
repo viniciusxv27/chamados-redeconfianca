@@ -1,10 +1,11 @@
 /** Tela de lista paginada do módulo Vendas: voltar, título, filtros fixos e lista com rolagem infinita. */
 import { type ReactElement, type ReactNode, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native';
+import { FlatList, RefreshControl, View } from 'react-native';
 
 import { BarraDetalhe, CabecalhoGrande, Entrada, EsqueletoLista, EstadoErro, EstadoVazio, type NomeIcone, Tela } from '@/components/ui';
 import { marca } from '@/constants/theme';
 import { mensagemDoErro } from '@/services/api';
+import { EsqueletoRodape } from '@/components/ui/esqueleto';
 
 /** Texto digitado → busca, depois que a pessoa para de digitar (350 ms). */
 export function useBuscaAdiada(inicial = '') {
@@ -76,7 +77,7 @@ export function TelaLista<T>({
               colors={[marca[500]]}
             />
           }
-          ListFooterComponent={consulta.isFetchingNextPage ? <ActivityIndicator color={marca[500]} style={{ marginVertical: 16 }} /> : undefined}
+          ListFooterComponent={consulta.isFetchingNextPage ? <EsqueletoRodape /> : undefined}
           ListEmptyComponent={<EstadoVazio icone={vazio.icone} titulo={vazio.titulo} texto={vazio.texto} />}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"

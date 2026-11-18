@@ -21,7 +21,7 @@ export function Tela({ children, topo = false, style }: { children: ReactNode; t
 /** Título grande das abas (estilo iOS), com ação opcional à direita. */
 export function CabecalhoGrande({ titulo, subtitulo, direita }: { titulo: string; subtitulo?: string; direita?: ReactNode }) {
   return (
-    <View className="flex-row items-end justify-between px-5 pb-3 pt-2">
+    <View className="flex-row items-end justify-between px-5 pb-4 pt-3">
       <View className="flex-1">
         {subtitulo ? (
           <Texto variante="rotulo" tom="fraco" className="mb-1">

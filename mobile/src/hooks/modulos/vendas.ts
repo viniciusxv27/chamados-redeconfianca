@@ -1,7 +1,7 @@
 /** Hooks do módulo Vendas (TanStack Query sobre src/services/modulos/vendas.ts). */
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { type FiltroVendas, type NovoOrcamento, type PodeVendas, type ResumoVendas, type SituacaoCliente, vendas } from '@/services/modulos/vendas';
+import { type FiltroVendas, lancar, type NovoOrcamento, type PodeVendas, type ResumoVendas, type SituacaoCliente, vendas } from '@/services/modulos/vendas';
 
 const proxima = (ultima: { tem_mais: boolean; pagina: number }) => (ultima.tem_mais ? ultima.pagina + 1 : undefined);
 
@@ -73,5 +73,42 @@ export function useCriarOrcamento() {
   return useMutation({
     mutationFn: (o: NovoOrcamento) => vendas.criarOrcamento(o),
     onSuccess: () => void cliente.invalidateQueries({ queryKey: ['m', 'vendas', 'orcamentos'] }),
+  });
+}
+
+// ── Lançar venda ──
+
+export function useFormularioVenda() {
+  return useQuery({ queryKey: ['m', 'vendas', 'lancar', 'formulario'], queryFn: lancar.formulario, staleTime: 5 * 60_000 });
+}
+
+export function useBuscarClienteVenda() {
+  return useMutation({ mutationFn: (cpf: string) => lancar.cliente(cpf) });
+}
+
+export function useProdutosVenda(q: string, segmentacao: string) {
+  return useQuery({
+    queryKey: ['m', 'vendas', 'lancar', 'produtos', q, segmentacao],
+    queryFn: () => lancar.produtos(q, segmentacao),
+    enabled: q.length >= 2,
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useConferirRenova() {
+  return useMutation({ mutationFn: (codigo: string) => lancar.renova(codigo) });
+}
+
+export function usePlanosFora(q: string) {
+  return useQuery({ queryKey: ['m', 'vendas', 'lancar', 'fora', q], queryFn: () => lancar.planosFora(q), enabled: q.length >= 2, placeholderData: keepPreviousData });
+}
+
+export function useGravarVenda() {
+  const cliente = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: object) => lancar.gravar(payload),
+    onSuccess: (r) => {
+      if (r.ok) void cliente.invalidateQueries({ queryKey: ['m', 'vendas'], predicate: (q) => q.queryKey[2] !== 'lancar' });
+    },
   });
 }

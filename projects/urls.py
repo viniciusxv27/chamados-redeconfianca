@@ -64,6 +64,7 @@ urlpatterns = [
     path('support/admin/', views_chat.support_admin_dashboard, name='support_admin_dashboard'),
     path('support/admin/template/', views_chat.support_admin_template, name='support_admin_template'),
     path('support/chat/<int:chat_id>/assign/', views_chat.assign_chat_to_agent, name='assign_chat_to_agent'),
+    path('support/chat/<int:chat_id>/impulso/', views_chat.pull_to_impulso, name='pull_support_chat_to_impulso'),
     path('support/chat/<int:chat_id>/resolve/', views_chat.resolve_support_chat, name='resolve_support_chat'),
     path('support/chat/<int:chat_id>/close/', views_chat.close_support_chat, name='close_support_chat'),
     path('support/chat/<int:chat_id>/delete/', views_chat.delete_support_chat, name='delete_support_chat'),

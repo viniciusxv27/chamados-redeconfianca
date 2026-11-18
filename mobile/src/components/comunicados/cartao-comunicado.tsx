@@ -20,7 +20,7 @@ export function CartaoComunicado({ comunicado, compacto = false }: { comunicado:
       {comunicado.imagem ? (
         <Image source={{ uri: comunicado.imagem }} style={{ width: '100%', aspectRatio: compacto ? 2 : 16 / 9, backgroundColor: cores.superficie3 }} contentFit="cover" transition={250} />
       ) : null}
-      <View className="gap-2 p-4">
+      <View style={{ gap: 10, padding: 18 }}>
         <View className="flex-row flex-wrap items-center gap-2">
           {comunicado.fixado ? <Selo texto="Fixado" cor={marca[500]} ponto={false} /> : null}
           {comunicado.obrigatorio && comunicado.situacao !== 'ESTOU_CIENTE' ? <Selo texto="Leitura obrigatória" cor={estado.perigo} /> : null}

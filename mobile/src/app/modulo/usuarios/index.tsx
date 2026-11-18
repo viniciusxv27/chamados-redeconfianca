@@ -5,7 +5,7 @@
  */
 import { router, type Href } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, ScrollView, View } from 'react-native';
+import { FlatList, RefreshControl, ScrollView, View } from 'react-native';
 
 import { CartaoUsuario } from '@/components/modulos/usuarios/pecas';
 import { BarraDetalhe, BotaoIcone, CabecalhoGrande, Campo, Chip, Entrada, EsqueletoLista, EstadoErro, EstadoVazio, Tela } from '@/components/ui';
@@ -15,6 +15,7 @@ import { useOpcoesUsuarios, useUsuarios } from '@/hooks/modulos/usuarios';
 import { mensagemDoErro } from '@/services/api';
 import type { Hierarquia, SituacaoUsuario, UsuarioResumo } from '@/services/modulos/usuarios';
 import { abrirNoPortal } from '@/utils/links';
+import { EsqueletoRodape } from '@/components/ui/esqueleto';
 
 const SITUACOES: { valor: SituacaoUsuario | ''; rotulo: string }[] = [
   { valor: 'ATIVO', rotulo: 'Ativos' },
@@ -101,7 +102,7 @@ export default function Usuarios() {
           onEndReachedThreshold={0.4}
           onEndReached={() => hasNextPage && !isFetchingNextPage && fetchNextPage()}
           refreshControl={<RefreshControl refreshing={isRefetching && !isFetchingNextPage} onRefresh={() => void refetch()} tintColor={marca[500]} colors={[marca[500]]} />}
-          ListFooterComponent={isFetchingNextPage ? <ActivityIndicator color={marca[500]} style={{ marginVertical: 16 }} /> : undefined}
+          ListFooterComponent={isFetchingNextPage ? <EsqueletoRodape /> : undefined}
           ListEmptyComponent={
             <EstadoVazio
               icone={filtrando ? 'search-outline' : 'people-outline'}

@@ -1,6 +1,6 @@
 import { type Href, router } from 'expo-router';
 import { useMemo } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native';
+import { FlatList, RefreshControl, View } from 'react-native';
 
 import { duracao } from '@/components/modulos/agenda/datas';
 import { COR_STATUS_TRANSCRICAO } from '@/components/modulos/agenda/pecas';
@@ -12,6 +12,7 @@ import { mensagemDoErro } from '@/services/api';
 import type { TranscricaoResumo } from '@/services/modulos/agenda';
 import { comAlfa, tempoRelativo } from '@/utils/formatar';
 import { abrirNoPortal } from '@/utils/links';
+import { EsqueletoRodape } from '@/components/ui/esqueleto';
 
 /** Atas de reunião que a pessoa pode ver (as dela, as compartilhadas com ela; o SUPERADMIN vê todas). */
 export default function Transcricoes() {
@@ -51,7 +52,7 @@ export default function Transcricoes() {
           </Entrada>
         )}
         ListEmptyComponent={!isPending && !isError ? <EstadoVazio icone="mic-off-outline" titulo="Nenhuma ata ainda" texto="As transcrições suas e as compartilhadas com você aparecem aqui." /> : undefined}
-        ListFooterComponent={isFetchingNextPage ? <ActivityIndicator color={marca[500]} style={{ marginVertical: 16 }} /> : undefined}
+        ListFooterComponent={isFetchingNextPage ? <EsqueletoRodape /> : undefined}
         contentContainerStyle={{ paddingBottom: 40, gap: 12 }}
         onEndReachedThreshold={0.4}
         onEndReached={() => hasNextPage && !isFetchingNextPage && fetchNextPage()}

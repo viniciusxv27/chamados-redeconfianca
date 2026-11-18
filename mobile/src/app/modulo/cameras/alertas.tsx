@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, ScrollView, View } from 'react-native';
+import { FlatList, RefreshControl, ScrollView, View } from 'react-native';
 
 import { CartaoAlerta } from '@/components/modulos/cameras/pecas';
 import { BarraDetalhe, CabecalhoGrande, Chip, Entrada, EsqueletoLista, EstadoErro, EstadoVazio, Tela } from '@/components/ui';
@@ -8,6 +8,7 @@ import { marca } from '@/constants/theme';
 import { useAlertasCameras } from '@/hooks/modulos/cameras';
 import { mensagemDoErro } from '@/services/api';
 import type { Opcao } from '@/services/modulos/cameras';
+import { EsqueletoRodape } from '@/components/ui/esqueleto';
 
 const STATUS_PADRAO: Opcao[] = [
   { valor: 'abertos', rotulo: 'Abertos' },
@@ -73,7 +74,7 @@ export default function AlertasCameras() {
           refreshControl={
             <RefreshControl refreshing={consulta.isRefetching && !consulta.isFetchingNextPage} onRefresh={() => void consulta.refetch()} tintColor={marca[500]} colors={[marca[500]]} />
           }
-          ListFooterComponent={consulta.isFetchingNextPage ? <ActivityIndicator color={marca[500]} style={{ marginVertical: 16 }} /> : undefined}
+          ListFooterComponent={consulta.isFetchingNextPage ? <EsqueletoRodape /> : undefined}
           ListEmptyComponent={
             <EstadoVazio
               icone="checkmark-circle-outline"
