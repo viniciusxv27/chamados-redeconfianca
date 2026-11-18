@@ -4,6 +4,87 @@
 {% block sap_subtitulo %}O app da loja (MB0A, MB1B, transferências, IQ02…) sempre na última versão{% endblock %}
 
 {% block sap_conteudo %}
+{% load static %}
+<style>
+  /* A janela do app dentro do portal: as cores do próprio app (roxo Vivo). */
+  .pn { --pn-roxo: #660099; --pn-roxo-2: #8A2BC2; --pn-fundo: #F6F1FA; --pn-borda: #E2D3EE; --pn-texto: #2A2033;
+        border-radius: 14px; overflow: hidden; border: 1px solid var(--pn-borda); background: #fff;
+        box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 12px 32px -12px rgba(102,0,153,.25); display: flex; flex-direction: column; }
+  .pn-barra { display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 14px; color: #fff;
+              background: linear-gradient(90deg, #4D0073, #660099 45%, #8A2BC2); }
+  .pn-barra img { height: 20px; filter: brightness(0) invert(1); opacity: .95; }
+  .pn-barra .pn-nome { font-weight: 700; font-size: 14px; letter-spacing: .01em; white-space: nowrap; }
+  .pn-barra .pn-sub { font-size: 12px; opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pn-barra button { display: inline-grid; place-items: center; width: 32px; height: 30px; border-radius: 8px; color: #fff; opacity: .9; }
+  .pn-barra button:hover { background: rgba(255,255,255,.15); opacity: 1; }
+  .pn-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; padding: 3px 10px;
+             border-radius: 999px; background: rgba(255,255,255,.16); white-space: nowrap; }
+  .pn-ponto { width: 8px; height: 8px; border-radius: 99px; background: #CBD5E1; }
+  .pn-chip-ok .pn-ponto { background: #4ADE80; box-shadow: 0 0 0 3px rgba(74,222,128,.25); }
+  .pn-chip-aviso .pn-ponto { background: #FBBF24; }
+  .pn-chip-erro .pn-ponto { background: #F87171; }
+  .pn-tela { position: relative; flex: 1; height: min(78vh, 860px); min-height: 460px; background: var(--pn-fundo);
+             display: grid; place-items: center; outline: none; overflow: hidden; }
+  .pn-cheia .pn-tela { height: auto; }
+  .pn-cheia { border-radius: 0; height: 100vh; }
+  .pn-com-teclado .pn-tela { box-shadow: inset 0 0 0 2px rgba(138,43,194,.35); }
+  .pn-palco { position: relative; }
+  .pn-teclado { position: absolute; left: 0; top: 0; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0; resize: none; pointer-events: none; }
+  .pn-palco canvas { position: absolute; left: 0; top: 0; image-rendering: auto; cursor: default; }
+  .pn-palco .pn-popup { border-radius: 8px; box-shadow: 0 20px 50px -10px rgba(30,0,50,.55), 0 0 0 1px rgba(0,0,0,.08);
+                        animation: pn-surge .16s ease-out; }
+  @keyframes pn-surge { from { transform: scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
+  .pn-aviso { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px;
+              background: radial-gradient(800px 300px at 50% 0%, rgba(138,43,194,.10), transparent 70%), var(--pn-fundo); }
+  .pn-aviso[hidden] { display: none; }
+  .pn-aviso-caixa { max-width: 520px; text-align: center; color: var(--pn-texto); }
+  .pn-aviso-caixa h3 { font-size: 19px; font-weight: 800; margin: 10px 0 6px; }
+  .pn-aviso-caixa p { font-size: 14px; color: #5B5266; margin: 6px 0; }
+  .pn-ico { font-size: 36px; color: var(--pn-roxo-2); }
+  .pn-ico-erro { color: #DC2626; }
+  .pn-logo { height: 44px; margin: 0 auto; }
+  .pn-botao { display: inline-flex; align-items: center; gap: 8px; margin-top: 12px; padding: 10px 18px; border-radius: 10px;
+              background: var(--pn-roxo); color: #fff !important; font-weight: 700; font-size: 14px; box-shadow: 0 8px 20px -8px rgba(102,0,153,.6); }
+  .pn-botao:hover { background: #4D0073; }
+  .pn-passos { text-align: left; margin: 14px auto 6px; padding-left: 20px; font-size: 14px; color: #3F3549; display: grid; gap: 8px; max-width: 420px; list-style: decimal; }
+  .pn-passos .pn-botao { margin-top: 0; }
+  .pn-nota { font-size: 12.5px !important; color: #7A7085 !important; }
+  .pn-link { color: var(--pn-roxo-2); font-weight: 600; text-decoration: underline; }
+  .pn-erro { color: #B91C1C !important; }
+  .pn-gira { display: inline-block; width: 34px; height: 34px; border-radius: 99px; border: 3px solid #E2D3EE; border-top-color: var(--pn-roxo-2);
+             animation: pn-gira 0.8s linear infinite; }
+  @keyframes pn-gira { to { transform: rotate(360deg); } }
+  .pn-barra-prog { height: 8px; border-radius: 99px; background: #E2D3EE; overflow: hidden; margin: 14px auto 0; max-width: 360px; }
+  .pn-barra-prog span { display: block; height: 100%; background: linear-gradient(90deg, #660099, #8A2BC2); transition: width .4s; }
+  .pn-rodape { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 6px 14px; font-size: 11.5px;
+               color: #7A7085; background: #fff; border-top: 1px solid var(--pn-borda); }
+  html.dark .pn { --pn-fundo: #17121C; --pn-borda: #4A3D57; --pn-texto: #EDE4F5; background: #221A2A; }
+  html.dark .pn-aviso-caixa p, html.dark .pn-passos { color: #C9BCD6; }
+  html.dark .pn-rodape { background: #221A2A; color: #A898B8; }
+  @media (max-width: 640px) { .pn-barra .pn-sub, .pn-barra [data-pn-windows] { display: none; } .pn-tela { min-height: 360px; } }
+</style>
+
+<section id="pnApp" class="pn mb-4" data-sessao="{% url 'auditoria_sap:automacao_ponte_sessao' %}"
+         data-baixar-ponte="{% if ponte %}{% url 'auditoria_sap:automacao_ponte_baixar' %}{% endif %}"
+         data-versao="{{ atual.versao|default:'' }}" data-logo="{% static 'auditoria_sap/automacao_logo_claro.png' %}"
+         aria-label="Automação SAP rodando dentro do portal">
+    <div class="pn-barra">
+        <img src="{% static 'auditoria_sap/automacao_logo_claro.png' %}" alt="">
+        <span class="pn-nome">Automação SAP</span>
+        <span class="pn-sub" data-pn-titulo>no seu computador, aqui dentro do portal</span>
+        <span class="ml-auto pn-chip" data-pn-status><span class="pn-ponto"></span>…</span>
+        <button type="button" data-pn-windows title="Levar o app para a área de trabalho do Windows" aria-label="Levar para o Windows"><i class="fab fa-windows"></i></button>
+        <button type="button" data-pn-reiniciar title="Reiniciar o app" aria-label="Reiniciar o app"><i class="fas fa-rotate-right"></i></button>
+        <button type="button" data-pn-cheia title="Tela cheia" aria-label="Tela cheia"><i class="fas fa-expand"></i></button>
+    </div>
+    <div class="pn-tela" data-pn-tela aria-label="Tela do app: clique para usar o teclado nele">
+        <div class="pn-palco" data-pn-palco></div>
+        <div class="pn-aviso" data-pn-aviso></div>
+    </div>
+    <div class="pn-rodape"><span data-pn-rodape>Ponte não conectada</span><span><i class="fas fa-keyboard mr-1"></i>Clique na tela do app para digitar nele · Ctrl+C / Ctrl+V usam a área de transferência do Windows</span></div>
+</section>
+<script src="{% static 'auditoria_sap/ponte.js' %}?v=4" defer></script>
+
 <div class="grid lg:grid-cols-3 gap-4">
     <div class="lg:col-span-2 flex flex-col gap-4 min-w-0">
 
@@ -34,9 +115,10 @@
         <section class="sap-card p-5 text-sm text-gray-700">
             <h2 class="font-semibold text-gray-800 mb-2"><i class="fas fa-circle-info text-sky-600 mr-1.5"></i>Como funciona</h2>
             <ul class="list-disc pl-5 space-y-1">
-                <li><strong>Só na primeira vez:</strong> baixe o .zip acima e extraia a pasta <code>AutomacaoSAP</code> inteira no computador da loja (ex.: <code>C:\AutomacaoSAP</code>).</li>
-                <li><strong>Depois disso, não precisa baixar mais.</strong> Ao abrir, o app confere aqui se há versão nova e se atualiza sozinho, mantendo as pastas <code>config</code> e <code>logs</code> da loja.</li>
-                <li>O app não roda pelo navegador: ele comanda o SAP GUI aberto no próprio computador.</li>
+                <li><strong>Aqui no portal (recomendado):</strong> com a <strong>Ponte</strong> instalada uma vez no Windows da loja, o app abre na janela acima — ela instala e atualiza o app sozinha. Precisa ser o computador que tem o SAP GUI aberto: é ele que o app comanda.</li>
+                <li><strong>Ou na área de trabalho:</strong> baixe o .zip e extraia a pasta <code>AutomacaoSAP</code> inteira (ex.: <code>C:\AutomacaoSAP</code>). A Ponte também acha e usa essa pasta.</li>
+                <li>Ao abrir, o app confere aqui se há versão nova e se atualiza sozinho, mantendo as pastas <code>config</code> e <code>logs</code> da loja.</li>
+                <li>Fechou a página? Em alguns segundos o app volta para a área de trabalho, sem perder o que estava fazendo.</li>
             </ul>
         </section>
 
@@ -108,6 +190,20 @@
             <button type="submit" id="automacaoBotao" class="px-4 py-2 bg-sky-600 text-white rounded-lg text-sm font-medium hover:bg-sky-700 disabled:opacity-60 disabled:cursor-wait">
                 <i class="fas fa-upload mr-1.5"></i>Enviar
             </button>
+        </form>
+
+        <form method="post" action="{% url 'auditoria_sap:automacao_ponte_enviar' %}" enctype="multipart/form-data"
+              class="sap-card p-5 flex flex-col gap-3" data-ponte-enviar>
+            {% csrf_token %}
+            <h2 class="font-semibold text-gray-800"><i class="fas fa-plug text-purple-700 mr-1.5"></i>Ponte (instalador)</h2>
+            <p class="text-xs text-gray-500">O instalador que a janela acima oferece a quem ainda não tem a ponte.</p>
+            {% if ponte %}<p class="text-xs text-gray-600">Oferecida às lojas: <strong>{{ ponte.versao }}</strong> · {% if ponte.origem == 'imagem' %}gerada na construção do portal (Easypanel){% else %}enviada aqui{% endif %}</p>
+            {% else %}<p class="text-xs text-amber-700">Nenhuma ponte disponível: a construção do portal não gerou o instalador e nenhum foi enviado.</p>{% endif %}
+            {% if ponte_enviada %}<p class="text-xs text-gray-500">Último enviado aqui: {{ ponte_enviada.versao }} · {{ ponte_enviada.enviado_em|date:"d/m/Y H:i" }} · {{ ponte_enviada.downloads }} download(s)</p>{% endif %}
+            <p class="text-xs text-gray-500">Só precisa enviar se quiser uma versão diferente da que a construção gera.</p>
+            <input type="file" name="arquivo" accept=".exe" required class="text-sm">
+            <input type="text" name="versao" placeholder="Versão (ex.: 1.0.0)" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            <button type="submit" class="px-4 py-2 bg-purple-700 text-white rounded-lg text-sm font-medium hover:bg-purple-800"><i class="fas fa-upload mr-1.5"></i>Publicar a ponte</button>
         </form>
 
         <section class="sap-card p-5 flex flex-col gap-2 text-sm" data-chave-app>

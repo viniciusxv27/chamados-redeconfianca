@@ -2,6 +2,7 @@
 import logging
 
 from django.contrib import messages
+from django.core import signing
 from django.contrib.auth.decorators import login_required
 from django.db import IntegrityError
 from django.db.models import F
@@ -12,7 +13,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from . import automacao
 from .espelho import ultima_sincronizacao
-from .models import ChaveAutomacaoSAP, VersaoAutomacaoSAP, versao_em_tupla
+from .models import ChaveAutomacaoSAP, InstaladorPonteSAP, VersaoAutomacaoSAP, versao_em_tupla
 from .permissions import e_gestor, pode_escolher_gestores, pode_ver
 from .views import so_auditoria
 
@@ -55,7 +56,7 @@ def tela(request):
         'aba': 'automacao', 'ultima': ultima_sincronizacao(), 'e_gestor': e_gestor(request.user),
         'pode_escolher_gestores': pode_escolher_gestores(request.user),
         'atual': VersaoAutomacaoSAP.atual(), 'versoes': versoes if superadmin else [v for v in versoes if v.publicada],
-        'superadmin': superadmin,
+        'superadmin': superadmin, 'ponte': automacao.ponte_oferecida(), 'ponte_enviada': InstaladorPonteSAP.atual(),
     }
     if superadmin:
         contexto['chave'] = ChaveAutomacaoSAP.get()
@@ -141,6 +142,92 @@ def baixar(request, versao_id):
         raise Http404
     VersaoAutomacaoSAP.objects.filter(pk=versao.pk).update(downloads=F('downloads') + 1)
     return _entregar(versao)
+
+
+# ── O app dentro do portal (Ponte) ────────────────────────────────────────────
+SAL_PONTE = 'auditoria_sap.ponte'
+PONTE_TOKEN_SEGUNDOS = 120
+PONTE_TAMANHO_MAX = 60 * 1024 * 1024
+
+
+@login_required
+@so_auditoria
+@require_GET
+def ponte_sessao(request):
+    """O que a página entrega à ponte do computador: um token curto (quem é) e a chave para parear."""
+    token = signing.dumps({'u': request.user.pk}, salt=SAL_PONTE, compress=True)
+    return JsonResponse({'token': token, 'chave': ChaveAutomacaoSAP.get().chave,
+                         'portal': request.build_absolute_uri('/').rstrip('/')}, headers={'Cache-Control': 'no-store'})
+
+
+@require_GET
+def api_ponte_conferir(request):
+    """A ponte confere o token que recebeu da página: quem é, e se ainda pode usar a Automação SAP."""
+    if not automacao.chave_confere(request, ChaveAutomacaoSAP.get().chave):
+        return JsonResponse({'ok': False, 'erro': 'Chave inválida: abra a página de novo para parear a ponte.'}, status=403)
+    try:
+        dados = signing.loads(request.GET.get('token', ''), salt=SAL_PONTE, max_age=PONTE_TOKEN_SEGUNDOS)
+    except signing.SignatureExpired:
+        return JsonResponse({'ok': False, 'erro': 'A sessão expirou: recarregue a página.'}, status=403)
+    except signing.BadSignature:
+        return JsonResponse({'ok': False, 'erro': 'Sessão inválida.'}, status=403)
+    from django.contrib.auth import get_user_model
+    usuario = get_user_model().objects.filter(pk=dados.get('u'), is_active=True).first()
+    if usuario is None or not pode_ver(usuario):
+        return JsonResponse({'ok': False, 'erro': 'Sem acesso à Automação SAP.'}, status=403)
+    pc = (request.GET.get('pc') or '')[:60]
+    try:
+        from core.models import SystemLog
+        SystemLog.objects.create(user=usuario, action_type='ADMIN_ACTION',
+                                 description=f'Automação SAP aberta no portal — PC {pc or "?"}, ponte {request.GET.get("ponte", "")[:20]}')
+    except Exception:  # noqa: BLE001
+        logger.warning('Log da ponte não gravado', exc_info=True)
+    return JsonResponse({'ok': True, 'usuario': usuario.get_full_name() or usuario.email})
+
+
+@login_required
+@require_POST
+def ponte_enviar(request):
+    if (barra := _so_superadmin(request)) is not None:
+        return barra
+    arquivo = request.FILES.get('arquivo')
+    if not arquivo or not arquivo.name.lower().endswith('.exe') or arquivo.size > PONTE_TAMANHO_MAX:
+        messages.error(request, 'Envie o PonteAutomacaoSAP.exe gerado pelo construtor (até 60 MB).')
+        return redirect('auditoria_sap:automacao')
+    cabeca = arquivo.read(2)
+    arquivo.seek(0)
+    if cabeca != b'MZ':
+        messages.error(request, 'Isso não é um executável do Windows.')
+        return redirect('auditoria_sap:automacao')
+    versao = (request.POST.get('versao') or '').strip().lstrip('vV') or automacao.versao_do_nome(arquivo.name) or '1.0.0'
+    import hashlib
+    resumo = hashlib.sha256()
+    for pedaco in arquivo.chunks():
+        resumo.update(pedaco)
+    arquivo.seek(0)
+    InstaladorPonteSAP.objects.create(versao=versao[:20], arquivo=arquivo, sha256=resumo.hexdigest(), tamanho=arquivo.size,
+                                      enviado_por=request.user)
+    _log(request, f'Automação SAP: instalador da ponte {versao} enviado')
+    messages.success(request, f'Instalador da ponte {versao} publicado: é ele que o portal oferece a quem ainda não tem a ponte.')
+    return redirect('auditoria_sap:automacao')
+
+
+@login_required
+@so_auditoria
+def ponte_baixar(request):
+    oferta = automacao.ponte_oferecida()
+    if oferta is None:
+        raise Http404
+    nome = f'PonteAutomacaoSAP_v{oferta["versao"]}.exe'
+    if oferta['origem'] == 'imagem':
+        _log(request, f'Automação SAP: ponte {oferta["versao"]} baixada (instalador da imagem)')
+        return FileResponse(open(oferta['caminho'], 'rb'), as_attachment=True, filename=nome)
+    item = oferta['item']
+    InstaladorPonteSAP.objects.filter(pk=item.pk).update(downloads=F('downloads') + 1)
+    if automacao.em_disco():
+        return FileResponse(item.arquivo.open('rb'), as_attachment=True, filename=nome)
+    from cameras.servicos import link_do_instalador
+    return redirect(link_do_instalador(item.arquivo.name, nome))
 
 
 # ── API do app (sem sessão; vale a chave) ──────────────────────────────────────

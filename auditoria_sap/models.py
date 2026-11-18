@@ -498,6 +498,34 @@ class VersaoAutomacaoSAP(models.Model):
         return max(publicadas, key=lambda v: v.tupla, default=None)
 
 
+def _caminho_ponte(instancia, nome):
+    return f'automacao_sap/ponte/PonteAutomacaoSAP_v{instancia.versao}.exe'
+
+
+class InstaladorPonteSAP(models.Model):
+    """O instalador da Ponte (o programinha que mostra o app dentro do portal). Vale o mais novo enviado."""
+    versao = models.CharField('Versão', max_length=20)
+    arquivo = models.FileField(upload_to=_caminho_ponte, max_length=200)
+    sha256 = models.CharField(max_length=64)
+    tamanho = models.BigIntegerField(default=0)
+    enviado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='+')
+    enviado_em = models.DateTimeField(auto_now_add=True)
+    downloads = models.PositiveIntegerField(default=0, db_default=0)
+
+    class Meta:
+        verbose_name = 'Instalador da Ponte da Automação SAP'
+        verbose_name_plural = 'Instaladores da Ponte da Automação SAP'
+        ordering = ['-enviado_em']
+
+    def __str__(self):
+        return f'Ponte {self.versao}'
+
+    @classmethod
+    def atual(cls):
+        return cls.objects.order_by('-enviado_em').first()
+
+
 class ChaveAutomacaoSAP(models.Model):
     """A chave que o app manda ao perguntar pela versão (uma linha só).
 

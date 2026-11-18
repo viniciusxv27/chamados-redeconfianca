@@ -215,6 +215,81 @@ t('trocar a chave invalida a antiga', anon.get(API + '?atual=1.2.1', HTTP_X_CHAV
 cadm.post(U + 'chave/')
 t('ADMIN não troca a chave', anon.get(API, HTTP_X_CHAVE_AUTOMACAO=ChaveAutomacaoSAP.get().chave).status_code == 200)
 
+print('App dentro do portal (Ponte)')
+from unittest import mock as _mock  # noqa: E402
+
+from django.core import signing  # noqa: E402
+
+from auditoria_sap.models import InstaladorPonteSAP  # noqa: E402
+from core.models import SystemLog  # noqa: E402
+
+h = cadm.get(U).content.decode()
+t('a tela traz a janela do app no portal', 'id="pnApp"' in h and 'auditoria_sap/ponte.js' in h
+  and 'data-sessao="/sap/automacao/ponte/sessao/"' in h and 'automacao_logo_claro.png' in h)
+t('sem instalador da ponte publicado, não oferece download', 'data-baixar-ponte=""' in h)
+t('o texto não diz mais que o app não roda pelo navegador', 'não roda pelo navegador' not in h and 'Aqui no portal' in h)
+SESSAO = '/sap/automacao/ponte/sessao/'
+r = cadm.get(SESSAO)
+j = r.json()
+t('a página pega o token da sessão e a chave para parear a ponte', r.status_code == 200 and j['token']
+  and j['chave'] == ChaveAutomacaoSAP.get().chave and r['Cache-Control'] == 'no-store' and j['portal'] == 'http://testserver')
+t('quem não vê a Visão SAP não pega sessão', ccomum.get(SESSAO).status_code == 302 and anon.get(SESSAO).status_code == 302)
+CONF = '/sap/automacao/api/ponte/conferir/'
+
+
+def conferir(token, chave_=None):
+    return anon.get(CONF, {'token': token, 'pc': 'LOJA-01', 'ponte': '1.0.0'},
+                    HTTP_X_CHAVE_AUTOMACAO=ChaveAutomacaoSAP.get().chave if chave_ is None else chave_)
+
+
+r = conferir(j['token'])
+t('a ponte confere o token: quem é', r.status_code == 200 and r.json() == {'ok': True, 'usuario': adm.get_full_name()}, r.content)
+t('fica registrado quem abriu e em qual PC', SystemLog.objects.filter(user=adm, description__contains='PC LOJA-01').exists())
+t('chave errada: recusa', conferir(j['token'], 'errada').status_code == 403)
+t('token adulterado: recusa', conferir(j['token'] + 'x').status_code == 403)
+with _mock.patch('time.time', return_value=__import__('time').time() - 600):
+    velho = signing.dumps({'u': adm.pk}, salt='auditoria_sap.ponte', compress=True)
+r = conferir(velho)
+t('token velho (mais de 2 min): pede para recarregar', r.status_code == 403 and 'recarregue' in r.json()['erro'])
+t('quem não pode ver a Visão SAP não usa, nem com token', conferir(signing.dumps({'u': comum.pk}, salt='auditoria_sap.ponte')).status_code == 403)
+inativo = novo('inativo', hierarchy='ADMIN', is_active=False)
+t('nem quem foi desativado', conferir(signing.dumps({'u': inativo.pk}, salt='auditoria_sap.ponte')).status_code == 403)
+ENVIAR = '/sap/automacao/ponte/enviar/'
+exe = SimpleUploadedFile('PonteAutomacaoSAP_v1.0.0.exe', b'MZ' + b'\0' * 2000, content_type='application/octet-stream')
+cadm.post(ENVIAR, {'arquivo': exe})
+t('só o SUPERADMIN publica a ponte', not InstaladorPonteSAP.objects.exists())
+csa.post(ENVIAR, {'arquivo': SimpleUploadedFile('ponte.zip', b'PK', content_type='application/zip')})
+csa.post(ENVIAR, {'arquivo': SimpleUploadedFile('ponte.exe', b'XX nao e exe', content_type='application/octet-stream')})
+t('só .exe de verdade (cabeçalho MZ)', not InstaladorPonteSAP.objects.exists())
+csa.post(ENVIAR, {'arquivo': SimpleUploadedFile('PonteAutomacaoSAP_v1.0.0.exe', b'MZ' + b'\0' * 2000)})
+inst = InstaladorPonteSAP.atual()
+t('a ponte é publicada com versão e sha256', inst and inst.versao == '1.0.0' and len(inst.sha256) == 64 and inst.tamanho == 2002)
+h = cadm.get(U).content.decode()
+t('a janela passa a oferecer o download da ponte', 'data-baixar-ponte="/sap/automacao/ponte/baixar/"' in h)
+r = cadm.get('/sap/automacao/ponte/baixar/')
+t('baixar a ponte entrega o .exe e conta', r.status_code == 200 and b''.join(r.streaming_content).startswith(b'MZ')
+  and 'PonteAutomacaoSAP_v1.0.0.exe' in r['Content-Disposition'] and InstaladorPonteSAP.atual().downloads == 1)
+t('quem não vê a Visão SAP não baixa a ponte', ccomum.get('/sap/automacao/ponte/baixar/').status_code == 302)
+embutido = PASTA / 'PonteAutomacaoSAP.exe'
+embutido.write_bytes(b'MZ da imagem')
+with _mock.patch.object(automacao, 'ponte_embutida', return_value=('1.0.0', embutido)):
+    r = cadm.get('/sap/automacao/ponte/baixar/')
+    t('a ponte gerada na construção da imagem vale sobre a enviada de mesma versão', r.status_code == 200
+      and b''.join(r.streaming_content) == b'MZ da imagem' and InstaladorPonteSAP.atual().downloads == 1)
+    t('a tela diz de onde veio', 'gerada na construção do portal' in csa.get(U).content.decode())
+    csa.post(ENVIAR, {'arquivo': SimpleUploadedFile('PonteAutomacaoSAP_v1.1.0.exe', b'MZ enviada nova')})
+    r = cadm.get('/sap/automacao/ponte/baixar/')
+    t('enviada de versão maior passa na frente da imagem', b''.join(r.streaming_content) == b'MZ enviada nova'
+      and 'v1.1.0' in r['Content-Disposition'])
+InstaladorPonteSAP.objects.all().delete()
+with _mock.patch.object(automacao, 'ponte_embutida', return_value=('1.0.0', embutido)):
+    h = cadm.get(U).content.decode()
+    t('sem nada enviado, a da imagem já é oferecida às lojas', 'data-baixar-ponte="/sap/automacao/ponte/baixar/"' in h)
+with _mock.patch.object(automacao, 'ponte_embutida', return_value=None):
+    t('sem imagem e sem envio, não oferece', 'data-baixar-ponte=""' in cadm.get(U).content.decode()
+      and cadm.get('/sap/automacao/ponte/baixar/').status_code == 404)
+t('lê a versão da ponte do próprio código', automacao.ponte_embutida() is None or automacao.ponte_embutida()[0] == '1.0.0')
+
 print('Atualizador do app (lado da loja)')
 chave = ChaveAutomacaoSAP.get().chave
 

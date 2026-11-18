@@ -84,3 +84,33 @@ def chave_confere(request, chave_certa):
     import hmac
     enviada = request.headers.get('X-Chave-Automacao') or request.GET.get('chave') or ''
     return bool(chave_certa) and hmac.compare_digest(enviada.strip(), chave_certa)
+
+
+# ── Instalador da Ponte ───────────────────────────────────────────────────────
+# A imagem do portal já sai com o instalador (o Dockerfile roda ponte_sap/construir_instalador.py).
+# O SUPERADMIN ainda pode enviar um pela tela: vale o de versão maior (empate: o da imagem).
+def ponte_embutida():
+    """(versão, caminho) do instalador gerado no build da imagem, ou None."""
+    import re
+    from pathlib import Path
+    base = Path(settings.BASE_DIR) / 'ponte_sap'
+    exe = base / 'dist' / 'PonteAutomacaoSAP.exe'
+    if not exe.is_file():
+        return None
+    try:
+        achado = re.search(r"^VERSAO = '([\d.]+)'", (base / 'ponte.py').read_text(encoding='utf-8'), re.M)
+    except OSError:
+        achado = None
+    return (achado.group(1) if achado else '0.0.0'), exe
+
+
+def ponte_oferecida():
+    """O instalador que a página oferece: {'versao', 'origem': 'imagem'|'enviada', 'item'|'caminho'} ou None."""
+    from .models import InstaladorPonteSAP, versao_em_tupla
+    enviada = InstaladorPonteSAP.atual()
+    embutida = ponte_embutida()
+    if embutida and (enviada is None or versao_em_tupla(embutida[0]) >= versao_em_tupla(enviada.versao)):
+        return {'versao': embutida[0], 'origem': 'imagem', 'caminho': embutida[1]}
+    if enviada is not None:
+        return {'versao': enviada.versao, 'origem': 'enviada', 'item': enviada}
+    return None

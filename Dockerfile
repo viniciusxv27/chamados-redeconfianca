@@ -43,6 +43,18 @@ RUN if [ "$INSTALAR_NAVEGADOR" = "1" ]; then \
 # Copiar código da aplicação
 COPY . .
 
+# Instalador da Ponte da Automação SAP (o app da loja dentro do portal, em /sap/automacao/):
+# baixa o Python oficial do Windows (conferido por SHA-256) e empacota com o NSIS.
+# Sai em ponte_sap/dist/PonteAutomacaoSAP.exe e o portal oferece esse arquivo às lojas.
+# Se falhar (ex.: build sem internet), a imagem segue sem ele. Para pular: --build-arg CONSTRUIR_PONTE=0
+ARG CONSTRUIR_PONTE=1
+RUN if [ "$CONSTRUIR_PONTE" = "1" ]; then \
+        apt-get update && apt-get install -y --no-install-recommends nsis && rm -rf /var/lib/apt/lists/* \
+        && python ponte_sap/construir_instalador.py --saida /app/ponte_sap/dist/PonteAutomacaoSAP.exe --cache /tmp/ponte-cache \
+        && rm -rf /tmp/ponte-cache \
+        || echo "AVISO: instalador da Ponte não gerado; o portal segue sem ele"; \
+    fi
+
 # Criar diretórios necessários e definir permissões
 RUN mkdir -p staticfiles media logs && \
     chmod +x deploy_new.sh

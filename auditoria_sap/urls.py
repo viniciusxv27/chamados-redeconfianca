@@ -21,5 +21,9 @@ urlpatterns = [
     path('automacao/<int:versao_id>/baixar/', views_automacao.baixar, name='automacao_baixar'),
     path('automacao/chave/', views_automacao.trocar_chave, name='automacao_chave'),
     path('automacao/api/versao/', views_automacao.api_versao, name='automacao_api_versao'),
+    path('automacao/ponte/sessao/', views_automacao.ponte_sessao, name='automacao_ponte_sessao'),
+    path('automacao/ponte/enviar/', views_automacao.ponte_enviar, name='automacao_ponte_enviar'),
+    path('automacao/ponte/baixar/', views_automacao.ponte_baixar, name='automacao_ponte_baixar'),
+    path('automacao/api/ponte/conferir/', views_automacao.api_ponte_conferir, name='automacao_api_ponte_conferir'),
     path('automacao/api/baixar/<str:versao>/', views_automacao.api_baixar, name='automacao_api_baixar'),
 ]
