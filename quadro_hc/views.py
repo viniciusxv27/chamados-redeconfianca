@@ -136,27 +136,7 @@ def vaga_fechar(request, dados, pk):
 
 @_api
 def carteira_salvar(request, dados):
-    pk = dados.get('id')
-    carteira = get_object_or_404(Carteira, pk=pk) if pk else Carteira()
-    nome = str(dados.get('nome') or '').strip()[:120]
-    if not nome:
-        raise ErroQuadro('Dê um nome à carteira.')
-    carteira.nome = nome
-    carteira.coordenador = User.objects.filter(pk=dados.get('coordenador') or 0).first()
-    carteira.coordenador_nome = str(dados.get('coordenador_nome') or '').strip()[:120]
-    try:
-        carteira.ordem = int(dados.get('ordem') or 0)
-    except (TypeError, ValueError):
-        carteira.ordem = 0
-    carteira.save()
-    lojas = dados.get('lojas') or []
-    if not isinstance(lojas, list):
-        lojas = [lojas]
-    ids = [int(x) for x in lojas if str(x).isdigit()]
-    # Uma loja fica em uma carteira só.
-    for outra in Carteira.objects.exclude(pk=carteira.pk).filter(lojas__in=ids).distinct():
-        outra.lojas.remove(*ids)
-    carteira.lojas.set(Sector.objects.filter(id__in=ids))
+    carteira = servicos.salvar_carteira(dados, request.user)
     return JsonResponse({'ok': True, 'msg': f'Carteira {carteira.nome} salva.'})
 
 
@@ -218,3 +198,78 @@ def acessos(request):
         'usuarios': (get_user_model().objects.filter(is_active=True).exclude(pk__in=[a.user_id for a in lista])
                      .select_related('sector').order_by('first_name', 'last_name')),
     })
+
+
+# ---------------------------------------------------------------------------
+# Importar planilha (em lote): entrada → prévia (nada gravado) → aplicar
+# ---------------------------------------------------------------------------
+SESSAO_IMPORTACAO = 'quadro_hc_importacao'
+PREVIA_DURA = 12 * 3600  # segundos que a planilha lida fica guardada para a prévia
+
+
+def _chave_previa(user, token):
+    return f'quadro_hc:importacao:{user.pk}:{token}'
+
+
+@login_required
+def importar(request):
+    """Importa a planilha do quadro. Só quem gerencia.
+
+    O que foi lido (JSON, ~80 KB na planilha real) fica no cache por 12 h; a
+    sessão guarda só o token e as lojas escolhidas — a sessão é gravada a cada
+    pedido e não deve carregar a planilha.
+    """
+    import uuid
+
+    from django.core.cache import cache
+    from django.core.exceptions import PermissionDenied
+
+    from . import importacao
+
+    if not servicos.pode_gerenciar(request.user):
+        raise PermissionDenied('Importar a planilha do Quadro de HC é só para quem gerencia o quadro.')
+    sessao = request.session.get(SESSAO_IMPORTACAO)
+    dados = cache.get(_chave_previa(request.user, sessao.get('token'))) if sessao else None
+    contexto = {'etapa': 'entrada', 'link': ''}
+    if request.method == 'POST':
+        acao = request.POST.get('acao')
+        if acao == 'ler':
+            contexto['link'] = (request.POST.get('link') or '').strip()
+            try:
+                lidos = importacao.ler_entrada(arquivo=request.FILES.get('arquivo'), link=contexto['link'])
+            except ErroQuadro as e:
+                contexto['erro'] = str(e)
+                return render(request, 'quadro_hc/importar.html', contexto, status=400)
+            if sessao:
+                cache.delete(_chave_previa(request.user, sessao.get('token')))
+            token = uuid.uuid4().hex
+            cache.set(_chave_previa(request.user, token), lidos, PREVIA_DURA)
+            request.session[SESSAO_IMPORTACAO] = {'token': token, 'escolhas': {}}
+            return redirect('quadro_hc:importar')
+        if acao == 'descartar':
+            if sessao:
+                cache.delete(_chave_previa(request.user, sessao.get('token')))
+            request.session.pop(SESSAO_IMPORTACAO, None)
+            return redirect('quadro_hc:importar')
+        if not sessao or dados is None or request.POST.get('token') != sessao.get('token'):
+            messages.error(request, 'Esta prévia não vale mais (foi aplicada, trocada ou passou de 12 horas). '
+                                    'Leia a planilha de novo.')
+            return redirect('quadro_hc:importar')
+        escolhas = {k[len('setor_'):]: v for k, v in request.POST.items() if k.startswith('setor_')}
+        sessao['escolhas'] = escolhas
+        request.session.modified = True
+        if acao == 'aplicar':
+            # Sai antes de aplicar: um segundo clique (ou reenvio) não aplica duas vezes.
+            cache.delete(_chave_previa(request.user, sessao['token']))
+            request.session.pop(SESSAO_IMPORTACAO, None)
+            resumo = importacao.aplicar_importacao(dados, escolhas, request.POST.getlist('item'),
+                                                   request.user, ip=_ip(request))
+            return render(request, 'quadro_hc/importar.html', {'etapa': 'resumo', 'resumo': resumo,
+                                                               'origem': dados.get('origem', '')})
+        return redirect('quadro_hc:importar')  # recalcular com as lojas escolhidas
+    if dados is not None and request.GET.get('novo') != '1':
+        previa = importacao.montar_previa(dados, sessao.get('escolhas'))
+        contexto.update(etapa='previa', previa=previa, token=sessao['token'], lido_em=dados.get('lido_em'))
+    elif sessao and dados is None:
+        request.session.pop(SESSAO_IMPORTACAO, None)
+    return render(request, 'quadro_hc/importar.html', contexto)

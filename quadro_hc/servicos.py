@@ -692,3 +692,33 @@ def enviar_lembretes(hoje=None):
             MovimentacaoHC.objects.filter(pk=m.pk).update(lembrete_dia_em=agora)
             dia += 1
     return f'{antes} lembrete(s) de 2 dias e {dia} do dia enviados.'
+
+
+# ---------------------------------------------------------------------------
+# Carteiras (tela "Carteiras" e importação da planilha)
+# ---------------------------------------------------------------------------
+def salvar_carteira(dados, autor=None) -> Carteira:
+    """Cria ou atualiza a carteira (nome, coordenação, ordem, lojas). Uma loja fica em uma carteira só."""
+    from django.shortcuts import get_object_or_404
+
+    pk = dados.get('id')
+    carteira = get_object_or_404(Carteira, pk=pk) if pk else Carteira()
+    nome = str(dados.get('nome') or '').strip()[:120]
+    if not nome:
+        raise ErroQuadro('Dê um nome à carteira.')
+    carteira.nome = nome
+    carteira.coordenador = User.objects.filter(pk=dados.get('coordenador') or 0).first()
+    carteira.coordenador_nome = str(dados.get('coordenador_nome') or '').strip()[:120]
+    try:
+        carteira.ordem = int(dados.get('ordem') or 0)
+    except (TypeError, ValueError):
+        carteira.ordem = 0
+    carteira.save()
+    lojas = dados.get('lojas') or []
+    if not isinstance(lojas, list):
+        lojas = [lojas]
+    ids = [int(x) for x in lojas if str(x).isdigit()]
+    for outra in Carteira.objects.exclude(pk=carteira.pk).filter(lojas__in=ids).distinct():
+        outra.lojas.remove(*ids)
+    carteira.lojas.set(Sector.objects.filter(id__in=ids))
+    return carteira

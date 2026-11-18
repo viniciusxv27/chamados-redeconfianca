@@ -1,0 +1,372 @@
+{% extends 'base.html' %}
+{% block title %}Importar planilha · Quadro de HC{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* Mesmo visual do quadro.html (IDV: laranja #FF6B35, grafite #2C3E50, Montserrat). */
+  .hci { --pri: #FF6B35; --pri-esc: #E85A26; --pri-suave: rgba(255,107,53,.12); --navy: #2C3E50; --navy-2: #1F2D3B;
+         --sup: #FFFFFF; --sup-2: #F8FAFC; --sup-3: #F1F5F9; --txt: #1F2937; --txt-2: #4B5563; --txt-3: #9CA3AF;
+         --borda: #E5E7EB; --borda-suave: #F1F5F9; --sombra: 0 1px 2px rgba(16,24,40,.05), 0 4px 14px rgba(16,24,40,.06);
+         --sombra-lg: 0 18px 40px rgba(16,24,40,.16); color: var(--txt); font-family: Montserrat, ui-sans-serif, system-ui; }
+  html.dark .hci { --sup: var(--tema-superficie, #1b2130); --sup-2: var(--tema-superficie-2, #232a3b); --sup-3: var(--tema-superficie-3, #2b3346);
+                   --txt: var(--tema-texto, #e7eaf0); --txt-2: var(--tema-texto-2, #b6bdcc); --txt-3: var(--tema-texto-3, #8b93a5);
+                   --borda: var(--tema-borda, #313a4f); --borda-suave: var(--tema-borda-suave, #262e40); --pri-suave: rgba(255,107,53,.18);
+                   --sombra: 0 1px 2px rgba(0,0,0,.3); --sombra-lg: 0 18px 40px rgba(0,0,0,.45); }
+  .hci .card { background: var(--sup); border: 1px solid var(--borda); border-radius: 1.1rem; box-shadow: var(--sombra); }
+  .hci .t2 { color: var(--txt-2); } .hci .t3 { color: var(--txt-3); }
+  .hci .tabular { font-variant-numeric: tabular-nums; }
+  .hci .heroi { position: relative; overflow: hidden; border-radius: 1.4rem; color: #fff;
+                background: radial-gradient(700px 240px at 100% 0%, rgba(255,107,53,.35), transparent 60%),
+                            linear-gradient(135deg, var(--navy) 0%, var(--navy-2) 100%); box-shadow: var(--sombra-lg); }
+  .hci .kpi { display: block; border-radius: 1rem; padding: .75rem .9rem; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.10); }
+  .hci .kpi b { display: block; font-size: 1.45rem; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .hci .kpi span { font-size: .7rem; color: rgba(255,255,255,.75); font-weight: 600; }
+  .hci .kpi.destaque b { color: #FFB089; }
+  .hci .passos { display: flex; gap: .35rem; margin-top: 1rem; max-width: 30rem; }
+  .hci .passo { flex: 1; font-size: 10.5px; font-weight: 700; color: rgba(255,255,255,.55); }
+  .hci .passo::before { content: ''; display: block; height: .25rem; border-radius: 9999px; background: rgba(255,255,255,.2); margin-bottom: .35rem; }
+  .hci .passo.feito { color: rgba(255,255,255,.95); } .hci .passo.feito::before { background: var(--pri); }
+  .hci .bt { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; padding: .6rem 1rem; border-radius: .8rem; font-size: .85rem; font-weight: 700; transition: all .15s; }
+  .hci .bt-pri { background: var(--pri); color: #fff; box-shadow: 0 6px 16px rgba(255,107,53,.35); }
+  .hci .bt-pri:hover { background: var(--pri-esc); }
+  .hci .bt-vidro { background: rgba(255,255,255,.1); color: #fff; border: 1px solid rgba(255,255,255,.2); }
+  .hci .bt-vidro:hover { background: rgba(255,255,255,.18); }
+  .hci .bt-claro { background: var(--sup); color: var(--txt); border: 1px solid var(--borda); }
+  .hci .bt-claro:hover { border-color: var(--pri); color: var(--pri-esc); }
+  .hci .bt:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+  .hci .campo { width: 100%; border: 1px solid var(--borda); background: var(--sup); color: var(--txt); border-radius: .7rem; padding: .55rem .8rem; font-size: .85rem; }
+  .hci .campo:focus { outline: none; border-color: var(--pri); box-shadow: 0 0 0 3px var(--pri-suave); }
+  .hci .tag { display: inline-flex; align-items: center; gap: .25rem; padding: .05rem .5rem; border-radius: 9999px; font-size: 10.5px; font-weight: 700; white-space: normal; }
+  .hci .tag-ok { background: #DCFCE7; color: #15803D; } .hci .tag-alerta { background: #FEF3C7; color: #B45309; }
+  .hci .tag-erro { background: #FEE2E2; color: #B91C1C; } .hci .tag-info { background: var(--pri-suave); color: var(--pri-esc); }
+  .hci .tag-cinza { background: var(--sup-3); color: var(--txt-2); }
+  html.dark .hci .tag-ok { background: rgba(34,197,94,.15); color: #86EFAC; } html.dark .hci .tag-alerta { background: rgba(245,158,11,.18); color: #FCD34D; }
+  html.dark .hci .tag-erro { background: rgba(239,68,68,.18); color: #FCA5A5; }
+  .hci .barra { position: sticky; top: .5rem; z-index: 25; background: color-mix(in srgb, var(--sup) 92%, transparent);
+                backdrop-filter: blur(10px); border: 1px solid var(--borda); border-radius: 1rem; box-shadow: var(--sombra); }
+  .hci .pilula { display: inline-flex; align-items: center; gap: .4rem; padding: .35rem .75rem; border-radius: 9999px; font-size: .78rem; font-weight: 700;
+                 border: 1px solid var(--borda); background: var(--sup); color: var(--txt-2); cursor: pointer; white-space: nowrap; }
+  .hci .pilula:has(input:checked) { background: var(--pri-suave); border-color: var(--pri); color: var(--pri-esc); }
+  .hci input[type=checkbox] { width: 1rem; height: 1rem; accent-color: var(--pri); flex: 0 0 auto; }
+  .hci .opcao { display: block; border: 1.5px dashed var(--borda); border-radius: 1rem; padding: 1rem; background: var(--sup-2); }
+  .hci .opcao:focus-within { border-color: var(--pri); }
+  .hci .bloco-cab { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem .9rem; padding: .9rem 1rem; border-bottom: 1px solid var(--borda-suave); }
+  .hci .pessoa { display: grid; grid-template-columns: minmax(0, 15rem) minmax(0, 1fr); gap: .4rem 1rem; padding: .75rem 1rem; border-bottom: 1px solid var(--borda-suave); }
+  .hci .pessoa:last-child { border-bottom: 0; }
+  .hci .item { display: flex; align-items: flex-start; gap: .5rem; padding: .3rem .5rem; border-radius: .6rem; font-size: .8rem; cursor: pointer; }
+  .hci .item:hover { background: var(--sup-2); }
+  .hci .item s { color: var(--txt-3); }
+  .hci .item .seta { color: var(--pri); font-weight: 800; }
+  .hci .item.mov { background: color-mix(in srgb, var(--pri) 7%, var(--sup)); border: 1px solid color-mix(in srgb, var(--pri) 30%, var(--borda)); }
+  .hci .avisos { font-size: .74rem; color: #B45309; } html.dark .hci .avisos { color: #FCD34D; }
+  .hci .pend { font-size: .76rem; color: #B91C1C; } html.dark .hci .pend { color: #FCA5A5; }
+  .hci details > summary { list-style: none; cursor: pointer; }
+  .hci details > summary::-webkit-details-marker { display: none; }
+  .hci details[open] .gira { transform: rotate(90deg); }
+  .hci .gira { transition: transform .2s; }
+  .hci .lista-mini li { padding: .35rem 0; border-bottom: 1px dashed var(--borda-suave); font-size: .8rem; }
+  .hci .lista-mini li:last-child { border-bottom: 0; }
+  .hci :focus-visible { outline: 3px solid rgba(255,107,53,.45); outline-offset: 2px; }
+  @media (max-width: 767px) {
+    .hci .pessoa { grid-template-columns: 1fr; }
+    .hci .barra { position: static; }
+    .hci .bloco-cab select { width: 100%; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="hci max-w-[1400px] mx-auto px-3 sm:px-5 py-5">
+
+  <section class="heroi p-5 sm:p-7 mb-5">
+    <div class="relative z-10 flex items-start justify-between gap-4 flex-wrap">
+      <div class="min-w-0">
+        <p class="text-[11px] font-bold uppercase tracking-[.18em] text-orange-300">Quadro de HC</p>
+        <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight mt-1"><i class="fas fa-file-import mr-2 text-orange-400"></i>Importar planilha</h1>
+        <p class="text-sm text-white/70 mt-1 max-w-2xl">Leia a planilha do quadro, confira loja a loja o que muda no cadastro e aplique só o que marcar. Nada é gravado antes de "Aplicar".</p>
+        <div class="passos" aria-label="Etapas">
+          <span class="passo feito">1 · Planilha</span>
+          <span class="passo {% if etapa != 'entrada' %}feito{% endif %}">2 · Prévia</span>
+          <span class="passo {% if etapa == 'resumo' %}feito{% endif %}">3 · Aplicado</span>
+        </div>
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        <a href="{% url 'quadro_hc:quadro' %}" class="bt bt-vidro"><i class="fas fa-arrow-left"></i>Voltar ao quadro</a>
+        {% if etapa != 'entrada' %}<a href="{% url 'quadro_hc:importar' %}?novo=1" class="bt bt-vidro"><i class="fas fa-rotate"></i>Ler outra planilha</a>{% endif %}
+      </div>
+    </div>
+    {% if etapa == 'previa' %}
+    <div class="relative z-10 grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2.5 mt-6">
+      <div class="kpi"><b>{{ previa.totais.blocos }}</b><span>Blocos lidos</span></div>
+      <div class="kpi"><b>{{ previa.totais.casadas }}<small class="text-sm font-semibold text-white/60">/{{ previa.totais.pessoas }}</small></b><span>Pessoas casadas</span></div>
+      <div class="kpi"><b>{{ previa.totais.campos }}</b><span>Campos do cadastro</span></div>
+      <div class="kpi"><b>{{ previa.totais.observacoes }}</b><span>Observações</span></div>
+      <div class="kpi"><b>{{ previa.totais.movimentacoes }}</b><span>Movimentações</span></div>
+      <div class="kpi"><b>{{ previa.totais.vagas }}</b><span>Vagas a abrir</span></div>
+      <div class="kpi"><b>{{ previa.totais.carteiras }}</b><span>Carteiras</span></div>
+      <div class="kpi {% if previa.totais.pendencias %}destaque{% endif %}"><b>{{ previa.totais.pendencias }}</b><span>Pendências</span></div>
+    </div>
+    {% endif %}
+  </section>
+
+  {% if messages %}{% for message in messages %}
+  <div role="alert" class="mb-3 p-3 rounded-xl text-sm {% if message.tags == 'error' %}bg-red-50 text-red-700{% else %}bg-green-50 text-green-800{% endif %}">{{ message }}</div>
+  {% endfor %}{% endif %}
+
+  {% if etapa == 'entrada' %}
+  {# ===================== 1 · ENTRADA ===================== #}
+  {% if erro %}<div role="alert" class="mb-4 p-3.5 rounded-2xl bg-red-50 border border-red-200 text-red-800 text-sm"><i class="fas fa-circle-exclamation mr-1"></i>{{ erro }}</div>{% endif %}
+  <form method="post" enctype="multipart/form-data" class="card p-4 sm:p-6 space-y-4" data-ler>
+    {% csrf_token %}
+    <input type="hidden" name="acao" value="ler">
+    <div class="grid md:grid-cols-2 gap-4">
+      <label class="opcao">
+        <span class="flex items-center gap-2 font-bold text-sm"><i class="fas fa-file-excel text-green-600"></i>Enviar o arquivo</span>
+        <span class="block text-xs t3 mt-1 mb-3">A aba do quadro em .xlsx (a que tiver os cabeçalhos "Cargo / Nome") ou .csv. Até 5 MB.</span>
+        <input type="file" name="arquivo" accept=".xlsx,.csv" class="campo">
+      </label>
+      <label class="opcao">
+        <span class="flex items-center gap-2 font-bold text-sm"><i class="fas fa-link text-sky-600"></i>Ou colar o link do Google Sheets</span>
+        <span class="block text-xs t3 mt-1 mb-3">O portal baixa só a aba do link (o <code>gid</code>), sem alterar nada. A planilha precisa estar aberta para "qualquer pessoa com o link".</span>
+        <input type="url" name="link" value="{{ link }}" placeholder="https://docs.google.com/spreadsheets/d/…/edit?gid=…" class="campo" inputmode="url">
+      </label>
+    </div>
+    <details class="text-sm t2">
+      <summary class="font-semibold"><i class="fas fa-chevron-right gira text-xs mr-1"></i>Como o portal lê a planilha</summary>
+      <ul class="list-disc pl-6 mt-2 space-y-1 text-xs">
+        <li>Cada bloco começa com o nome da loja sozinho numa linha ("NORTE SUL - ES") e o cabeçalho Cargo, Nome, Cidade onde reside, Login, Nascimento, Contratação, OBS, Número do colaborador.</li>
+        <li>"SERRÃO - COORDENAÇÃO - JOÃO" vale para as lojas de baixo até a próxima coordenação (carteira).</li>
+        <li>"VAGA EM ABERTO" é vaga (o que estiver entre parênteses vira observação). O bloco ESCRITÓRIO (Cargo, Nome, Setor) vira um bloco por setor.</li>
+        <li>A pessoa é achada pelo login e, sem login, pelo nome completo (único entre os ativos). Campo vazio na planilha nunca apaga o cadastro.</li>
+        <li>Loja e cargo diferentes viram movimentação do quadro (com histórico); o resto grava no cadastro com o histórico de alterações.</li>
+      </ul>
+    </details>
+    <div class="flex justify-end"><button type="submit" class="bt bt-pri"><i class="fas fa-magnifying-glass-chart"></i>Ler planilha e ver a prévia</button></div>
+  </form>
+
+  {% elif etapa == 'previa' %}
+  {# ===================== 2 · PRÉVIA ===================== #}
+  <form method="post" id="fPrevia" data-previa>
+    {% csrf_token %}
+    <input type="hidden" name="token" value="{{ token }}">
+    <div class="barra p-2.5 mb-4 flex flex-wrap items-center gap-2">
+      <span class="text-xs font-bold t3 mr-1">Aplicar:</span>
+      <label class="pilula"><input type="checkbox" data-marcar-grupo="campo" checked>Cadastro</label>
+      <label class="pilula"><input type="checkbox" data-marcar-grupo="obs" checked>Observações</label>
+      <label class="pilula"><input type="checkbox" data-marcar-grupo="mov">Movimentações</label>
+      <label class="pilula"><input type="checkbox" data-marcar-grupo="vaga" checked>Vagas</label>
+      <label class="pilula"><input type="checkbox" data-marcar-grupo="carteira" checked>Carteiras</label>
+      <span class="flex-1"></span>
+      <button type="submit" name="acao" value="descartar" class="bt bt-claro" formnovalidate><i class="fas fa-xmark"></i><span class="hidden sm:inline">Descartar</span></button>
+      <button type="submit" name="acao" value="recalcular" class="bt bt-claro" data-recalcular><i class="fas fa-arrows-rotate"></i><span class="hidden sm:inline">Recalcular</span></button>
+      <button type="submit" name="acao" value="aplicar" class="bt bt-pri" data-aplicar><i class="fas fa-check"></i>Aplicar <span data-contagem class="tabular">0</span> marcado(s)</button>
+    </div>
+    <p class="text-xs t3 mb-4">Lido de <b class="t2 break-all">{{ previa.origem }}</b>. A prévia é refeita com o cadastro de agora a cada vez que a página abre; trocar a loja de um bloco recalcula. Movimentação de setor do escritório vem desmarcada (o setor principal mexe nos acessos).</p>
+
+    {% if previa.pendencias %}
+    <details class="card mb-4" open>
+      <summary class="p-4 flex items-center gap-2"><i class="fas fa-chevron-right gira text-xs t3"></i><i class="fas fa-triangle-exclamation text-amber-500"></i><b>Pendências</b><span class="tag tag-alerta">{{ previa.pendencias|length }}</span><span class="text-xs t3">não entram na importação: resolva no cadastro e leia de novo</span></summary>
+      <ul class="lista-mini px-4 pb-4">
+        {% for p in previa.pendencias %}<li><span class="tag tag-cinza">{{ p.onde }} · linha {{ p.n }}</span> <b>{{ p.nome }}</b> — <span class="pend">{{ p.motivo }}</span></li>{% endfor %}
+      </ul>
+    </details>
+    {% endif %}
+
+    {% if previa.carteiras %}
+    <section class="card mb-4">
+      <div class="p-4 flex items-center gap-2 border-b" style="border-color:var(--borda-suave)"><i class="fas fa-layer-group" style="color:var(--pri)"></i><b>Carteiras e coordenações</b></div>
+      <ul class="px-4 py-2 lista-mini">
+        {% for c in previa.carteiras %}
+        <li class="flex items-start gap-2">
+          {% if c.chave %}<input type="checkbox" name="item" value="{{ c.chave }}" data-grupo="carteira" checked aria-label="Aplicar carteira {{ c.nome }}" class="mt-0.5">{% else %}<i class="fas fa-check text-green-500 mt-0.5"></i>{% endif %}
+          <div class="min-w-0">
+            <b>{{ c.nome }}</b>{% if not c.existente %} <span class="tag tag-info">nova</span>{% endif %}
+            {% if c.mudar_coord %} · coordenação <s class="t3">{{ c.coord_antes|default:"—" }}</s> <span style="color:var(--pri)">→</span> {{ c.coord_depois }}{% if c.coord_user %} <span class="tag tag-ok">usuário ligado</span>{% else %} <span class="tag tag-cinza">só o nome</span>{% endif %}
+            {% else %} · <span class="t2">{{ c.coord_antes|default:c.coord_depois }}</span>{% endif %}
+            {% if c.entrar %}<div class="text-xs mt-1">Entram: {% for e in c.entrar %}<span class="tag tag-info">{{ e.setor.name }}{% if e.de %} (sai da {{ e.de }}){% endif %}</span> {% endfor %}</div>{% endif %}
+            {% if c.fora %}<div class="text-xs mt-1 avisos">Na carteira e fora da planilha (continuam): {% for s in c.fora %}{{ s.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endif %}
+            {% if not c.chave %}<span class="text-xs t3"> — já está assim</span>{% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    {% for b in previa.blocos %}
+    <article class="card mb-4 overflow-hidden" data-bloco-card="{{ b.i }}">
+      <div class="bloco-cab">
+        {% if b.itens %}<input type="checkbox" data-marcar-bloco="{{ b.i }}" aria-label="Marcar tudo do bloco {{ b.titulo }}">{% endif %}
+        <div class="min-w-0">
+          <h2 class="font-extrabold text-base leading-tight">{{ b.titulo }}</h2>
+          <p class="text-xs t3 mt-0.5">{{ b.pessoas|length }} pessoa(s){% if b.vagas %} · {{ b.vagas|length }} vaga(s){% endif %}{% if b.carteira %} · carteira {{ b.carteira }}{% endif %}</p>
+        </div>
+        <span class="flex-1"></span>
+        <div class="flex flex-wrap items-center gap-2 min-w-0">
+          {% if b.setor %}{% if b.escolha %}<span class="tag tag-info">escolhida à mão</span>{% else %}<span class="tag tag-ok">casou: {{ b.setor.name }}</span>{% endif %}
+          {% else %}<span class="tag tag-alerta">sem loja: só o cadastro</span>{% endif %}
+          <select name="setor_{{ b.i }}" class="campo" style="width:auto;max-width:100%;min-width:12rem" aria-label="Loja ou setor do bloco {{ b.titulo }}" data-setor-bloco>
+            <option value="" {% if not b.escolha %}selected{% endif %}>Automático{% if b.auto %}: {{ b.auto.name }}{% else %} (não casou){% endif %}</option>
+            <option value="0" {% if b.escolha == '0' %}selected{% endif %}>— Sem loja (só o cadastro) —</option>
+            {% if b.candidatos %}<optgroup label="Parecidos">{% for s in b.candidatos %}<option value="{{ s.id }}" {% if b.escolha == s.id|stringformat:'d' %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</optgroup>{% endif %}
+            <optgroup label="Todas">{% for s in previa.setores %}<option value="{{ s.id }}" {% if b.escolha == s.id|stringformat:'d' %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</optgroup>
+          </select>
+        </div>
+      </div>
+
+      {% for p in b.com_algo %}
+      <div class="pessoa">
+        <div class="min-w-0">
+          <p class="font-bold text-sm leading-tight">{{ p.nome }}</p>
+          <p class="text-xs t3">{{ p.cargo|default:"sem cargo na planilha" }} · linha {{ p.n }}</p>
+          {% if p.user %}<p class="text-xs mt-1"><i class="fas fa-link t3"></i> {{ p.cadastro }} <span class="tag tag-cinza">pelo {{ p.como }}</span></p>
+          <p class="text-[11px] t3">{{ p.cargo_cadastro|default:"sem cargo" }} · {{ p.loja_cadastro }}</p>
+          {% else %}<p class="pend mt-1"><i class="fas fa-user-slash"></i> {{ p.pendencia }}</p>{% endif %}
+        </div>
+        <div class="min-w-0 space-y-1">
+          {% for c in p.campos %}
+          <label class="item"><input type="checkbox" name="item" value="{{ c.chave }}" data-grupo="{% if c.campo == 'observacao' %}obs{% else %}campo{% endif %}" data-bloco="{{ b.i }}" checked>
+            <span class="min-w-0"><b>{{ c.rotulo }}</b> <s>{{ c.antes }}</s> <span class="seta">→</span> {{ c.depois }}</span></label>
+          {% endfor %}
+          {% if p.mov %}
+          <label class="item mov"><input type="checkbox" name="item" value="{{ p.mov.chave }}" data-grupo="mov" data-bloco="{{ b.i }}" {% if p.mov.marcado %}checked{% endif %}>
+            <span class="min-w-0"><i class="fas fa-people-arrows" style="color:var(--pri)"></i> <b>Movimentação hoje</b>: {{ p.mov.texto }}</span></label>
+          {% endif %}
+          {% if p.avisos %}<ul class="avisos space-y-0.5 pl-1">{% for a in p.avisos %}<li><i class="fas fa-circle-info"></i> {{ a }}</li>{% endfor %}</ul>{% endif %}
+          {% if p.user and not p.campos and not p.mov %}<span class="tag tag-cinza">nada a mudar</span>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+
+      {% if b.vagas %}
+      <div class="px-4 py-3 border-t" style="border-color:var(--borda-suave)">
+        <p class="text-xs font-bold t3 uppercase tracking-wide mb-1"><i class="fas fa-user-clock text-amber-500"></i> Vagas em aberto na planilha</p>
+        {% for v in b.vagas %}
+        {% if v.chave %}
+        <label class="item"><input type="checkbox" name="item" value="{{ v.chave }}" data-grupo="vaga" data-bloco="{{ b.i }}" checked>
+          <span>Abrir vaga de <b>{{ v.cargo }}</b>{% if v.observacao %} <span class="t3">({{ v.observacao }})</span>{% endif %} <span class="t3">· linha {{ v.n }}</span></span></label>
+        {% else %}
+        <div class="item cursor-default"><i class="fas {% if 'aberta' in v.situacao %}fa-check text-green-500{% else %}fa-ban text-red-500{% endif %} mt-0.5"></i>
+          <span>{{ v.cargo|default:v.cargo_planilha|default:"(sem cargo)" }}{% if v.observacao %} <span class="t3">({{ v.observacao }})</span>{% endif %} — <span class="t3">{{ v.situacao }}</span></span></div>
+        {% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if b.ausentes %}
+      <div class="px-4 py-3 border-t avisos" style="border-color:var(--borda-suave)">
+        <p class="font-bold"><i class="fas fa-user-question"></i> No quadro desta loja e fora da planilha ({{ b.ausentes|length }}) — só aviso, nada muda:</p>
+        <p class="mt-1">{% for a in b.ausentes %}{{ a.nome }}{% if a.cargo %} <span class="t3">({{ a.cargo }}{% if a.login %} · {{ a.login }}{% endif %})</span>{% endif %}{% if not forloop.last %}; {% endif %}{% endfor %}</p>
+      </div>
+      {% endif %}
+
+      {% if b.sem_mudanca %}
+      <details class="border-t" style="border-color:var(--borda-suave)">
+        <summary class="px-4 py-2.5 text-xs t3 font-semibold"><i class="fas fa-chevron-right gira mr-1"></i>{{ b.sem_mudanca|length }} pessoa(s) já iguais ao cadastro</summary>
+        <p class="px-4 pb-3 text-xs t2">{% for p in b.sem_mudanca %}{{ p.nome }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>
+      </details>
+      {% endif %}
+    </article>
+    {% endfor %}
+
+    <div class="flex justify-end gap-2 flex-wrap mt-2">
+      <button type="submit" name="acao" value="aplicar" class="bt bt-pri" data-aplicar><i class="fas fa-check"></i>Aplicar <span data-contagem class="tabular">0</span> marcado(s)</button>
+    </div>
+  </form>
+
+  {% else %}
+  {# ===================== 3 · RESUMO ===================== #}
+  <section class="card p-4 sm:p-6 mb-4">
+    <h2 class="font-extrabold text-lg"><i class="fas fa-circle-check text-green-500 mr-1"></i>Importação aplicada</h2>
+    <p class="text-xs t3 mt-1 break-all">De {{ origem }}</p>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 mt-4">
+      <div class="card p-3"><b class="text-xl tabular">{{ resumo.pessoas }}</b><p class="text-xs t3">Pessoas alteradas</p></div>
+      <div class="card p-3"><b class="text-xl tabular">{{ resumo.campos }}</b><p class="text-xs t3">Campos do cadastro</p></div>
+      <div class="card p-3"><b class="text-xl tabular">{{ resumo.observacoes }}</b><p class="text-xs t3">Observações</p></div>
+      <div class="card p-3"><b class="text-xl tabular">{{ resumo.movimentacoes }}</b><p class="text-xs t3">Movimentações</p></div>
+      <div class="card p-3"><b class="text-xl tabular">{{ resumo.vagas }}</b><p class="text-xs t3">Vagas abertas</p></div>
+      <div class="card p-3"><b class="text-xl tabular">{{ resumo.carteiras }}</b><p class="text-xs t3">Carteiras</p></div>
+    </div>
+    {% if resumo.nao_marcados %}<p class="text-xs t3 mt-3">{{ resumo.nao_marcados }} item(ns) da prévia ficaram desmarcados e não foram aplicados.</p>{% endif %}
+  </section>
+  {% if resumo.erros %}
+  <section class="card p-4 mb-4"><b class="pend"><i class="fas fa-circle-exclamation"></i> Não aplicado</b>
+    <ul class="lista-mini mt-2">{% for e in resumo.erros %}<li class="pend">{{ e }}</li>{% endfor %}</ul></section>
+  {% endif %}
+  {% if resumo.linhas %}
+  <details class="card mb-4" open><summary class="p-4 font-bold"><i class="fas fa-chevron-right gira text-xs t3 mr-1"></i>O que foi gravado ({{ resumo.linhas|length }})</summary>
+    <ul class="lista-mini px-4 pb-4">{% for l in resumo.linhas %}<li>{{ l }}</li>{% endfor %}</ul></details>
+  {% endif %}
+  {% if resumo.pendencias %}
+  <details class="card mb-4"><summary class="p-4 font-bold"><i class="fas fa-chevron-right gira text-xs t3 mr-1"></i><i class="fas fa-triangle-exclamation text-amber-500"></i> Pendências ({{ resumo.pendencias|length }})</summary>
+    <ul class="lista-mini px-4 pb-4">{% for p in resumo.pendencias %}<li><span class="tag tag-cinza">{{ p.onde }} · linha {{ p.n }}</span> <b>{{ p.nome }}</b> — <span class="pend">{{ p.motivo }}</span></li>{% endfor %}</ul></details>
+  {% endif %}
+  {% if resumo.ausentes %}
+  <details class="card mb-4"><summary class="p-4 font-bold"><i class="fas fa-chevron-right gira text-xs t3 mr-1"></i>No quadro e fora da planilha ({{ resumo.ausentes|length }})</summary>
+    <ul class="lista-mini px-4 pb-4">{% for loja, a in resumo.ausentes %}<li><span class="tag tag-cinza">{{ loja }}</span> {{ a.nome }} <span class="t3">{{ a.cargo }}</span></li>{% endfor %}</ul></details>
+  {% endif %}
+  <div class="flex gap-2 flex-wrap justify-end">
+    <a href="{% url 'quadro_hc:importar' %}?novo=1" class="bt bt-claro"><i class="fas fa-rotate"></i>Importar outra</a>
+    <a href="{% url 'quadro_hc:quadro' %}" class="bt bt-pri"><i class="fas fa-table-cells-large"></i>Ver o quadro</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var form = document.getElementById('fPrevia');
+  if (!form) {
+    var ler = document.querySelector('[data-ler]');
+    if (ler) ler.addEventListener('submit', function () {
+      var bt = ler.querySelector('button[type=submit]');
+      if (bt) { bt.disabled = true; bt.innerHTML = '<i class="fas fa-spinner fa-spin"></i>Lendo a planilha…'; }
+    });
+    return;
+  }
+  var itens = function (sel) { return Array.prototype.slice.call(form.querySelectorAll(sel)); };
+  function contar() {
+    var n = itens('input[name=item]:checked').length;
+    itens('[data-contagem]').forEach(function (el) { el.textContent = n; });
+    itens('[data-aplicar]').forEach(function (b) { b.disabled = n === 0; });
+    // Mestre do grupo e do bloco refletem o que está marcado.
+    itens('[data-marcar-grupo]').forEach(function (m) {
+      var alvo = itens('input[name=item][data-grupo="' + m.dataset.marcarGrupo + '"]');
+      var marcados = alvo.filter(function (i) { return i.checked; }).length;
+      m.checked = alvo.length > 0 && marcados === alvo.length;
+      m.indeterminate = marcados > 0 && marcados < alvo.length;
+    });
+    itens('[data-marcar-bloco]').forEach(function (m) {
+      var alvo = itens('input[name=item][data-bloco="' + m.dataset.marcarBloco + '"]');
+      var marcados = alvo.filter(function (i) { return i.checked; }).length;
+      m.checked = alvo.length > 0 && marcados === alvo.length;
+      m.indeterminate = marcados > 0 && marcados < alvo.length;
+    });
+  }
+  form.addEventListener('change', function (e) {
+    var t = e.target;
+    if (t.dataset.marcarGrupo) {
+      itens('input[name=item][data-grupo="' + t.dataset.marcarGrupo + '"]').forEach(function (i) { i.checked = t.checked; });
+    } else if (t.dataset.marcarBloco) {
+      itens('input[name=item][data-bloco="' + t.dataset.marcarBloco + '"]').forEach(function (i) { i.checked = t.checked; });
+    } else if (t.hasAttribute('data-setor-bloco')) {
+      var bt = form.querySelector('[data-recalcular]');
+      if (form.requestSubmit) form.requestSubmit(bt); else bt.click();
+      return;
+    }
+    contar();
+  });
+  form.addEventListener('submit', function (e) {
+    var bt = e.submitter;
+    if (bt && bt.value === 'aplicar') {
+      var n = itens('input[name=item]:checked').length;
+      if (!window.confirm('Aplicar ' + n + ' item(ns) no cadastro e no quadro? Fica tudo no histórico.')) { e.preventDefault(); return; }
+    }
+    if (bt && bt.value === 'descartar' && !window.confirm('Descartar esta prévia?')) { e.preventDefault(); return; }
+    if (bt) setTimeout(function () { bt.disabled = true; }, 0);
+  });
+  contar();
+})();
+</script>
+{% endblock %}
