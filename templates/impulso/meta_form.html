@@ -262,7 +262,7 @@
                 {% endcomment %}
                 {% if colegas_parceria %}
                 <div class="sm:col-span-2">
-                    {% include 'impulso/_seletor_pessoas.html' with nome='parceiros' pessoas=colegas_parceria escolhidos=vazio rotulo='Chamar colega para fazer junto' ajuda='Opcional. Colegas do seu setor — cada um recebe o convite e precisa aceitar.' %}
+                    {% include 'impulso/_seletor_pessoas.html' with nome='parceiros' pessoas=colegas_parceria escolhidos=vazio rotulo='Chamar para fazer junto' mostrar_setor=True ajuda='Opcional. Qualquer pessoa do Impulso, de qualquer setor (o seu vem primeiro) — cada uma recebe o convite e precisa aceitar.' %}
                 </div>
                 {% endif %}
 

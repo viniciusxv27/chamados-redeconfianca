@@ -279,21 +279,35 @@
             </div>
             {% endif %}
 
-            {% if pode_chamar_parceiro and colegas_parceria %}
+            {% if pode_chamar_parceiro %}
             <form method="post" action="{% url 'impulso:meta_convidar_parceiro' meta.id %}"
-                  class="flex flex-col sm:flex-row gap-2">
+                  class="space-y-2" data-form-parceiros>
                 {% csrf_token %}
-                <select name="parceiros" multiple size="3"
-                        class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    {% for c in colegas_parceria %}
-                    <option value="{{ c.id }}">{{ c.get_full_name|default:c.email }}</option>
-                    {% endfor %}
-                </select>
-                <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700 whitespace-nowrap self-start">
-                    <i class="fas fa-user-plus mr-1"></i>Chamar
-                </button>
+                {% include 'impulso/_seletor_pessoas.html' with nome='parceiros' pessoas=colegas_parceria escolhidos=vazio rotulo='Chamar para fazer junto' mostrar_setor=True vazio_texto='Todo mundo do Impulso já foi chamado.' ajuda='Qualquer pessoa do Impulso, de qualquer setor (o seu vem primeiro). Cada uma recebe o convite e precisa aceitar.' %}
+                <div class="flex justify-end">
+                    <button type="submit" data-chamar disabled
+                            class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700 whitespace-nowrap
+                                   disabled:opacity-40 disabled:cursor-not-allowed">
+                        <i class="fas fa-user-plus mr-1"></i><span data-chamar-rotulo>Chamar</span>
+                    </button>
+                </div>
             </form>
-            <p class="text-[11px] text-gray-400 mt-1">Colegas do seu setor. Segure Ctrl (ou Cmd) para escolher mais de um.</p>
+            <script>
+            (function () {
+                var form = document.querySelector('[data-form-parceiros]');
+                if (!form) { return; }
+                var botao = form.querySelector('[data-chamar]');
+                var rotulo = form.querySelector('[data-chamar-rotulo]');
+                function atualizar() {
+                    var n = form.querySelectorAll('input[name="parceiros"]:checked').length;
+                    botao.disabled = n === 0;
+                    rotulo.textContent = n > 1 ? 'Chamar ' + n + ' pessoas' : 'Chamar';
+                }
+                form.addEventListener('change', atualizar);
+                form.addEventListener('click', function () { setTimeout(atualizar, 0); });
+                atualizar();
+            })();
+            </script>
             {% endif %}
         </div>
         {% endif %}

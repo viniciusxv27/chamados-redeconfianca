@@ -1306,14 +1306,21 @@ def meta_solicitacoes(request):
 
 
 def _colegas_para_parceria(user):
-    """Quem pode ser chamado para tocar a meta junto: o setor da pessoa.
+    """Quem pode ser chamado para tocar a meta junto: qualquer pessoa do Impulso.
 
-    Parceria é combinada entre quem trabalha lado a lado — abrir isto para a
-    rede inteira transformaria o convite em lista telefônica.
+    Antes era só o setor de quem chama; a parceria passou a valer entre setores
+    (18/11/2026). Os colegas do próprio setor vêm primeiro na lista, e cada um
+    leva o setor para a tela mostrar e a busca achar.
     """
-    colegas = get_colaboradores().exclude(id=user.id)
+    from django.db.models import Case, IntegerField, Value, When
+
+    from .utils import get_participantes_impulso
+
+    colegas = get_participantes_impulso().exclude(id=user.id).select_related('sector')
     if getattr(user, 'sector_id', None):
-        colegas = colegas.filter(sector_id=user.sector_id)
+        colegas = colegas.annotate(_do_meu_setor=Case(
+            When(sector_id=user.sector_id, then=Value(0)), default=Value(1),
+            output_field=IntegerField())).order_by('_do_meu_setor', 'first_name', 'last_name')
     return colegas
 
 
@@ -1341,7 +1348,7 @@ def _convidar_parceiros(meta, ids, quem):
 @require_POST
 @impulso_member_required
 def meta_convidar_parceiro(request, meta_id):
-    """Chama um colega do setor para tocar a meta junto."""
+    """Chama uma ou mais pessoas do Impulso para tocar a meta junto."""
     meta = get_object_or_404(Meta, id=meta_id)
     if not (meta.colaborador_id == request.user.id or meta.gestor_id == request.user.id
             or is_impulso_manager(request.user)):

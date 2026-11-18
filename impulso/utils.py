@@ -128,6 +128,20 @@ def get_colaboradores():
             .distinct().order_by('first_name', 'last_name'))
 
 
+def get_participantes_impulso():
+    """Todos que entram no Impulso (a mesma regra de `is_impulso_member`), em consulta.
+
+    ESCRITÓRIO (ADM), ADM's LOJAS, gestores do Impulso, SUPERADMIN e quem
+    recebeu o módulo individualmente.
+    """
+    return (User.objects.filter(is_active=True)
+            .filter(_q_grupo('communication_groups__name', GRUPOS_ADM)
+                    | _q_grupo('communication_groups__name', GRUPO_GESTOR)
+                    | Q(is_superuser=True) | Q(hierarchy='SUPERADMIN')
+                    | Q(module_accesses__module_key='impulso'))
+            .distinct().order_by('first_name', 'last_name'))
+
+
 def get_gestores():
     return (User.objects.filter(is_active=True)
             .filter(_q_grupo('communication_groups__name', GRUPO_GESTOR))

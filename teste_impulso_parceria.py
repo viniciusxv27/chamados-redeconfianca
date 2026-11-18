@@ -10,7 +10,9 @@ na meta sem ser perguntada. Parceria é convite: quem foi chamado aceita ou não
 O que este teste cobre:
 
 - convidar na criação da meta e depois, pela tela da meta;
-- só colega do mesmo setor aparece para chamar;
+- qualquer pessoa do Impulso aparece para chamar, de qualquer setor (18/11/2026;
+  antes era só o setor), o setor de quem chama primeiro, e quem não é do Impulso não;
+- chamar várias pessoas de uma vez;
 - aceitar coloca na meta (vê, acompanha, marca o to-do); recusar não;
 - o convite é de quem recebeu — ninguém responde pelo outro;
 - convite repetido não vira dois;
@@ -89,6 +91,10 @@ try:
     ana = pessoa('ana', loja)
     bruno = pessoa('bruno', loja)
     distante = pessoa('distante', outra)
+    # Fora do Impulso: sem grupo nenhum do módulo.
+    fora = User.objects.create_user(
+        username='zzpa.fora', email='zzpa.fora@exemplo-teste.local', password='S3nha!teste',
+        first_name='Fora', last_name='Parceria', hierarchy='PADRAO', sector=outra)
     chefe.communication_groups.add(adm)
     # Criar meta para si mesmo exige escolher um gestor do setor.
     gestores, _ = CommunicationGroup.objects.get_or_create(name='GESTORES (IMPULSO)',
@@ -105,7 +111,11 @@ try:
     html = ca.get('/impulso/metas/nova/').content.decode()
     t('a tela de criar oferece chamar colega', 'name="parceiros"' in html)
     t('com o colega do setor', 'Bruno Parceria' in html)
-    t('e sem quem é de outro setor', 'Distante Parceria' not in html)
+    t('e também quem é de outro setor', 'Distante Parceria' in html)
+    t('mas não quem está fora do Impulso', 'Fora Parceria' not in html)
+    t('o setor do colega aparece', 'ZZ Outra Loja' in html)
+    t('o setor de quem chama vem primeiro', 'Bruno Parceria' in html
+      and html.index('Bruno Parceria') < html.index('Distante Parceria'))
 
     r = ca.post('/impulso/metas/nova/', {
         'titulo': 'ZZ meta em conjunto', 'descricao': 'ZZ descrição',
@@ -153,9 +163,18 @@ try:
     t('recusar é respeitado', c2.status == ParceriaMeta.Status.RECUSADA
       and not meta.participantes.filter(id=carla.id).exists())
 
-    ca.post(f'/impulso/metas/{meta.id}/parceiro/', {'parceiros': [str(distante.id)]})
-    t('não dá para chamar quem é de outro setor',
-      not ParceriaMeta.objects.filter(meta=meta, convidado=distante).exists())
+    html = ca.get(f'/impulso/metas/{meta.id}/').content.decode()
+    t('a tela da meta usa o seletor de várias pessoas',
+      'data-seletor="parceiros"' in html and 'type="checkbox" name="parceiros"' in html
+      and '<select name="parceiros"' not in html)
+    t('e oferece quem é de outro setor', 'Distante Parceria' in html and 'Fora Parceria' not in html)
+    evan = pessoa('evan', outra)
+    ca.post(f'/impulso/metas/{meta.id}/parceiro/', {'parceiros': [str(distante.id), str(evan.id)]})
+    t('chama várias pessoas de outro setor de uma vez',
+      ParceriaMeta.objects.filter(meta=meta, convidado__in=[distante, evan]).count() == 2)
+    ca.post(f'/impulso/metas/{meta.id}/parceiro/', {'parceiros': [str(fora.id)]})
+    t('não dá para chamar quem está fora do Impulso',
+      not ParceriaMeta.objects.filter(meta=meta, convidado=fora).exists())
     ca.post(f'/impulso/metas/{meta.id}/parceiro/', {'parceiros': [str(ana.id)]})
     t('nem a si mesmo', not ParceriaMeta.objects.filter(meta=meta, convidado=ana).exists())
 
