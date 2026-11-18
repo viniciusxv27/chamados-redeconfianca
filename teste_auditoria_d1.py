@@ -416,6 +416,13 @@ cab = rows[0]
 por_venda = {x[cab.index('ID Venda')]: dict(zip(cab, x)) for x in rows[1:]}
 t('contestada procedente sai como Procedente sem motivo', por_venda.get('108', {}).get('Status BKO(*)(**)') == 'Procedente'
   and por_venda['108']['Motivo Reprovação(**)'] == '')
+t('contestada procedente desfaz: Zerar Não, sem Motivo Cancelamento, receita original e observação',
+  por_venda['108']['Zerar Remuneração'] == 'Não' and por_venda['108']['Motivo Cancelamento(**)'] == ''
+  and por_venda['108']['Receita'] == '0,00'
+  and por_venda['108']['Observação'] == 'Auditoria D-1: contestação procedente, venda volta (VENDA INEXISTENTE)', por_venda.get('108'))
+t('valores incorretos: Receita = receita correta e observação com quem verificou', por_venda['101']['Receita'] == '30,00'
+  and por_venda['101']['Observação'].startswith('Auditoria D-1: VALORES INCORRETOS')
+  and por_venda['101']['Observação'].endswith(f'verificado por {NOME_AUDITOR}'), por_venda['101'].get('Observação'))
 t('valores incorretos: Valor Plano ajustado para 30,00', por_venda.get('101', {}).get('Valor Plano(**)') == '30,00')
 t('Serviço(*) sai como o Serviço_Técnico da venda', por_venda['101']['Serviço(*)'] == 'Alta Controle')
 t('ID Serviço fica logo depois de ID Venda e traz o ID do serviço', cab.index('ID Serviço') == cab.index('ID Venda') + 1
@@ -434,6 +441,10 @@ rows = list(csv.reader(io.StringIO(r.content.decode('cp1252')), delimiter=';'))
 por_venda = {x[rows[0].index('ID Venda')]: dict(zip(rows[0], x)) for x in rows[1:]}
 t('venda inexistente sai Improcedente + motivo', por_venda['108']['Status BKO(*)(**)'] == 'Improcedente'
   and por_venda['108']['Motivo Reprovação(**)'] == 'Lançamento incorreto no Vivo GO')
+t('venda inexistente: Zerar Remuneração = Sim, Motivo Cancelamento, Receita 0,00 e observação',
+  por_venda['108']['Zerar Remuneração'] == 'Sim' and por_venda['108']['Motivo Cancelamento(**)'] == 'VENDA INEXISTENTE'
+  and por_venda['108']['Receita'] == '0,00'
+  and por_venda['108']['Observação'] == f'Auditoria D-1: VENDA INEXISTENTE · verificado por {NOME_AUDITOR}', por_venda['108'])
 r = jpost(ca, '/auditoria-d1/api/contestacoes', {'id_servico': 'S2', 'decisao': 'IMPROCEDENTE', 'solicitante': 'Vendedor', 'motivo': 'alegou'})
 v = q("SELECT * FROM verificacao_vendas WHERE id_servico='S2'")[0]
 t('improcedente: continua DIVERGENTE com a contestação registrada', (v['status'], v['contestacao_decisao'], v['receita_validada']) == ('DIVERGENTE', 'IMPROCEDENTE', 30))
@@ -442,6 +453,44 @@ v = q("SELECT * FROM verificacao_vendas WHERE id_servico='S2'")[0]
 t('apagar registro improcedente: limpa só a contestação', v['status'] == 'DIVERGENTE' and v['contestacao_decisao'] is None)
 h = ca.get('/auditoria-d1/api/historico/S9').json()
 t('histórico do serviço em ordem decrescente', [x['evento'] for x in h][:3] == ['DESF_CONTEST', 'CONTESTACAO', 'SALVAR'])
+
+print('== EXPORTAR: ZERAR, MOTIVO CANCELAMENTO, RECEITA E OBSERVAÇÃO (18/11/2026) ==')
+_cols = [c.split(' AS ')[1].strip().rstrip(',') for c in __import__('auditoria_d1.mysql', fromlist=['x']).COLUNAS_VENDA.strip().splitlines()]
+_base = dict.fromkeys(_cols)
+_base.update(id_servico='X1', id_venda='9001', data_venda=dt.date(2026, 10, 5), pdv='LARANJEIRAS', servico='Alta Banda Larga',
+             receita=99.9, valor_plano=99.9, zerar_remuneracao='0', status_bko='Não avaliado', status_servico='Ativo',
+             v_status='DIVERGENTE', v_receita_original=99.9, v_por='DEBORA ROCHA DOS SANTOS NASCIMENTO')
+
+
+def _gerar(**k):
+    dados, _res = importacao_vivogo.gerar([{**_base, **k}])
+    linhas = list(csv.reader(io.StringIO(dados.decode('cp1252')), delimiter=';'))
+    return dict(zip(linhas[0], linhas[1])) if len(linhas) > 1 else None
+
+
+L = _gerar(v_correcao='MOVIMENTO INELEGÍVEL', v_penalidade='FIBRA CANCELADA')
+t('inelegível: Improcedente, motivo de reprovação mantido, Zerar Remuneração = Sim',
+  (L['Status BKO(*)(**)'], L['Motivo Reprovação(**)'], L['Zerar Remuneração']) == ('Improcedente', 'Outros erros', 'Sim'), L)
+t('inelegível: Motivo Cancelamento = correção - penalidade e Receita 0,00',
+  L['Motivo Cancelamento(**)'] == 'MOVIMENTO INELEGÍVEL - FIBRA CANCELADA' and L['Receita'] == '0,00', L)
+t('inelegível: observação no formato pedido',
+  L['Observação'] == 'Auditoria D-1: MOVIMENTO INELEGÍVEL · FIBRA CANCELADA · verificado por DEBORA ROCHA DOS SANTOS NASCIMENTO', L['Observação'])
+L = _gerar(v_correcao='MOVIMENTO INELEGÍVEL', v_penalidade='FIBRA CANCELADA', v_observacao='  cliente   cancelou no 3º dia ')
+t('observação do auditor entra entre a penalidade e quem verificou', L['Observação'] ==
+  'Auditoria D-1: MOVIMENTO INELEGÍVEL · FIBRA CANCELADA · cliente cancelou no 3º dia · verificado por DEBORA ROCHA DOS SANTOS NASCIMENTO')
+L = _gerar(v_correcao='PLANO INCORRETO', v_receita_correta=49.9, v_plano_correto='Outro')
+t('plano incorreto com receita: Valor Plano e Receita = 49,90', L['Valor Plano(**)'] == '49,90' and L['Receita'] == '49,90'
+  and L['Zerar Remuneração'] == 'Não', L)
+t('plano incorreto sem receita continua fora do arquivo', _gerar(v_correcao='PLANO INCORRETO', v_plano_correto='Outro') is None)
+L = _gerar(v_status='CONTESTADA', v_correcao='MOVIMENTO INELEGÍVEL', v_penalidade='FIBRA CANCELADA', receita=0,
+           zerar_remuneracao='1', motivo_cancelamento='MOVIMENTO INELEGÍVEL - FIBRA CANCELADA')
+t('procedente desfaz tudo mesmo com o VivoGo já zerado (receita volta à original 99,90)',
+  (L['Status BKO(*)(**)'], L['Motivo Reprovação(**)'], L['Zerar Remuneração'], L['Motivo Cancelamento(**)'], L['Receita'])
+  == ('Procedente', '', 'Não', '', '99,90'), L)
+t('procedente: observação de volta', L['Observação'] == 'Auditoria D-1: contestação procedente, venda volta (MOVIMENTO INELEGÍVEL)')
+L = _gerar(v_status='CONTESTADA', v_correcao='VALORES INCORRETOS', v_receita_correta=30, receita=30, valor_plano=30)
+t('valores incorretos contestado: Valor Plano e Receita voltam a 99,90', L['Valor Plano(**)'] == '99,90' and L['Receita'] == '99,90'
+  and L['Observação'] == 'Auditoria D-1: contestação procedente, venda volta (VALORES INCORRETOS)', L)
 
 print('== PLANILHA .XLSX ==')
 r = cc.get('/auditoria-d1/api/exportar-planilha?mes=2026-10')
@@ -738,7 +787,7 @@ rows = list(csv.reader(io.StringIO(r.content.decode('cp1252')), delimiter=';'))
 pv = {x[rows[0].index('ID Venda')]: dict(zip(rows[0], x)) for x in rows[1:]}
 t('CSV: Nº Acesso no formato do VivoGo', pv['101']['Nº Acesso(*)'] == '27 99876-1234', pv.get('101', {}).get('Nº Acesso(*)'))
 t('CSV: CPF/CNPJ no formato do VivoGo', pv['101']['CPF/CNPJ'] == '111.444.777-35')
-t('CSV: valores com vírgula decimal', pv['101']['Valor Plano(**)'] == '30,00' and pv['101']['Receita'] == '59,90')
+t('CSV: valores com vírgula decimal', pv['101']['Valor Plano(**)'] == '30,00' and pv['101']['Receita'] == '30,00')
 res = json.loads(unquote(r['X-Resumo']))
 man = {m['id_venda']: m for m in res['manuais']}
 t('ajuste manual: linha correta já formatada para digitar no VivoGo', man['102']['valor'] == '27 98888-7777')

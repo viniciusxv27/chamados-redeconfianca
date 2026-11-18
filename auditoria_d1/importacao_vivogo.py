@@ -3,12 +3,15 @@
 
 Cada venda alterada na auditoria vira uma linha do modelo, preenchida com os dados da vendas_servicos e com as
 correções aplicadas nos campos que o VivoGo permite alterar (marcados com (**) no modelo):
-  VENDA INEXISTENTE / MOVIMENTO INELEGÍVEL → Status BKO = Improcedente + Motivo Reprovação
-  VALORES INCORRETOS (e PLANO INCORRETO com receita correta) → Valor Plano ajustado para a receita correta
+  VENDA INEXISTENTE / MOVIMENTO INELEGÍVEL → Status BKO = Improcedente + Motivo Reprovação + Zerar Remuneração = Sim
+    + Motivo Cancelamento "CORREÇÃO - PENALIDADE" + Receita 0,00 (18/11/2026: sem o Zerar, o VivoGo não zerava a receita)
+  VALORES INCORRETOS (e PLANO INCORRETO com receita correta) → Valor Plano ajustado e Receita = receita correta
   LINHA INCORRETA, DIVERGÊNCIA CADASTRAL, nome do PLANO → não são campos alteráveis: ficam de fora e são
   avisados como ajuste manual. VENDA EM DUPLICIDADE não altera nada no VivoGo.
-  CONTESTADA (contestação procedente) → a linha DESFAZ a alteração: exclusão volta com Status BKO = Procedente e
-  sem motivo de reprovação; valor corrigido volta ao valor original da venda.
+  CONTESTADA (contestação procedente) → a linha DESFAZ a alteração: exclusão volta com Status BKO = Procedente,
+  sem motivo de reprovação nem de cancelamento, Zerar Remuneração = Não e a receita original; valor corrigido volta
+  ao Valor Plano e à Receita originais.
+  Toda linha exportada leva na Observação "Auditoria D-1: correção · penalidade · observação · verificado por (nome)".
 
 Nº Acesso / Nº Portado ("11 99999-9999"), CPF/CNPJ ("999.999.999-99") e valores ("100,75") saem sempre no formato
 do VivoGo (formato.py), mesmo que a origem venha só com dígitos.
@@ -178,15 +181,37 @@ def _sem_marcador(col):
     return re.sub(r"\(\*+\)", "", col).strip()
 
 
+def _txt(x):
+    return re.sub(r"\s+", " ", str(x or "")).strip()
+
+
+def motivo_cancelamento(v, corr):
+    """'MOVIMENTO INELEGÍVEL - FIBRA CANCELADA' (sem penalidade, só a correção)."""
+    return " - ".join(p for p in (_txt(corr), _txt(v.get("v_penalidade"))) if p)
+
+
+def observacao(v, corr):
+    """'Auditoria D-1: MOVIMENTO INELEGÍVEL · FIBRA CANCELADA · <observação> · verificado por FULANO' (vazios saem)."""
+    partes = [_txt(corr), _txt(v.get("v_penalidade")), _txt(v.get("v_observacao"))]
+    if _txt(v.get("v_por")):
+        partes.append(f"verificado por {_txt(v.get('v_por'))}")
+    return "Auditoria D-1: " + " · ".join(p for p in partes if p)
+
+
+def _receita_original(v):
+    original = v.get("v_receita_original")
+    return v["receita"] if original is None else original
+
+
 def desfazer(v, corr, ident, manuais):
     """Campos que voltam a venda contestada ao que era antes da auditoria."""
+    volta = {"Observação": f"Auditoria D-1: contestação procedente, venda volta ({_txt(corr)})"}
     if corr in MOTIVO_REPROVACAO:
-        return {"Status BKO": "Procedente", "Motivo Reprovação": ""}
+        return {**volta, "Status BKO": "Procedente", "Motivo Reprovação": "", "Zerar Remuneração": "Não",
+                "Motivo Cancelamento": "", "Receita": _num(_receita_original(v))}
     if corr in ("VALORES INCORRETOS", "PLANO INCORRETO") and v["v_receita_correta"] is not None:
-        original = v.get("v_receita_original")
-        if original is None:
-            original = v["receita"]
-        return {"Valor Plano": _num(_novo_valor_plano(v, original))}
+        original = _receita_original(v)
+        return {**volta, "Valor Plano": _num(_novo_valor_plano(v, original)), "Receita": _num(original)}
     if corr in MOTIVO_MANUAL:
         manuais.append({**ident, "motivo": "Contestação procedente: desfazer o ajuste manual feito no VivoGo",
                         "valor": "", "contestada": True})
@@ -209,14 +234,16 @@ def gerar(vendas):
             continue
         alt = {}
         if corr in MOTIVO_REPROVACAO:
-            alt = {"Status BKO": "Improcedente", "Motivo Reprovação": MOTIVO_REPROVACAO[corr]}
+            alt = {"Status BKO": "Improcedente", "Motivo Reprovação": MOTIVO_REPROVACAO[corr],
+                   "Zerar Remuneração": "Sim", "Motivo Cancelamento": motivo_cancelamento(v, corr), "Receita": _num(0)}
         elif v["v_receita_correta"] is not None and corr in ("VALORES INCORRETOS", "PLANO INCORRETO"):
-            alt = {"Valor Plano": _num(_novo_valor_plano(v, v["v_receita_correta"]))}
+            alt = {"Valor Plano": _num(_novo_valor_plano(v, v["v_receita_correta"])),
+                   "Receita": _num(v["v_receita_correta"])}
         if corr in MOTIVO_MANUAL:
             manuais.append({**ident, "motivo": MOTIVO_MANUAL[corr], "valor": valor_manual(v)})
         if not alt:
             continue
-        linha = {**linha_base(v), **alt}
+        linha = {**linha_base(v), **alt, "Observação": observacao(v, corr)}
         saida.append([linha.get(_sem_marcador(c), "") for c in cols])
         incluidas.append(ident)
     buf = io.StringIO(newline="")
