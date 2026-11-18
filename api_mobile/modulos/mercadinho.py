@@ -7,16 +7,16 @@ Regras de onde vieram (prizes/views.py e templates):
   nome e a ordenação da tela (prizes/views.py:24-46); categorias ativas (views.py:23).
 - Saldo: a tela /prizes/ mostra ``request.user.balance_cs`` para TODO mundo
   (views.py:56 + marketplace.html:53-60, sem condição de hierarquia) — diferente da home.
-- Resgatar: a PRÓPRIA view da web (``redeem_prize``, views.py:63): disponível
+- Resgatar: a PRÓPRIA view da web (``redeem_prize``, views.py:67): disponível
   (ativo, validade, estoque), saldo ≥ valor final, cria o Redemption PENDENTE, debita o
   saldo e grava o CSTransaction REDEMPTION. A confirmação é do app (o modal da web,
   marketplace.html:313).
-- Meus resgates: ``Redemption.objects.filter(user=request.user)`` (views.py:270). Prazo de
+- Meus resgates: ``Redemption.objects.filter(user=request.user)`` (views.py:274). Prazo de
   retirada na SEDE: ``pickup_deadline`` + ``pickup_notified_at`` (o popup da home,
   core/views.py:110).
-- Cancelar: a PRÓPRIA view da web (``cancel_redemption``, views.py:572). A tela da web só
+- Cancelar: a PRÓPRIA view da web (``cancel_redemption``, views.py:568). A tela da web só
   oferece o botão no PENDENTE (redemption_history.html:133); aqui também.
-- Sugerir produto: a PRÓPRIA view da web (``sugerir_produto``, views.py:807).
+- Sugerir produto: a PRÓPRIA view da web (``sugerir_produto``, views.py:829).
 
 Gestão (cadastrar prêmio, estoque, aprovar/entregar resgate, avisar retirada, descontos,
 sugestões) fica no portal: o app só mostra o atalho para quem ``can_manage_prizes``.
@@ -40,7 +40,7 @@ from . import permissao
 
 
 def pode_entrar(user):
-    # prizes/views.py:20 — só @login_required; o menu (base.html:488) aparece para todo logado.
+    # prizes/views.py:21 — só @login_required; o menu (base.html:488) aparece para todo logado.
     return bool(user and user.is_authenticated and user.is_active)
 
 
@@ -143,7 +143,7 @@ def _aprovados(premio_ids):
 
 
 def _premio_visivel(pk):
-    # O resgate só acha prêmio ativo (prizes/views.py:66); o detalhe segue a mesma régua.
+    # O resgate só acha prêmio ativo (prizes/views.py:69); o detalhe segue a mesma régua.
     premio = Prize.objects.select_related('category').filter(pk=pk, is_active=True).first()
     if premio is None:
         raise Http404('Prêmio não encontrado.')
@@ -239,7 +239,7 @@ def premio(request, pk):
 @authentication_classes(AUTH)
 @permission_classes(PERM)
 def resgatar(request, pk):
-    """Resgata pela view da web (prizes/views.py:63): mesmas validações, débito e movimentação de C$."""
+    """Resgata pela view da web (prizes/views.py:67): mesmas validações, débito e movimentação de C$."""
     _premio_visivel(pk)                         # inativo/inexistente → 404 (a web dá 404 também)
     resposta, _msgs = _chamar_web(request, web.redeem_prize, pk)
     corpo = _json_da_web(resposta)
@@ -261,7 +261,7 @@ def resgatar(request, pk):
 @authentication_classes(AUTH)
 @permission_classes(PERM)
 def resgates(request):
-    """Os resgates da própria pessoa (prizes/views.py:270). ?situacao=PENDENTE|APROVADO|ENTREGUE|CANCELADO"""
+    """Os resgates da própria pessoa (prizes/views.py:274). ?situacao=PENDENTE|APROVADO|ENTREGUE|CANCELADO"""
     base = Redemption.objects.filter(user=request.user).select_related('prize').order_by('-redeemed_at', '-pk')
     situacao = (request.query_params.get('situacao') or '').strip().upper()
     qs = base.filter(status=situacao) if situacao in STATUS_ROTULO else base
@@ -278,7 +278,7 @@ def resgates(request):
 @authentication_classes(AUTH)
 @permission_classes(PERM)
 def cancelar(request, pk):
-    """Cancela o próprio resgate pendente pela view da web (prizes/views.py:572), que devolve o C$."""
+    """Cancela o próprio resgate pendente pela view da web (prizes/views.py:568), que devolve o C$."""
     r = Redemption.objects.filter(pk=pk, user=request.user).first()
     if r is None:
         raise Http404('Resgate não encontrado.')
@@ -300,7 +300,7 @@ def cancelar(request, pk):
 @authentication_classes(AUTH)
 @permission_classes(PERM)
 def sugerir(request):
-    """{link, nome?, observacao?} pela view da web (prizes/views.py:807): link http(s), até 5 em análise."""
+    """{link, nome?, observacao?} pela view da web (prizes/views.py:829): link http(s), até 5 em análise."""
     req = request._request
     original_post = req.POST
     from django.http import QueryDict

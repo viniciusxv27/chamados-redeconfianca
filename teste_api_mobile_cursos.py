@@ -204,8 +204,14 @@ try:
     with mock.patch.object(ConfiguracaoCursos, 'get', classmethod(lambda cls: trava)):
         caches['local'].clear()
         r = c_preso.get(f'{M}/')
-        t('travado pelo curso vencido: 423 também no módulo cursos (regra atual do app)',
-          r.status_code == 423 and r.json().get('bloqueio', {}).get('tipo') == 'curso', r.content[:200])
+        t('travado pelo curso vencido: o módulo cursos continua aberto (como /cursos/ na web)',
+          r.status_code == 200, r.content[:200])
+        r = c_preso.get('/api/mobile/v1/inicio/')
+        t('mas o resto do app segue bloqueado (423)', r.status_code == 423 and r.json().get('bloqueio', {}).get('tipo') == 'curso', r.content[:200])
+        r = c_preso.get('/api/mobile/v1/m/ponto/resumo/')
+        t('outro módulo também segue bloqueado', r.status_code == 423, r.status_code)
+        r = c_preso.post(f'{M}/{vencido.pk}/comprovante/', {'arquivo': arquivo('vencido-travado.jpg')})
+        t('e, travado, consegue mandar o comprovante (a saída da trava)', r.status_code == 201, r.content[:200])
     solto = ConfiguracaoCursos.get()
     solto.bloquear_navegacao = False
     with mock.patch.object(ConfiguracaoCursos, 'get', classmethod(lambda cls: solto)):

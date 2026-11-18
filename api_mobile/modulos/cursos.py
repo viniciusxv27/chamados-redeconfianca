@@ -38,7 +38,10 @@ def pode_entrar(user):
 
 
 MODULO = {'rotulo': 'Cursos', 'descricao': 'Cursos Vivo e comprovantes',
-          'icone': 'school-outline', 'cor': '#8B5CF6', 'pode_entrar': pode_entrar}
+          'icone': 'school-outline', 'cor': '#8B5CF6', 'pode_entrar': pode_entrar,
+          # Como na web: o bloqueio por curso vencido deixa /cursos/ aberto (cursos/middleware.py
+          # LIBERADOS) — mandar o comprovante é justamente a saída da trava.
+          'libera_no_bloqueio': ('curso',)}
 
 _PERM = [permissao('cursos')]
 _AUTH = [TokenMobileAuthentication]

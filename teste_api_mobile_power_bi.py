@@ -72,7 +72,7 @@ try:
     ana = novo('ana')
     beto = novo('beto', setor=outra)
     chefe = novo('chefe', 'SUPERADMIN', outra)
-    grupo = CommunicationGroup.objects.create(name='ZZ Grupo PBI App')
+    grupo = CommunicationGroup.objects.create(name='ZZ Grupo PBI App', created_by=chefe)
     grupo.members.add(beto)
 
     def relatorio(nome, nova_guia=False, ativo=True, url='https://app.powerbi.com/view?r=zz-teste'):

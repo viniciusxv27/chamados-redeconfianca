@@ -1,27 +1,27 @@
 """Módulo Facilitador no app (/api/mobile/v1/m/facilitador/): arquivos e links úteis.
 
 Regras de onde vieram (facilitador/views.py):
-- Entrada: ``inicio`` só tem @login_required (views.py:131) e o item do menu aparece para
+- Entrada: ``inicio`` só tem @login_required (views.py:108) e o item do menu aparece para
   todo logado (templates/base.html:448, sem {% if %}).
 - Recorte: quem gerencia (SUPERADMIN, ``pode_gerenciar`` views.py:37) vê tudo, inclusive o
-  oculto; os outros só ``ativo=True`` (views.py:133). Detalhe/arquivo/link: ``_visivel``
+  oculto; os outros só ``ativo=True`` (views.py:111). Detalhe/arquivo/link: ``_visivel``
   (views.py:47) — oculto para quem não gerencia é 404. Não há recorte por setor/grupo.
-- Busca/categoria/tipo: os filtros da tela (views.py:134-144).
-- Abrir link: a própria view ``ir`` (views.py:254) — conta o clique e devolve o destino; o
+- Busca/categoria/tipo: os filtros da tela (views.py:112-122).
+- Abrir link: a própria view ``ir`` (views.py:249) — conta o clique e devolve o destino; o
   app abre no navegador do sistema.
 - Arquivo: link assinado (api_mobile/arquivos.py); o resolvedor confere ``_visivel`` de novo
-  com o dono do link e conta o download como ``baixar`` (views.py:165). Só PDF/imagem/mídia/
+  com o dono do link e conta o download como ``baixar`` (views.py:145). Só PDF/imagem/mídia/
   documento abre na tela; HTML/SVG/XML vai como download (o portal também nunca serve
   arquivo enviado como página na própria origem — a página HTML usa o link público isolado,
-  ``link_da_pagina``/``pagina_publica``, views.py:212 e 244).
+  ``link_da_pagina``/``pagina_publica``, views.py:186 e 226).
 
 Cadastro, edição, ocultar, excluir e QR code ficam no portal.
 """
 import mimetypes
 from types import SimpleNamespace
 
-from django.db.models import Q
-from django.urls import path
+from django.db.models import F, Q
+from django.urls import path, reverse
 from rest_framework import status
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.response import Response
@@ -36,7 +36,7 @@ from . import permissao
 
 
 def pode_entrar(user):
-    # facilitador/views.py:131 — só @login_required; o menu (base.html:448) aparece para todo logado.
+    # facilitador/views.py:108 — só @login_required; o menu (base.html:448) aparece para todo logado.
     return bool(user and user.is_authenticated and user.is_active)
 
 
@@ -64,7 +64,7 @@ def _resumo(r, gestor):
         'categoria': r.categoria or None,
         'extensao': None if r.e_link else (r.extensao or None),
         'tamanho': None if r.e_link else (r.tamanho or None),
-        'dominio': r.dominio or None if r.e_link else None,
+        'dominio': (r.dominio or None) if r.e_link else None,
         'pagina': bool(r.e_html and r.arquivo),
         'oculto': (not r.ativo) if gestor else False,
     }
@@ -74,7 +74,7 @@ def _resumo(r, gestor):
 @authentication_classes(AUTH)
 @permission_classes(PERM)
 def lista(request):
-    """?busca= &categoria= &tipo=arquivo|link (os filtros da tela, facilitador/views.py:131)."""
+    """?busca= &categoria= &tipo=arquivo|link (os filtros da tela, facilitador/views.py:108)."""
     gestor = web.pode_gerenciar(request.user)
     recursos = Recurso.objects.all() if gestor else Recurso.objects.filter(ativo=True)
     categorias = sorted({c for c in recursos.values_list('categoria', flat=True) if c}, key=str.lower)
@@ -104,7 +104,7 @@ def detalhe(request, pk):
     saida = _resumo(r, gestor)
     saida.update({
         'descricao': r.descricao or None,
-        'url': r.url or None if r.e_link else None,
+        'url': (r.url or None) if r.e_link else None,
         'nome_arquivo': None if r.e_link else (r.nome_original or (r.arquivo.name.rsplit('/', 1)[-1] if r.arquivo else None)),
         'tem_arquivo': bool(not r.e_link and r.arquivo),
         'atualizado_em': dados.iso(r.atualizado_em),
@@ -125,13 +125,15 @@ def abrir(request, pk):
     if r.e_link:
         if not r.url:
             return Response({'erro': 'Este item não tem link.'}, status=status.HTTP_404_NOT_FOUND)
-        resposta = web.ir(request._request, pk)       # conta o clique (views.py:254) e redireciona
+        resposta = web.ir(request._request, pk)       # conta o clique (views.py:253) e redireciona
         return Response({'tipo': 'link', 'url': resposta['Location']})
     if not r.arquivo:
         return Response({'erro': 'Este item não tem arquivo.'}, status=status.HTTP_404_NOT_FOUND)
     if r.e_html and r.ativo and r.token_pagina and request.data.get('como') != 'arquivo':
-        # A página abre isolada no link público (pagina_publica conta o acesso, views.py:244).
-        return Response({'tipo': 'pagina', 'url': web.link_da_pagina(request._request, r)})
+        # A página abre isolada no link público (pagina_publica conta o acesso, views.py:226).
+        # Mesmo endereço de web.link_da_pagina (views.py:186), com o esquema do proxy (dados.absoluta).
+        url = dados.absoluta(request, reverse('facilitador:pagina_publica', args=[r.token_pagina]))
+        return Response({'tipo': 'pagina', 'url': url})
     return Response({'tipo': 'arquivo', 'url': link(request, 'facilitador', r.pk)})
 
 
@@ -157,5 +159,5 @@ def _arquivo(user, obj_id):
     if r.e_link or not r.arquivo:
         raise LookupError('Sem arquivo.')
     nome = r.nome_original or r.arquivo.name.rsplit('/', 1)[-1]
-    Recurso.objects.filter(pk=r.pk).update(acessos=web.F('acessos') + 1)   # como ``baixar`` (views.py:172)
+    Recurso.objects.filter(pk=r.pk).update(acessos=F('acessos') + 1)   # como ``baixar`` (views.py:151)
     return r.arquivo, nome, _tipo_seguro(nome)

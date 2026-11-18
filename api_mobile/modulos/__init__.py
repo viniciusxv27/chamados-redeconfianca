@@ -2,7 +2,9 @@
 
 Cada módulo mora no seu arquivo (``api_mobile/modulos/<chave>.py``) e declara:
 
-- ``MODULO``: rótulo, ícone (Ionicons), cor e ``pode_entrar(user)`` — a MESMA
+- ``MODULO``: rótulo, ícone (Ionicons), cor, ``libera_no_bloqueio`` (tipos de bloqueio do
+  portal em que o módulo continua aberto, como os LIBERADOS dos middlewares) e
+  ``pode_entrar(user)`` — a MESMA
   regra que o portal usa para deixar a pessoa entrar no módulo (gate do menu /
   da view web). Nada de regra nova aqui: chama a função do próprio app.
 - ``urlpatterns``: os endpoints, todos com ``permissao(<chave>)``.
@@ -15,7 +17,9 @@ from importlib import import_module
 
 from rest_framework.exceptions import PermissionDenied
 
-from ..permissoes import SemBloqueio
+from rest_framework.permissions import BasePermission
+
+from ..permissoes import PortalBloqueado, bloqueio_do_usuario
 
 logger = logging.getLogger(__name__)
 
@@ -51,11 +55,17 @@ def modulos_do_usuario(user):
 def permissao(chave):
     """Classe de permissão do DRF: logado, sem bloqueio do portal e com acesso ao módulo."""
 
-    class ModuloLiberado(SemBloqueio):
+    class ModuloLiberado(BasePermission):
         def has_permission(self, request, view):
-            if not super().has_permission(request, view):
+            user = request.user
+            if not (user and user.is_authenticated):
                 return False
-            if not pode_entrar(request.user, chave):
+            # Os bloqueios do portal valem aqui — menos o que o próprio bloqueio deixa aberto na
+            # web para a pessoa se resolver (os LIBERADOS dos middlewares: /cursos/ no de curso).
+            bloqueio = bloqueio_do_usuario(user)
+            if bloqueio and bloqueio['tipo'] not in carregar(chave).get('libera_no_bloqueio', ()):
+                raise PortalBloqueado(bloqueio)
+            if not pode_entrar(user, chave):
                 raise PermissionDenied(f'Você não tem acesso a {carregar(chave)["rotulo"]}.')
             return True
 

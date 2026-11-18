@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { View } from 'react-native';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,6 +30,13 @@ export default function Bloqueado() {
   const [conferindo, setConferindo] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [icone, cor] = ICONES[bloqueio?.tipo ?? ''] ?? ['lock-closed', marca[500]];
+
+  // Voltou de outra tela (ex.: mandou o comprovante do curso): confere de novo se a trava saiu.
+  useFocusEffect(
+    useCallback(() => {
+      void conferir().catch(() => undefined);
+    }, [conferir]),
+  );
 
   async function verificar() {
     setConferindo(true);
@@ -64,7 +72,11 @@ export default function Bloqueado() {
         ) : null}
       </View>
       <Animated.View entering={FadeInDown.delay(220)} className="gap-3 px-6">
-        {bloqueio?.tipo !== 'ferias' ? <Botao titulo="Resolver no portal" icone="open-outline" tamanho="lg" onPress={() => abrirNoPortal(bloqueio?.caminho_web ?? '/')} /> : null}
+        {bloqueio?.tipo === 'curso' ? (
+          <Botao titulo="Enviar comprovante do curso" icone="cloud-upload-outline" tamanho="lg" onPress={() => router.push('/modulo/cursos' as never)} />
+        ) : bloqueio?.tipo !== 'ferias' ? (
+          <Botao titulo="Resolver no portal" icone="open-outline" tamanho="lg" onPress={() => abrirNoPortal(bloqueio?.caminho_web ?? '/')} />
+        ) : null}
         <Botao titulo="Já resolvi, verificar de novo" variante="secundario" icone="refresh" onPress={verificar} carregando={conferindo} />
         <Botao titulo="Sair" variante="fantasma" onPress={() => void sair()} />
       </Animated.View>
