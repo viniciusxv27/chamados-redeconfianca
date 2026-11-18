@@ -1023,36 +1023,83 @@ def _comprovante_para_o_campo(arquivo):
     return ContentFile(paginas[0], name='comprovante.png')
 
 
-def _baixar_comprovante(url, max_bytes=10 * 1024 * 1024, timeout=15):
+def _baixar_comprovante(url, motivos=None, max_bytes=20 * 1024 * 1024, timeout=30, tentativas=2):
     """Baixa o comprovante de uma URL http/https. (bytes, mime) ou (None, None).
 
     Imagem **ou PDF**: o cliente manda os dois pelo WhatsApp, e o PDF era
     recusado aqui — chegava à IA como se fosse JPEG e nada era identificado.
     O tipo é confirmado pelo conteúdo, porque o `Content-Type` que vem do
     WhatsApp costuma ser genérico (`application/octet-stream`).
+
+    ``motivos`` (lista opcional): recebe o porquê de não ter baixado. Antes a
+    falha era muda — o gasto saía "manual", só com o texto da mensagem, e
+    ninguém sabia que a foto tinha se perdido (chamado #8232, 11/11/2026).
+    Rede instável é tentada de novo uma vez; foto grande vai até 20 MB.
     """
+    def falhou(motivo):
+        if motivos is not None:
+            motivos.append(motivo)
+        host = url.split('/')[2] if isinstance(url, str) and url.count('/') >= 2 else '?'
+        logger.warning('Comprovante do cartão não baixado (%s): %s', host, motivo)
+        return None, None
+
     if not url or not isinstance(url, str):
-        return None, None
+        return falhou('link vazio')
     if not (url.startswith('http://') or url.startswith('https://')):
-        return None, None
-    try:
-        req = Request(url, headers={'User-Agent': 'redeconfianca-cartoes/1.0'})
-        with urlopen(req, timeout=timeout) as resp:
-            ctype = (resp.headers.get('Content-Type') or '').split(';')[0].strip().lower()
-            data = resp.read(max_bytes + 1)
+        return falhou('link não é http/https')
+    ultimo = ''
+    for _ in range(max(1, tentativas)):
+        try:
+            req = Request(url, headers={'User-Agent': 'redeconfianca-cartoes/1.0'})
+            with urlopen(req, timeout=timeout) as resp:
+                ctype = (resp.headers.get('Content-Type') or '').split(';')[0].strip().lower()
+                data = resp.read(max_bytes + 1)
             if len(data) > max_bytes:
-                return None, None
+                return falhou(f'arquivo maior que {max_bytes // (1024 * 1024)} MB')
+            if not data:
+                return falhou('arquivo vazio')
             if data[:5] == b'%PDF-':
                 return data, 'application/pdf'
             if ctype and not (ctype.startswith('image/') or ctype == 'application/pdf'):
                 # Tipo genérico continua valendo: quem decide é o conteúdo, e a
                 # IA descarta o que não for imagem legível.
                 if ctype not in ('application/octet-stream', 'binary/octet-stream'):
-                    return None, None
+                    return falhou(f'o link devolveu "{ctype}", não uma imagem/PDF')
                 ctype = ''
             return data, (ctype or 'image/jpeg')
-    except (URLError, ValueError, OSError):
+        except (URLError, ValueError, OSError) as exc:
+            ultimo = str(getattr(exc, 'reason', '') or exc)[:200]
+    return falhou(f'não deu para baixar: {ultimo or "erro de rede"}')
+
+
+def _comprovante_em_base64(valor, motivos=None, max_bytes=20 * 1024 * 1024):
+    """Comprovante mandado direto no corpo (base64 ou data URI) — o que a Evolution
+    entrega quando o webhook está com "base64" ligado. (bytes, mime) ou (None, None)."""
+    import base64
+    import binascii
+
+    texto = str(valor or '').strip()
+    if not texto:
         return None, None
+    mime = ''
+    if texto.startswith('data:') and ',' in texto:
+        cabeca, texto = texto.split(',', 1)
+        mime = cabeca[5:].split(';')[0].strip().lower()
+    try:
+        data = base64.b64decode(re.sub(r'\s+', '', texto), validate=False)
+    except (binascii.Error, ValueError):
+        if motivos is not None:
+            motivos.append('base64 inválido')
+        return None, None
+    if not data or len(data) > max_bytes:
+        if motivos is not None:
+            motivos.append('base64 vazio ou maior que 20 MB')
+        return None, None
+    if data[:5] == b'%PDF-':
+        return data, 'application/pdf'
+    if not mime.startswith('image/'):
+        mime = 'image/png' if data[:8] == b'\x89PNG\r\n\x1a\n' else 'image/jpeg'
+    return data, mime
 
 
 MENSAGEM_ESCOLHA_ENVIADA = 'Mensagem enviada ao cliente'
@@ -1093,6 +1140,8 @@ def api_lancar_gasto(request):
     Auth: token estático no header. Corpo (JSON ou form):
       - telefone (ou numero): telefone do usuário responsável (obrigatório)
       - foto_url (ou foto): link do comprovante (opcional)
+      - foto_base64: o comprovante no próprio corpo (base64 ou data URI), alternativa
+        ao link; a Evolution manda assim com o webhook em base64
       - descricao: descrição da compra (opcional; obrigatório se não houver foto)
       - valor: valor do gasto (opcional; fallback se a IA não extrair)
       - parcelas: em quantas vezes (opcional; sem ele vale o que a IA ler, ou 1x)
@@ -1120,6 +1169,7 @@ def api_lancar_gasto(request):
     telefone = (payload.get('telefone') or payload.get('numero') or '').strip()
     descricao = (payload.get('descricao') or '').strip()
     foto_url = (payload.get('foto_url') or payload.get('foto') or '').strip()
+    foto_base64 = payload.get('foto_base64') or payload.get('base64') or ''
     cartao_last4 = (payload.get('cartao_last4') or '').strip()
     cartao_opcao = str(payload.get('cartao_opcao') or payload.get('opcao') or '').strip()
     valor_payload = _parse_valor(payload.get('valor'))
@@ -1127,8 +1177,8 @@ def api_lancar_gasto(request):
 
     if not telefone:
         return JsonResponse({'error': 'Informe o telefone do usuário.'}, status=400)
-    if not foto_url and not descricao:
-        return JsonResponse({'error': 'Informe foto_url ou descricao.'}, status=400)
+    if not foto_url and not foto_base64 and not descricao:
+        return JsonResponse({'error': 'Informe foto_url, foto_base64 ou descricao.'}, status=400)
 
     # Identifica o usuário pelo telefone (comparando só os dígitos).
     alvo = _norm_br_phone(telefone)
@@ -1161,10 +1211,20 @@ def api_lancar_gasto(request):
 
     # Baixa o comprovante (best-effort — não trava se falhar). Pode ser PDF.
     image_bytes, mime = None, 'image/jpeg'
-    if foto_url:
-        image_bytes, dl_mime = _baixar_comprovante(foto_url)
+    motivos_comprovante = []
+    if foto_base64:
+        image_bytes, dl_mime = _comprovante_em_base64(foto_base64, motivos_comprovante)
         if dl_mime:
             mime = dl_mime
+    if image_bytes is None and foto_url:
+        image_bytes, dl_mime = _baixar_comprovante(foto_url, motivos_comprovante)
+        if dl_mime:
+            mime = dl_mime
+    # Veio comprovante (link ou base64) e não deu para ler: o chamado avisa, e não
+    # parece um gasto "manual" de quem não mandou foto.
+    comprovante_perdido = bool((foto_url or foto_base64) and image_bytes is None)
+    motivo_comprovante = ((motivos_comprovante[-1] if motivos_comprovante else 'desconhecido')
+                          if comprovante_perdido else '')
 
     # IA (degrada graciosamente; a chave pode estar indisponível). Ela insiste
     # sozinha enquanto faltar valor, categoria ou descrição.
@@ -1190,6 +1250,12 @@ def api_lancar_gasto(request):
     descricao_final = descricao or ((ia.get('descricao') if ia_ok else '') or '')
     if aviso:
         descricao_final = (descricao_final + '\n[Valor a confirmar]').strip()
+    if comprovante_perdido:
+        descricao_final = (descricao_final + '\n[Comprovante enviado, mas não recebido pelo portal: '
+                           + motivo_comprovante + '. Mande a foto de novo ou anexe no chamado.]').strip()
+        # Sem a foto, o "estabelecimento" que a IA tira do texto é palpite (no #8232 virou "Pádua",
+        # a cidade da loja): fica em branco para ninguém tomar como dado do comprovante.
+        estabelecimento = ''
 
     foto_file = None
     if image_bytes:
@@ -1210,7 +1276,8 @@ def api_lancar_gasto(request):
         documento_estabelecimento=documento_do_vendedor(ia.get('documento')) if ia_ok else '',
         categoria_gasto=categoria_gasto, descricao=descricao_final,
         foto=foto_file, origem=('FOTO' if image_bytes else 'MANUAL'),
-        ia_dados=(ia if isinstance(ia, dict) else {}),
+        ia_dados=dict(ia if isinstance(ia, dict) else {},
+                      **({'comprovante_perdido': motivo_comprovante} if comprovante_perdido else {})),
         itens=limpar_itens(ia.get('itens')) if ia_ok else [],
         # Quem manda pela API pode dizer as parcelas; senão vale o que a IA leu (à vista quando não aparece).
         parcelas=parcelas_lidas(parcelas_payload if parcelas_payload not in (None, '') else (ia.get('parcelas') if ia_ok else 1),
@@ -1232,4 +1299,5 @@ def api_lancar_gasto(request):
         'comprovante': ia.get('anexo') or ('imagem' if image_bytes else ''),
         'categoria': categoria_gasto,
         'aviso': aviso,
+        'aviso_comprovante': ('O comprovante não foi recebido: ' + motivo_comprovante + '.') if comprovante_perdido else None,
     })

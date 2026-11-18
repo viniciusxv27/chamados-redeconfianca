@@ -57,7 +57,8 @@ _SYSTEM_PROMPT = (
 _USER_INSTRUCTION = (
     'Retorne um objeto JSON com as chaves: '
     '"estabelecimento" (string: o nome de quem VENDEU — loja, site, posto; nunca "Rede Confiança", '
-    'que é quem comprou), '
+    'que é quem comprou; "loja de X" no texto é a loja da Rede que recebeu a compra, não quem vendeu — '
+    'sem comprovante e sem o nome do vendedor no texto, deixe vazio), '
     '"documento" (CNPJ ou CPF do ESTABELECIMENTO onde a compra foi feita — o que aparece no cabeçalho '
     'do cupom/nota, perto do nome da loja, de "CNPJ", "CPF", "C.N.P.J." ou "CNPJ/CPF do emitente". '
     'NUNCA use o "CPF do consumidor"/"CPF do cliente" nem o CNPJ da operadora do cartão. '
