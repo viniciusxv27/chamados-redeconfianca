@@ -130,6 +130,11 @@ está na tela e o que está no gráfico serem sempre o mesmo recorte.
     {% endif %}
     <p class="text-[11px] text-gray-400 mt-2" data-sap-desprezivel>
         <i class="fas fa-circle-info mr-1"></i>Divergências de valor abaixo de R$ {{ limite_desprezivel|floatformat:2 }} são desconsideradas.
+        {% if serial_tirados %}
+        <span class="block sm:inline sm:ml-1" data-sap-serial-tirados>
+            {{ serial_tirados }} linha{{ serial_tirados|pluralize }} com possível erro de serial (mesmo cliente e dia nos dois lados, serial diferente) ficaram de fora — o D-1 concilia.
+        </span>
+        {% endif %}
     </p>
 </form>
 

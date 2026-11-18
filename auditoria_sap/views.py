@@ -17,7 +17,8 @@ from django.utils import timezone
 from .espelho import sincronizar, ultima_sincronizacao
 from .models import (GRUPOS_DA_TELA, LIMITE_VALOR_DESPREZIVEL, TIPO_NAO_LANCADA_NO_SAP, LinhaAuditoria,
                      SincronizacaoAuditoria, com_tipo_principal, filtro_aguardando_leitura,
-                     filtro_resolvidas_pendentes, inicio_da_ultima_leitura, q_da_tela, q_valor_desprezivel)
+                     filtro_resolvidas_pendentes, inicio_da_ultima_leitura, q_da_tela, q_serial_tirado_da_tela,
+                     q_valor_desprezivel)
 from .mysql import SapIndisponivel
 from .permissions import e_gestor as _e_gestor
 from .permissions import (CHAVE_GESTOR, gestores_escolhidos, lojas_visiveis, nome_da_loja, normalizar_loja,
@@ -155,15 +156,16 @@ def ler_filtros(request, grupo_padrao=''):
     }
 
 
-def filtrar(filtros, corte=None, pdvs=None):
+def filtrar(filtros, corte=None, pdvs=None, base=None):
     """A consulta do espelho já com os filtros da tela (e só as lojas de quem vê).
 
     Divergência de valor abaixo de R$ 1 fica de fora de tudo (``q_valor_desprezivel``).
     Cada linha leva o ``tipo_principal`` (SEM NF na frente de tudo): é ele que o
     filtro de tipo, as contagens e a lista usam.
     """
-    qs = com_tipo_principal(LinhaAuditoria.objects.filter(
-        q_da_tela('' if filtros.get('grupo', 'todos') == 'todos' else filtros['grupo'])))
+    if base is None:
+        base = q_da_tela('' if filtros.get('grupo', 'todos') == 'todos' else filtros['grupo'])
+    qs = com_tipo_principal(LinhaAuditoria.objects.filter(base))
     qs = qs.exclude(q_valor_desprezivel())
     if pdvs is not None:
         qs = qs.filter(pdv__in=pdvs)
@@ -274,8 +276,12 @@ def _contexto_comum(request, filtros, pdvs=None):
     abertas_antes = 0
     if _mes_valido(filtros['mes']) and filtros['de']:
         abertas_antes = visiveis.filter(resolvida=False, data_venda__lt=filtros['de']).count()
+    # Possível erro de serial (o D-1 concilia): saiu das listas; a tela diz quantos, nos mesmos filtros.
+    serial_tirados = filtrar({**filtros, 'grupo': 'todos', 'tipo': ''}, pdvs=pdvs,
+                             base=q_serial_tirado_da_tela()).count()
     return {
         'abertas_antes': abertas_antes,
+        'serial_tirados': serial_tirados,
         'filtros': filtros,
         'meses': [{'chave': c, 'rotulo': rotulo_mes(c), 'atual': c == atual} for c in chaves],
         'mes_atual': atual,

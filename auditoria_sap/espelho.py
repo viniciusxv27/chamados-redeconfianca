@@ -16,8 +16,8 @@ from decimal import Decimal, InvalidOperation
 from django.utils import timezone
 
 from . import mysql
-from .models import (TIPO_NAO_LANCADA_NO_SAP, TIPOS_SERIAL, LinhaAuditoria, SincronizacaoAuditoria,
-                     chave_de)
+from .models import (MARCA_POSSIVEL_SERIAL, TIPO_NAO_LANCADA_NO_SAP, TIPOS_SERIAL, LinhaAuditoria,
+                     SincronizacaoAuditoria, chave_de)
 
 logger = logging.getLogger(__name__)
 
@@ -180,6 +180,89 @@ def linhas_nao_lancadas_no_sap(brutas):
     return linhas
 
 
+TIPO_NAO_ENCONTRADA_NO_VIVOGO = 'VENDA NÃO ENCONTRADA NO VIVO GO'
+# Até quantos dias entre a venda no Vivo GO e a do SAP o par ainda é a mesma venda
+# (medido em 18/11/2026: 259 pares no mesmo dia, 60 entre 1 e 3 dias).
+DIAS_DO_PAR = 3
+SERIAL_PARECIDO = 0.7
+
+
+def _so_digitos(valor):
+    return re.sub(r'\D', '', _texto(valor))
+
+
+def _parecido(a, b):
+    from difflib import SequenceMatcher
+    return SequenceMatcher(None, a, b).ratio() if a and b else 0.0
+
+
+def _prova_do_par(vg, sap):
+    """Por que o item do Vivo GO e a venda do SAP parecem a mesma venda: (força, motivo) ou (0, '')."""
+    sku_vg, sku_sap = _so_letras_e_numeros(vg.get('SKU_VIVOGO')), _so_letras_e_numeros(sap.get('COD_MATERIAL_SAP'))
+    serial_vg, serial_sap = _so_letras_e_numeros(vg.get('SERIAL_VIVOGO')), _so_letras_e_numeros(sap.get('SERIAL_SAP'))
+    parecido = _parecido(serial_vg, serial_sap)
+    if sku_vg and sku_vg == sku_sap:
+        return 4 + parecido, 'mesmo SKU'
+    if parecido >= SERIAL_PARECIDO:
+        return 3 + parecido, f'serial parecido, {round(parecido * 100)}%'
+    # Todo chip começa com 8955: a semelhança do ICCID não diz nada, mas chip × chip do
+    # mesmo cliente no mesmo dia é o chip que saiu com o número de outro.
+    if serial_vg.startswith('8955') and serial_sap.startswith('8955'):
+        return 2 + parecido, 'chip × chip'
+    v1, v2 = _decimal(vg.get('VALOR_VIVO_GO')), _decimal(sap.get('VALOR_SAP'))
+    if v1 and v2 and abs(v1 - v2) <= max(Decimal('1'), Decimal('0.15') * max(v1, v2)):
+        return 1 + parecido, 'mesmo valor'
+    return 0, ''
+
+
+def marcar_possiveis_erros_de_serial(brutas):
+    """Marca os pares "não está no SAP" × "não está no Vivo GO" que são a mesma venda (18/11/2026).
+
+    Mesmo CPF dos dois lados, até ``DIAS_DO_PAR`` dias de distância e uma prova: o
+    mesmo SKU, o serial parecido (dígito trocado/faltando), chip × chip ou o mesmo
+    valor. Cada linha entra em um par só — a mais forte primeiro —, para uma venda
+    do SAP não esconder dois itens do Vivo GO. A marca vai na própria linha
+    (``MARCA_POSSIVEL_SERIAL``, com o outro lado do par) e a tela deixa de mostrar.
+    Devolve quantos pares.
+    """
+    for bruta in brutas:
+        bruta.pop(MARCA_POSSIVEL_SERIAL, None)
+    sap_por_cpf = {}
+    for bruta in brutas:
+        if _texto(bruta.get('TIPO_ERRO')) == TIPO_NAO_ENCONTRADA_NO_VIVOGO:
+            cpf = _so_digitos(bruta.get('DOCUMENTO_SAP'))
+            if cpf:
+                sap_por_cpf.setdefault(cpf, []).append(bruta)
+    candidatos = []
+    for i, vg in enumerate(brutas):
+        if _texto(vg.get('TIPO_ERRO')) != TIPO_NAO_LANCADA_NO_SAP:
+            continue
+        dia_vg = _data(vg.get('DATA_VENDA'))
+        for j, sap in enumerate(sap_por_cpf.get(_so_digitos(vg.get('DOCUMENTO_VIVOGO')), ())):
+            dia_sap = _data(sap.get('DATA_VENDA')) or _data(sap.get('DATA_FATURA_SAP'))
+            if not (dia_vg and dia_sap) or abs((dia_vg - dia_sap).days) > DIAS_DO_PAR:
+                continue
+            forca, motivo = _prova_do_par(vg, sap)
+            if forca:
+                candidatos.append((forca, -abs((dia_vg - dia_sap).days), id(vg), id(sap), vg, sap, motivo))
+    candidatos.sort(key=lambda c: (c[0], c[1]), reverse=True)
+    usados, pares = set(), 0
+    for _forca, _dias, id_vg, id_sap, vg, sap, motivo in candidatos:
+        if id_vg in usados or id_sap in usados:
+            continue
+        usados.update((id_vg, id_sap))
+        pares += 1
+        vg[MARCA_POSSIVEL_SERIAL] = (
+            f'POSSÍVEL ERRO DE SERIAL ({motivo}) | NO SAP: {_texto(sap.get("PRODUTO_SAP"))} | '
+            f'SERIAL SAP = {_texto(sap.get("SERIAL_SAP")) or "—"} | NF {_texto(sap.get("NUM_FAT_SAP")) or "—"} | '
+            f'CONCILIADO NO D-1')
+        sap[MARCA_POSSIVEL_SERIAL] = (
+            f'POSSÍVEL ERRO DE SERIAL ({motivo}) | NO VIVO GO: VENDA {_texto(vg.get("ID_VENDA")) or "—"} | '
+            f'{_texto(vg.get("PRODUTO_VIVOGO"))} | SERIAL VIVO GO = {_texto(vg.get("SERIAL_VIVOGO")) or "—"} | '
+            f'CONCILIADO NO D-1')
+    return pares
+
+
 def _mudou(linha, valores):
     for campo, valor in valores.items():
         if getattr(linha, campo) != valor:
@@ -206,6 +289,10 @@ def sincronizar(por=None):
     except Exception:                                 # noqa: BLE001 — a auditoria já foi lida
         leu_nao_lancadas = False
         logger.warning('Auditoria SAP: vendas do Vivo GO sem SAP não lidas agora', exc_info=True)
+    try:
+        marcar_possiveis_erros_de_serial(brutas)
+    except Exception:                                 # noqa: BLE001 — sem a marca, a linha só aparece na tela
+        logger.warning('Auditoria SAP: possíveis erros de serial não marcados agora', exc_info=True)
 
     agora = timezone.now()
     existentes = {linha.chave: linha for linha in LinhaAuditoria.objects.all()}
@@ -221,6 +308,10 @@ def sincronizar(por=None):
         vistas.add(chave)
         valores = valores_da_linha(bruta)
         linha = existentes.get(chave)
+        if (not leu_nao_lancadas and linha is not None and MARCA_POSSIVEL_SERIAL in (linha.dados or {})
+                and MARCA_POSSIVEL_SERIAL not in valores['dados']):
+            # Sem o lado do Vivo GO nesta leitura não dá para refazer o par: fica o de antes.
+            valores['dados'][MARCA_POSSIVEL_SERIAL] = linha.dados[MARCA_POSSIVEL_SERIAL]
         if linha is None:
             novas.append(LinhaAuditoria(chave=chave, visto_em=agora, **valores))
             continue

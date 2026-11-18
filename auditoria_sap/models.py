@@ -221,19 +221,39 @@ def com_tipo_principal(qs):
     return qs.annotate(tipo_principal=tipo_principal())
 
 
+# Possível erro de serial (18/11/2026): o item do Vivo GO que "não está no SAP" e a
+# venda do SAP que "não está no Vivo GO" são, muitas vezes, a mesma venda com o serial
+# digitado errado — mesmo cliente, mesmo dia, serial com um dígito trocado. A view só
+# casa isso quando o SKU também bate (CPF + SKU + DATA); com o SKU diferente
+# (TGSA609B2000 × TGSA609B4000) os dois lados ficavam nas listas. Quem concilia serial
+# é o D-1, então o par sai da Visão SAP. O espelho guarda a marca em ``dados`` com o
+# outro lado do par (auditoria_sap/espelho.py, ``marcar_possiveis_erros_de_serial``).
+MARCA_POSSIVEL_SERIAL = 'POSSIVEL_ERRO_SERIAL'
+
+
+def q_possivel_erro_serial():
+    return models.Q(dados__has_key=MARCA_POSSIVEL_SERIAL)
+
+
+def q_serial_tirado_da_tela():
+    """O que saiu da tela por ser possível erro de serial (sem NF continua: a nota é outro problema)."""
+    return models.Q(tipo_erro__in=TIPOS_DA_TELA) & q_possivel_erro_serial() & ~q_sem_nf()
+
+
 def q_da_tela(grupo=''):
     """Só os tipos que a Visão SAP mostra; com ``grupo``, só os daquela aba.
 
     A aba vai pelo erro principal: linha sem NF cai em "Sem NF" mesmo que a view
     a mande como serial errado ou venda não encontrada — e sai da outra aba.
+    Possível erro de serial não aparece (é do D-1), a não ser que esteja sem NF.
     """
-    tela = models.Q(tipo_erro__in=TIPOS_DA_TELA)
+    tela = models.Q(tipo_erro__in=TIPOS_DA_TELA) & ~(q_possivel_erro_serial() & ~q_sem_nf())
     tipos = dict((c, t) for c, _r, t in GRUPOS_DA_TELA).get(grupo)
     if tipos is None:
         return tela
     if grupo == 'sem_nf':
-        return tela & q_sem_nf()
-    return models.Q(tipo_erro__in=tipos) & ~q_sem_nf()
+        return models.Q(tipo_erro__in=TIPOS_DA_TELA) & q_sem_nf()
+    return models.Q(tipo_erro__in=tipos) & ~q_sem_nf() & ~q_possivel_erro_serial()
 
 
 def q_valor_desprezivel():
