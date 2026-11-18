@@ -2982,6 +2982,12 @@ def _tipo_do_grupo(grupo, documento=None, video=None, atual=None):
     return ConteudoConectar.Tipo.POP
 
 
+def _mes_inteiro(dia):
+    """(primeiro, último) dia do mês de ``dia``."""
+    import calendar
+    return dia.replace(day=1), dia.replace(day=calendar.monthrange(dia.year, dia.month)[1])
+
+
 @impulso_member_required
 def conteudo_create(request):
     """Gestor cria curso ou vídeo/POP; a equipe sobe vídeo/POP."""
@@ -3015,16 +3021,32 @@ def conteudo_create(request):
                 return redirect('impulso:conteudo_create')
         tipo = _tipo_do_grupo(grupo, documento, video)
 
+        inicio = parse_date(request.POST.get('inicio') or '') or None
+        fim = parse_date(request.POST.get('fim') or '') or None
+        if not gestor:
+            # Quem sobe para si mesmo: sai obrigatório, exigindo entrega e com o mês
+            # inteiro de período — sem início e fim o vídeo/POP não pontuava em mês
+            # nenhum (impulso/scoring.py). O próprio material é a entrega, então
+            # precisa vir pelo menos um: documento, vídeo ou link.
+            if not (documento or video or extras or (request.POST.get('url') or '').strip()):
+                messages.error(request, 'Anexe o documento, o vídeo ou informe o link do que você fez.')
+                return redirect('impulso:conteudo_create')
+            mes_inicio, mes_fim = _mes_inteiro(timezone.localdate())
+            inicio, fim = inicio or mes_inicio, fim or mes_fim
+            if fim < inicio:
+                messages.error(request, 'O fim do período está antes do início.')
+                return redirect('impulso:conteudo_create')
+
         conteudo = ConteudoConectar.objects.create(
             tipo=tipo, titulo=titulo,
             descricao=(request.POST.get('descricao') or '').strip(),
             url=(request.POST.get('url') or '').strip(),
             arquivo=documento,
             video=video,
-            obrigatorio=bool(request.POST.get('obrigatorio')) if gestor else False,
-            exige_entrega=bool(request.POST.get('exige_entrega')) if gestor else False,
-            inicio=parse_date(request.POST.get('inicio') or '') or None,
-            fim=parse_date(request.POST.get('fim') or '') or None,
+            obrigatorio=bool(request.POST.get('obrigatorio')) if gestor else True,
+            exige_entrega=bool(request.POST.get('exige_entrega')) if gestor else True,
+            inicio=inicio,
+            fim=fim,
             criado_por=request.user,
             criado_por_equipe=not gestor,
         )
@@ -3050,9 +3072,13 @@ def conteudo_create(request):
             messages.success(request, 'Enviado! Sua entrega está aguardando a conferência do gestor.')
         return redirect('impulso:conteudo_detail', conteudo_id=conteudo.id)
 
+    periodo_inicio, periodo_fim = _mes_inteiro(timezone.localdate())
     context = {
         'is_gestor': gestor,
         'campos_do_gestor': gestor,
+        # O período já vem com o mês inteiro atual (dá para mudar).
+        'periodo_inicio': periodo_inicio,
+        'periodo_fim': periodo_fim,
         'grupos': ConteudoConectar.GRUPOS,
         'colaboradores': _colaboradores_para_atribuir() if gestor else None,
         'active_tab': 'conectar',
