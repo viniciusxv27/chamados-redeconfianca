@@ -2928,18 +2928,9 @@ def _separar_anexos(enviados, documento_unico=None, video_unico=None):
     return documento, video, extras
 
 
-def _entregar_o_que_subiu(request, conteudo, extras):
-    """Marca como entregue o que a pessoa acabou de subir para si mesma.
-
-    O material do conteúdo é a própria entrega — não é copiado para outro
-    arquivo. O que sobrou dos dois campos do modelo entra como item.
-    """
-    conclusao, _ = ConclusaoConteudo.objects.get_or_create(
-        conteudo=conteudo, user=request.user)
-    for anexo in extras:
-        EntregaConteudo.objects.create(
-            conclusao=conclusao, arquivo=anexo, titulo=(anexo.name or '')[:200])
-
+def _marcar_entregue(conteudo, user):
+    """A conclusão de ``user`` no conteúdo, entregue e na fila de conferência."""
+    conclusao, _ = ConclusaoConteudo.objects.get_or_create(conteudo=conteudo, user=user)
     conclusao.concluido = True
     conclusao.concluido_em = timezone.now()
     conclusao.aprovacao = ConclusaoConteudo.Aprovacao.PENDENTE
@@ -2947,13 +2938,41 @@ def _entregar_o_que_subiu(request, conteudo, extras):
     conclusao.decidida_em = None
     conclusao.observacao = ''
     conclusao.save()
+    return conclusao
 
+
+def _entregar_o_que_subiu(request, conteudo, extras, parceiros=()):
+    """Marca como entregue o que a pessoa acabou de subir para si mesma.
+
+    O material do conteúdo é a própria entrega — não é copiado para outro
+    arquivo. O que sobrou dos dois campos do modelo entra como item.
+
+    ``parceiros``: quem fez junto (19/11/2026). Cada um ganha a própria
+    conclusão com o mesmo material, e o gestor confere um por um.
+    """
+    conclusao = _marcar_entregue(conteudo, request.user)
+    for anexo in extras:
+        EntregaConteudo.objects.create(
+            conclusao=conclusao, arquivo=anexo, titulo=(anexo.name or '')[:200])
+    for parceiro in parceiros:
+        _marcar_entregue(conteudo, parceiro)
+
+    quem = request.user.get_full_name() or request.user.email
+    if parceiros:
+        _notify(list(parceiros), 'Você foi chamado para um conteúdo do Conectar',
+                f'{quem} incluiu você em "{conteudo.titulo}", feito em conjunto. '
+                f'A entrega já está na fila de conferência do gestor.',
+                f'/impulso/conectar/{conteudo.id}/')
     try:
-        gestores = get_gestores_do_setor(request.user)
-        if gestores.exists():
-            _notify(list(gestores), 'Entrega aguardando conferência',
-                    f'{request.user.get_full_name() or request.user.email} subiu '
-                    f'"{conteudo.titulo}" e está esperando a sua conferência.',
+        avisar = {}
+        for pessoa in [request.user, *parceiros]:
+            for g in get_gestores_do_setor(pessoa):
+                avisar[g.id] = g
+        if avisar:
+            junto = (f' (junto com {", ".join(p.get_full_name() or p.email for p in parceiros)})'
+                     if parceiros else '')
+            _notify(list(avisar.values()), 'Entrega aguardando conferência',
+                    f'{quem} subiu "{conteudo.titulo}"{junto} e está esperando a sua conferência.',
                     '/impulso/conectar/conferir/')
     except Exception:                                       # aviso nunca derruba
         pass
@@ -3074,9 +3093,13 @@ def conteudo_create(request):
             # ele e a entrega entra na fila de conferência na mesma hora. Antes
             # ele subia e ainda precisava abrir o conteúdo para "marcar como
             # concluído" — duas etapas para a mesma coisa.
-            conteudo.obrigatorio_para.set([request.user])
-            _entregar_o_que_subiu(request, conteudo, extras)
-            messages.success(request, 'Enviado! Sua entrega está aguardando a conferência do gestor.')
+            # Quem fez junto (19/11/2026): qualquer pessoa do Impulso, como na parceria da meta.
+            parceiros = list(_colegas_para_parceria(request.user).filter(
+                id__in=[i for i in request.POST.getlist('parceiros') if str(i).isdigit()]))
+            conteudo.obrigatorio_para.set([request.user, *parceiros])
+            _entregar_o_que_subiu(request, conteudo, extras, parceiros)
+            messages.success(request, 'Enviado! Sua entrega está aguardando a conferência do gestor.'
+                             + (f' {len(parceiros)} pessoa(s) entraram junto com você.' if parceiros else ''))
         return redirect('impulso:conteudo_detail', conteudo_id=conteudo.id)
 
     periodo_inicio, periodo_fim = _mes_inteiro(timezone.localdate())
@@ -3088,6 +3111,8 @@ def conteudo_create(request):
         'periodo_fim': periodo_fim,
         'grupos': ConteudoConectar.GRUPOS,
         'colaboradores': _colaboradores_para_atribuir() if gestor else None,
+        # Quem sobe para si chama quem fez junto (qualquer pessoa do Impulso).
+        'colegas_parceria': None if gestor else _colegas_para_parceria(request.user),
         'active_tab': 'conectar',
     }
     return render(request, 'impulso/conteudo_form.html', context)

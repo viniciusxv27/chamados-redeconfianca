@@ -186,5 +186,31 @@ c = ConteudoConectar.objects.filter(titulo='ZZ do gestor').first()
 t('gestor continua escolhendo (sem marcar = não obrigatório, sem entrega)',
   c is not None and not c.obrigatorio and not c.exige_entrega, c and (c.obrigatorio, c.exige_entrega))
 
+print('\n== CHAMAR QUEM FEZ JUNTO (19/11/2026) ==')
+from core.models import Notification
+outra_loja = Sector.objects.create(name='ZZ Outra Loja Proprio')
+bia = User.objects.create_user(username='zzp.bia', email='zzp.bia@exemplo-teste.local', password='S3nha!teste',
+                               first_name='ZZP', last_name='Bia', sector=outra_loja)
+bia.communication_groups.add(adm)
+fora = User.objects.create_user(username='zzp.fora', email='zzp.fora@exemplo-teste.local', password='S3nha!teste',
+                                first_name='ZZP', last_name='Fora', sector=loja)
+html = c_ana.get('/impulso/conectar/novo/').content.decode()
+t('a tela oferece chamar quem fez junto', 'data-seletor="parceiros"' in html and 'ZZP Bia' in html)
+t('de outro setor sim, de fora do Impulso não', 'ZZ Outra Loja Proprio' in html and 'ZZP Fora' not in html)
+c_ana.post('/impulso/conectar/novo/', {
+    'grupo': 'POP_VIDEO', 'titulo': 'ZZ POP feito em dupla', 'arquivo': arquivo('dupla.pdf'),
+    'parceiros': [str(bia.id), str(fora.id)]})
+c = ConteudoConectar.objects.get(titulo='ZZ POP feito em dupla')
+t('quem fez junto entra no conteúdo (quem está fora do Impulso não)',
+  set(c.obrigatorio_para.values_list('id', flat=True)) == {ana.id, bia.id})
+cb = ConclusaoConteudo.objects.filter(conteudo=c, user=bia).first()
+t('ela ganha a própria entrega, na fila de conferência', cb is not None and cb.concluido and not cb.aprovada
+  and cb.aprovacao == ConclusaoConteudo.Aprovacao.PENDENTE)
+t('com o mesmo material (conta como entrega)', cb is not None and cb.tem_entrega)
+t('e é avisada', Notification.objects.filter(user=bia, title__icontains='Conectar').exists())
+t('quem está fora não ganha nada', not ConclusaoConteudo.objects.filter(conteudo=c, user=fora).exists())
+c_bia = Client(); c_bia.force_login(bia)
+t('ela abre o conteúdo', c_bia.get(f'/impulso/conectar/{c.id}/').status_code == 200)
+
 print(f'\n{ok} OK / {fail} falhas')
 sys.exit(1 if fail else 0)

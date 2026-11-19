@@ -68,6 +68,9 @@
                 <label class="block text-sm font-medium text-gray-700 mb-1">Outros arquivos (opcional)</label>
                 <input type="file" name="arquivos" multiple class="w-full text-sm">
             </div>
+            {% if colegas_parceria %}
+            {% include 'impulso/_seletor_pessoas.html' with nome='parceiros' pessoas=colegas_parceria escolhidos=vazio rotulo='Chamar quem fez junto (opcional)' mostrar_setor=True ajuda='Qualquer pessoa do Impulso, de qualquer setor (o seu vem primeiro). Cada uma entra com a mesma entrega, e o gestor confere uma por uma.' %}
+            {% endif %}
             <div class="border-t border-gray-100 pt-4 space-y-3">
                 <div class="flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-700">
                     <label class="flex items-center gap-2 opacity-80">

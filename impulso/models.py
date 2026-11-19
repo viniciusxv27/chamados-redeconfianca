@@ -1196,7 +1196,11 @@ class ConclusaoConteudo(models.Model):
 
     def _material_proprio(self):
         conteudo = self.conteudo
-        if not (conteudo.criado_por_equipe and conteudo.criado_por_id == self.user_id):
+        if not conteudo.criado_por_equipe:
+            return []
+        # Quem fez junto (chamado por quem subiu) entrega o mesmo material.
+        if conteudo.criado_por_id != self.user_id and not any(
+                u.id == self.user_id for u in conteudo.obrigatorio_para.all()):
             return []
         itens = []
         # Rótulo neutro: a mesma lista é lida por quem entregou e por quem
