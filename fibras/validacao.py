@@ -440,9 +440,12 @@ def executar(param: dict | None = None, *, by_user=None, origem='manual', notifi
         campos = ['cruzamento', 'adabas', 'protocolo_tratado', 'formato_protocolo', 'status_cruzamento',
                   'assertividade', 'ordem_vinculada', 'metodo_cruzamento', 'motivo_cruzamento',
                   'observacao_cruzamento', 'conferencia_endereco', 'detalhe_endereco', 'etapa_instalacao',
-                  'last_planilha_at', 'ordem_planilha', 'status_planilha_raw', 'sla_agenda', 'motivo_planilha',
-                  'data_agendamento', 'status']
+                  'last_planilha_at', 'ordem_planilha', 'status_planilha_raw', 'sla_agenda', 'motivo_planilha']
+        # Status e agendamento NÃO vão no bulk_update geral (19/11/2026): ele regravava em toda venda o valor
+        # lido no começo, e o que alguém salvou na lista enquanto a base atualizava voltava atrás. Os dois
+        # são gravados depois, só onde mudou e com a trava "à mão" conferida na hora de gravar.
         mudancas = []
+        agendas = []
         vinculos = {}
         for i, r in rg.iterrows():
             f = fibras.get(linhas.at[i, 'linha_go'])
@@ -471,16 +474,19 @@ def executar(param: dict | None = None, *, by_user=None, origem='manual', notifi
                 f.status_planilha_raw = e.status_instalacao[:120]
                 f.sla_agenda = e.sla_agenda[:120]
                 f.motivo_planilha = e.motivo[:255]
-                f.data_agendamento = e.data_agenda
+                # Agendamento posto à mão na lista manda nele (19/11/2026), como o status.
+                if not f.agendamento_manual and f.data_agendamento != e.data_agenda:
+                    f.data_agendamento = e.data_agenda
+                    agendas.append(f)
                 novo = _map_planilha_status(e.status_instalacao)
                 # Parecer manual manda: a Esteira atualiza o resto, mas não troca o status (16/11/2026).
                 if novo and novo != f.status and not f.status_manual:
-                    mudancas.append((f, f.status, novo, e.status_instalacao))
-                    f.status = novo
+                    mudancas.append((f, novo, e.status_instalacao))
         Fibra.objects.bulk_update(list(fibras.values()), campos, batch_size=500)
-        for f, antigo, novo, bruto in mudancas:
-            FibraStatusHistory.objects.create(fibra=f, status_anterior=antigo, status_novo=novo,
-                                              retorno=f'Esteira Vivo: {bruto[:80]}', alterado_por=by_user)
+        if agendas:
+            # O filtro entra no UPDATE: quem marcou "à mão" depois da leitura acima não é sobrescrito.
+            Fibra.objects.filter(agendamento_manual=False).bulk_update(agendas, ['data_agendamento'], batch_size=500)
+        mudancas = _gravar_status_da_esteira(mudancas, by_user)
 
         # Esteira: escopo e vínculo
         EsteiraVenda.objects.filter(importacao=c['imp']).update(no_escopo=False, fibra=None)
@@ -501,9 +507,35 @@ def executar(param: dict | None = None, *, by_user=None, origem='manual', notifi
                 obj.save(update_fields=['status_raw', 'last_seen_at'])
 
     if notificar:
-        for f, antigo, novo, _ in mudancas:
+        for f, antigo, novo in mudancas:
             _notify_vendor(f, antigo, novo)
     return cruz
+
+
+def _gravar_status_da_esteira(mudancas, by_user):
+    """Grava o status que a Esteira deu, conferindo a venda NA HORA (trava a linha até o fim da importação).
+
+    Quem virou "à mão" ou já está no status novo desde a leitura do começo fica de fora — sem gravar e
+    sem histórico. Devolve [(fibra, antigo, novo)] do que de fato mudou.
+    """
+    if not mudancas:
+        return []
+    atuais = dict(Fibra.objects.select_for_update().filter(pk__in=[f.pk for f, _, _ in mudancas], status_manual=False)
+                  .values_list('pk', 'status'))
+    feitas, por_status = [], {}
+    for f, novo, bruto in mudancas:
+        antigo = atuais.get(f.pk)
+        if antigo is None or antigo == novo:
+            continue
+        f.status = novo
+        por_status.setdefault(novo, []).append(f.pk)
+        feitas.append((f, antigo, novo, bruto))
+    for novo, ids in por_status.items():
+        Fibra.objects.filter(pk__in=ids).update(status=novo)
+    FibraStatusHistory.objects.bulk_create([
+        FibraStatusHistory(fibra=f, status_anterior=antigo, status_novo=novo, retorno=f'Esteira Vivo: {bruto[:80]}',
+                           alterado_por=by_user) for f, antigo, novo, bruto in feitas])
+    return [(f, antigo, novo) for f, antigo, novo, _ in feitas]
 
 
 def ultimo_cruzamento():

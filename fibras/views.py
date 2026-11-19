@@ -12,7 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .models import Fibra, FibraIncidente, FibraChat, FibraChatMessage, FibraStatusHistory
+from .models import Fibra, FibraIncidente, FibraChat, FibraChatMessage
 from .permissoes import exige, fibras_visiveis, pode
 from .services import change_status, import_planilha_xlsx, sync_fibras
 
@@ -265,6 +265,8 @@ def detail(request, pk: int):
     historico = fibra.status_history.select_related('alterado_por')[:50]
     return render(request, 'fibras/detail.html', {
         'fibra': fibra,
+        # O que a Esteira diz do agendamento, para o aviso de agendamento à mão.
+        'esteira_atual': fibra.esteira_atual() if fibra.agendamento_manual else None,
         'incidentes': incidentes,
         'historico': historico,
         'status_choices': Fibra.STATUS_CHOICES,
@@ -277,7 +279,9 @@ def detail(request, pk: int):
 def change_status_view(request, pk: int):
     fibra = get_object_or_404(fibras_visiveis(request.user), pk=pk)
     new_status = (request.POST.get('status') or '').strip()
-    retorno = (request.POST.get('retorno') or '').strip()
+    # O campo vem preenchido com o retorno atual: o que estiver nele (até vazio) é o que fica.
+    retorno = request.POST.get('retorno')
+    retorno = retorno.strip() if retorno is not None else None
     try:
         change_status(fibra, new_status, changed_by=request.user, retorno=retorno)
         messages.success(request, 'Status atualizado.')
@@ -290,10 +294,15 @@ def change_status_view(request, pk: int):
 @exige('status.alterar')
 @require_POST
 def seguir_esteira_view(request, pk: int):
-    """Desliga o parecer manual: a venda volta a seguir a Esteira Vivo."""
-    from .services import seguir_esteira
+    """Desliga o que foi decidido à mão: a venda volta a seguir a Esteira Vivo.
+
+    ``campo`` = status | agendamento; sem ele, os dois.
+    """
+    from .services import SEGUIR_CAMPOS, seguir_esteira
     fibra = get_object_or_404(fibras_visiveis(request.user), pk=pk)
-    novo = seguir_esteira(fibra, changed_by=request.user)
+    campo = (request.POST.get('campo') or '').strip()
+    campos = (campo,) if campo in SEGUIR_CAMPOS else SEGUIR_CAMPOS
+    novo = seguir_esteira(fibra, changed_by=request.user, campos=campos)
     messages.success(request, 'A venda voltou a seguir a Esteira' + (f' (status: {fibra.get_status_display()}).' if novo else '.'))
     return redirect('fibras:detail', pk=pk)
 
@@ -302,15 +311,15 @@ def seguir_esteira_view(request, pk: int):
 @exige('status.alterar')
 @require_POST
 def change_status_ajax(request, pk: int):
-    """Endpoint usado pelo drag&drop do Kanban — retorna JSON.
+    """Status pelo arrastar do Kanban e pelo seletor da Lista — retorna JSON.
 
-    Mantido para compatibilidade, porém o status passa a ser ditado pela
-    planilha diária: por isso só a Ilha (Supervisor/Admin) pode mudar manualmente.
+    Grava na hora e vira status "à mão": a importação da Esteira e a sincronização do Vivo GO
+    não trocam mais (até "Voltar a seguir a Esteira" no detalhe). O retorno da Ilha fica como está.
     """
     fibra = get_object_or_404(fibras_visiveis(request.user), pk=pk)
     new_status = (request.POST.get('status') or '').strip()
     try:
-        change_status(fibra, new_status, changed_by=request.user, retorno='')
+        change_status(fibra, new_status, changed_by=request.user)
     except ValueError as e:
         return JsonResponse({'ok': False, 'error': str(e)}, status=400)
     return JsonResponse({
@@ -318,6 +327,7 @@ def change_status_ajax(request, pk: int):
         'pk': fibra.pk,
         'status': fibra.status,
         'status_label': fibra.get_status_display(),
+        'status_manual': fibra.status_manual,
     })
 
 
@@ -327,10 +337,12 @@ def change_status_ajax(request, pk: int):
 def change_agendamento_ajax(request, pk: int):
     """Edita a data de agendamento na própria linha da lista (mesma permissão de mudar o status).
 
-    Vazio limpa a data. Fica no histórico da venda; a próxima importação/cruzamento da Esteira
-    volta a gravar a DATA_AGENDA dela por cima.
+    Vazio limpa a data. Fica no histórico da venda e vira agendamento "à mão": a importação da
+    Esteira não grava mais a DATA_AGENDA por cima (19/11/2026; antes gravava e a data se perdia).
     """
     from datetime import date as _date
+
+    from .services import mudar_agendamento
     fibra = get_object_or_404(fibras_visiveis(request.user), pk=pk)
     bruto = (request.POST.get('data_agendamento') or '').strip()
     nova = None
@@ -341,19 +353,13 @@ def change_agendamento_ajax(request, pk: int):
             return JsonResponse({'ok': False, 'error': 'Data de agendamento inválida.'}, status=400)
         if not (2000 <= nova.year <= 2100):
             return JsonResponse({'ok': False, 'error': 'Data de agendamento fora do intervalo aceito.'}, status=400)
-    antiga = fibra.data_agendamento
-    if nova != antiga:
-        fibra.data_agendamento = nova
-        fibra.save(update_fields=['data_agendamento', 'last_synced_at'])
-        fmt = lambda d: d.strftime('%d/%m/%Y') if d else 'sem data'  # noqa: E731
-        FibraStatusHistory.objects.create(
-            fibra=fibra, status_anterior=fibra.status, status_novo=fibra.status, alterado_por=request.user,
-            retorno=f'Agendamento alterado na lista: {fmt(antiga)} para {fmt(nova)}')
+    mudar_agendamento(fibra, nova, changed_by=request.user)
     return JsonResponse({
         'ok': True,
         'pk': fibra.pk,
         'data_agendamento': nova.isoformat() if nova else '',
         'data_agendamento_fmt': nova.strftime('%d/%m/%Y') if nova else '',
+        'agendamento_manual': fibra.agendamento_manual,
     })
 
 

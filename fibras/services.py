@@ -202,9 +202,11 @@ def _upsert_fibra_from_mysql_row(r: dict) -> tuple[Optional[Fibra], bool]:
     if existing:
         for field, value in common.items():
             setattr(existing, field, value)
-        if cancelada and existing.status != Fibra.STATUS_CANCELADO and not existing.status_manual:
-            existing.status = Fibra.STATUS_CANCELADO
-        existing.save()
+        # Só os campos do Vivo GO: um save() inteiro devolvia status/agendamento lidos antes (19/11/2026).
+        existing.save(update_fields=list(common) + ['last_synced_at'])
+        if cancelada:
+            _cancelar_sem_mao([existing.pk])
+            existing.refresh_from_db(fields=['status'])
         return existing, False
 
     initial_status = Fibra.STATUS_CANCELADO if cancelada else Fibra.STATUS_AGENDADO
@@ -237,7 +239,7 @@ def sync_fibras(*, year: Optional[int] = None, month: Optional[int] = None) -> d
         if numero:
             linhas[numero] = r
     existentes = {f.numero_da_venda: f for f in Fibra.objects.filter(numero_da_venda__in=list(linhas))}
-    novas, alteradas = [], []
+    novas, alteradas, canceladas = [], [], []
     campos = list(_campos_do_mysql({}).keys())
     for numero, r in linhas.items():
         comum = _campos_do_mysql(r)
@@ -253,18 +255,32 @@ def sync_fibras(*, year: Optional[int] = None, month: Optional[int] = None) -> d
                 setattr(f, campo, valor)
                 mudou = True
         if cancelada and f.status != Fibra.STATUS_CANCELADO and not f.status_manual:
-            f.status = Fibra.STATUS_CANCELADO
-            mudou = True
+            canceladas.append(f.pk)
         if mudou:
             alteradas.append(f)
     Fibra.objects.bulk_create(novas, batch_size=500)
     if alteradas:
-        Fibra.objects.bulk_update(alteradas, campos + ['status'], batch_size=500)
+        # Só os campos do Vivo GO. O status NÃO vai junto: o lido lá em cima pode já estar velho (alguém
+        # mudou na lista enquanto a base atualizava) e o bulk_update o gravaria de volta (19/11/2026).
+        Fibra.objects.bulk_update(alteradas, campos, batch_size=500)
+    _cancelar_sem_mao(canceladas)
     if existentes:
         # O save() de antes carimbava last_synced_at em toda venda vista; mantém.
         Fibra.objects.filter(numero_da_venda__in=list(existentes)).update(last_synced_at=timezone.now())
     created, updated = len(novas), len(linhas) - len(novas)
     return {'created': created, 'updated': updated, 'total_in_source': len(raw)}
+
+
+def _cancelar_sem_mao(ids) -> int:
+    """Cancelado vindo do Vivo GO (Venda_ativa='0'), só onde ninguém decidiu o status à mão.
+
+    A trava vale na hora de gravar (WHERE status_manual = false), não na leitura feita antes.
+    """
+    ids = list(ids)
+    if not ids:
+        return 0
+    return (Fibra.objects.filter(pk__in=ids, status_manual=False).exclude(status=Fibra.STATUS_CANCELADO)
+            .update(status=Fibra.STATUS_CANCELADO))
 
 
 def meses_entre(ini: date, fim: date) -> list[tuple[int, int]]:
@@ -452,12 +468,13 @@ def _prune_stale_fibras(*, import_ts) -> int:
 # ---------------------------------------------------------------------------
 
 @invalida_quadro
-def change_status(fibra: Fibra, new_status: str, *, changed_by, retorno: str = '') -> None:
+def change_status(fibra: Fibra, new_status: str, *, changed_by, retorno: Optional[str] = None) -> None:
+    """Status mudado por gente (lista, kanban, detalhe). ``retorno=None`` mantém o retorno; texto (até vazio) grava."""
     if new_status not in dict(Fibra.STATUS_CHOICES):
         raise ValueError(f"Status inválido: {new_status}")
     old = fibra.status
     fibra.status = new_status
-    if retorno:
+    if retorno is not None:
         fibra.retorno_myrella = retorno
     # Mudança feita por gente vira parecer manual: a próxima Esteira não passa por cima.
     fibra.status_manual = True
@@ -470,30 +487,72 @@ def change_status(fibra: Fibra, new_status: str, *, changed_by, retorno: str = '
         fibra=fibra,
         status_anterior=old,
         status_novo=new_status,
-        retorno=retorno,
+        retorno=retorno or '',
         alterado_por=changed_by,
     )
 
     _notify_vendor(fibra, old, new_status)
 
 
-def seguir_esteira(fibra: Fibra, *, changed_by) -> str | None:
-    """Desliga o parecer manual: a venda volta a seguir a Esteira (já com o status que ela diz).
+@invalida_quadro
+def mudar_agendamento(fibra: Fibra, nova: Optional[date], *, changed_by) -> bool:
+    """Data de agendamento posta à mão (lista). Vira agendamento manual: a Esteira não grava mais por cima.
 
-    Devolve o status novo (ou None se a Esteira não diz nada e o status fica como está).
+    Devolve True se mudou alguma coisa.
     """
-    novo = _map_planilha_status(fibra.status_planilha_raw) if fibra.status_planilha_raw else None
+    antiga = fibra.data_agendamento
+    if nova == antiga and fibra.agendamento_manual:
+        return False
+    fibra.data_agendamento = nova
+    fibra.agendamento_manual = True
+    fibra.agendamento_manual_em = timezone.now()
+    fibra.agendamento_manual_por = changed_by if getattr(changed_by, 'pk', None) else None
+    fibra.save(update_fields=['data_agendamento', 'agendamento_manual', 'agendamento_manual_em',
+                              'agendamento_manual_por', 'last_synced_at'])
+    fmt = lambda d: d.strftime('%d/%m/%Y') if d else 'sem data'  # noqa: E731
+    FibraStatusHistory.objects.create(
+        fibra=fibra, status_anterior=fibra.status, status_novo=fibra.status, alterado_por=changed_by,
+        retorno=f'Agendamento alterado na lista: {fmt(antiga)} para {fmt(nova)}')
+    return True
+
+
+SEGUIR_CAMPOS = ('status', 'agendamento')
+
+
+@invalida_quadro
+def seguir_esteira(fibra: Fibra, *, changed_by, campos=SEGUIR_CAMPOS) -> str | None:
+    """Desliga o que foi decidido à mão (status e/ou agendamento): volta a valer o que a Esteira diz.
+
+    Devolve o status novo (ou None se o status não mudou).
+    """
+    novo_status = None
+    gravar = []
+    partes = []
     antigo = fibra.status
-    fibra.status_manual, fibra.status_manual_em, fibra.status_manual_por = False, None, None
-    campos = ['status_manual', 'status_manual_em', 'status_manual_por']
-    if novo and novo != antigo:
-        fibra.status = novo
-        campos.append('status')
-    fibra.save(update_fields=campos)
+    if 'status' in campos and fibra.status_manual:
+        novo = _map_planilha_status(fibra.status_planilha_raw) if fibra.status_planilha_raw else None
+        fibra.status_manual, fibra.status_manual_em, fibra.status_manual_por = False, None, None
+        gravar += ['status_manual', 'status_manual_em', 'status_manual_por']
+        if novo and novo != antigo:
+            fibra.status = novo_status = novo
+            gravar.append('status')
+        partes.append(f'status{": " + fibra.status_planilha_raw[:60] if fibra.status_planilha_raw else ""}')
+    if 'agendamento' in campos and fibra.agendamento_manual:
+        linha = fibra.esteira_atual()
+        fibra.agendamento_manual, fibra.agendamento_manual_em, fibra.agendamento_manual_por = False, None, None
+        gravar += ['agendamento_manual', 'agendamento_manual_em', 'agendamento_manual_por']
+        if linha is not None:
+            fibra.data_agendamento = linha.data_agenda
+            gravar.append('data_agendamento')
+        data = fibra.data_agendamento.strftime('%d/%m/%Y') if fibra.data_agendamento else 'sem data'
+        partes.append(f'agendamento: {data}' if linha is not None else 'agendamento')
+    if not gravar:
+        return None
+    fibra.save(update_fields=gravar)
     FibraStatusHistory.objects.create(
         fibra=fibra, status_anterior=antigo, status_novo=fibra.status, alterado_por=changed_by,
-        retorno=f'Voltou a seguir a Esteira Vivo{": " + fibra.status_planilha_raw[:60] if fibra.status_planilha_raw else ""}')
-    return novo
+        retorno='Voltou a seguir a Esteira Vivo (' + '; '.join(partes) + ')')
+    return novo_status
 
 
 def _notify_vendor(fibra: Fibra, old_status: str, new_status: str) -> None:

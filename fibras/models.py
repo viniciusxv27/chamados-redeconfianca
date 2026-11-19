@@ -59,6 +59,12 @@ class Fibra(models.Model):
                                           blank=True, related_name='+', verbose_name='Status manual por')
     data_agendamento = models.DateField('Data de agendamento (Esteira)', null=True, blank=True,
                                         help_text='Coluna DATA_AGENDA da Esteira Vivo, pela ORDEM vinculada.')
+    # Agendamento à mão (19/11/2026): igual ao status — quem muda a data na lista manda nela e a
+    # importação da Esteira deixa de gravar a DATA_AGENDA por cima. "Voltar a seguir a Esteira" desliga.
+    agendamento_manual = models.BooleanField('Agendamento definido à mão', default=False, db_default=False)
+    agendamento_manual_em = models.DateTimeField('Agendamento manual em', null=True, blank=True)
+    agendamento_manual_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                               blank=True, related_name='+', verbose_name='Agendamento manual por')
 
     # Bookkeeping
     first_seen_at = models.DateTimeField('Primeira sincronização', default=timezone.now)
@@ -128,6 +134,11 @@ class Fibra(models.Model):
         """O status que a Esteira daria (pela última importação), para mostrar ao lado do manual."""
         from .services import _map_planilha_status
         return _map_planilha_status(self.status_planilha_raw) if self.status_planilha_raw else None
+
+    def esteira_atual(self):
+        """A linha da última Esteira importada vinculada a esta venda (ou None). Uma consulta: use no detalhe."""
+        return (self.esteira_vendas.select_related('importacao')
+                .order_by('-importacao__importado_em', '-id').first())
 
 
 class FibraStatusHistory(models.Model):

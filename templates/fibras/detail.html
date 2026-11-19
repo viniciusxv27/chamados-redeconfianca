@@ -109,7 +109,14 @@
     <div class="fb-aviso" data-status-manual><i class="fas fa-hand" aria-hidden="true"></i><div><b class="fb-aviso-tit">Status definido à mão</b>
       {% if fibra.status_manual_por %}Por {{ fibra.status_manual_por.get_full_name|default:fibra.status_manual_por.username }}{% if fibra.status_manual_em %} em {{ fibra.status_manual_em|date:"d/m/Y H:i" }}{% endif %}. {% endif %}A importação da Esteira não troca este status.
       {% if fibra.status_esteira and fibra.status_esteira != fibra.status %}<br>A Esteira diz: <b>{{ fibra.status_planilha_raw }}</b>.{% endif %}
-      {% if fb_pode.status_alterar %}<form method="post" action="{% url 'fibras:seguir_esteira' fibra.pk %}" style="margin-top:8px">{% csrf_token %}<button class="fb-btn pequeno" type="submit"><i class="fas fa-rotate" aria-hidden="true"></i> Voltar a seguir a Esteira</button></form>{% endif %}
+      {% if fb_pode.status_alterar %}<form method="post" action="{% url 'fibras:seguir_esteira' fibra.pk %}" style="margin-top:8px">{% csrf_token %}<input type="hidden" name="campo" value="status"><button class="fb-btn pequeno" type="submit"><i class="fas fa-rotate" aria-hidden="true"></i> Voltar a seguir a Esteira</button></form>{% endif %}
+    </div></div>
+    {% endif %}
+    {% if fibra.agendamento_manual %}
+    <div class="fb-aviso" data-agendamento-manual><i class="fas fa-calendar-check" aria-hidden="true"></i><div><b class="fb-aviso-tit">Agendamento definido à mão</b>
+      {% if fibra.agendamento_manual_por %}Por {{ fibra.agendamento_manual_por.get_full_name|default:fibra.agendamento_manual_por.username }}{% if fibra.agendamento_manual_em %} em {{ fibra.agendamento_manual_em|date:"d/m/Y H:i" }}{% endif %}. {% endif %}A importação da Esteira não troca esta data ({{ fibra.data_agendamento|date:"d/m/Y"|default:"sem data" }}).
+      {% if esteira_atual and esteira_atual.data_agenda != fibra.data_agendamento %}<br>A Esteira diz: <b>{{ esteira_atual.data_agenda|date:"d/m/Y"|default:"sem data" }}</b>.{% endif %}
+      {% if fb_pode.status_alterar %}<form method="post" action="{% url 'fibras:seguir_esteira' fibra.pk %}" style="margin-top:8px">{% csrf_token %}<input type="hidden" name="campo" value="agendamento"><button class="fb-btn pequeno" type="submit"><i class="fas fa-rotate" aria-hidden="true"></i> Voltar a seguir a Esteira</button></form>{% endif %}
     </div></div>
     {% endif %}
     {% if fibra.motivo_planilha %}

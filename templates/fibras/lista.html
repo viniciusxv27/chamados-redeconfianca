@@ -184,7 +184,7 @@ html.dark .fb-novo { color: #A5B4FC; }
           <td data-label="Valor" class="num valor">R$ {{ f.valor|floatformat:"2g" }}</td>
           <td data-label="Vendedor / PDV" style="font-size:12px">{{ f.vendedor }}<span class="sub">{{ f.pdv }}</span></td>
           <td data-label="Data" style="font-size:12px;white-space:nowrap">{{ f.data_da_venda|date:"d/m/Y" }}</td>
-          <td data-label="Agendamento" style="font-size:12px;white-space:nowrap">{% if fb_pode.status_alterar %}<input type="date" class="fb-ag-input" value="{{ f.data_agendamento|date:'Y-m-d' }}" data-mudar-agenda data-antes="{{ f.data_agendamento|date:'Y-m-d' }}" min="2000-01-01" max="2100-12-31" aria-label="Agendamento da venda {{ f.numero_da_venda }}" title="Data de agendamento (vazio limpa)" style="font-size:12px;padding:2px 4px;border:1px solid var(--fb-borda,#d1d5db);border-radius:6px;background:transparent;color:inherit">{% else %}{{ f.data_agendamento|date:"d/m/Y"|default:"—" }}{% endif %}</td>
+          <td data-label="Agendamento" style="font-size:12px;white-space:nowrap">{% if fb_pode.status_alterar %}<input type="date" class="fb-ag-input" value="{{ f.data_agendamento|date:'Y-m-d' }}" data-mudar-agenda data-antes="{{ f.data_agendamento|date:'Y-m-d' }}" min="2000-01-01" max="2100-12-31" aria-label="Agendamento da venda {{ f.numero_da_venda }}" title="Data de agendamento (vazio limpa)" style="font-size:12px;padding:2px 4px;border:1px solid var(--fb-borda,#d1d5db);border-radius:6px;background:transparent;color:inherit">{% else %}{{ f.data_agendamento|date:"d/m/Y"|default:"—" }}{% endif %}{% if f.agendamento_manual %}<span class="sub fb-manual" data-agenda-manual title="Agendamento definido à mão: a importação da Esteira não troca"><i class="fas fa-hand" aria-hidden="true"></i> manual</span>{% endif %}</td>
           <td data-label="Status" class="centro cel-status">{% if fb_pode.status_alterar %}<select class="fb-st-select" data-st="{{ f.status }}" data-mudar-status aria-label="Status da venda {{ f.numero_da_venda }}">{% for k, l in status_choices %}<option value="{{ k }}" {% if k == f.status %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>{% else %}<span class="st-pill" data-st="{{ f.status }}">{{ f.get_status_display }}</span>{% endif %}{% if f.status_manual %}<span class="sub fb-manual" title="Status definido à mão: a importação da Esteira não troca{% if f.status_esteira and f.status_esteira != f.status %} (a Esteira diz: {{ f.status_planilha_raw }}){% endif %}"><i class="fas fa-hand" aria-hidden="true"></i> manual</span>{% endif %}{% if f.coluna == 'nao_localizado' %}<span class="sub" title="Fora da última planilha: no kanban fica na coluna Não localizado">não localizado</span>{% endif %}</td>
           <td data-label="Retorno Myrella" class="retorno cel-retorno" title="{{ f.retorno_myrella }}">{{ f.retorno_myrella|truncatechars:60 }}</td>
           <td class="num cel-acao"><a href="{% url 'fibras:detail' f.pk %}" class="fb-abrir">Abrir <i class="fas fa-arrow-right" aria-hidden="true"></i></a></td>
@@ -288,6 +288,15 @@ html.dark .fb-novo { color: #A5B4FC; }
     });
   });
 
+  /* Selo "manual" na hora: o que se muda aqui fica salvo e a base não troca mais. */
+  function fbSeloManual(celula, atributo, titulo) {
+    if (!celula || celula.querySelector('.fb-manual')) return;
+    var s = document.createElement('span');
+    s.className = 'sub fb-manual'; s.setAttribute(atributo, ''); s.title = titulo;
+    s.innerHTML = '<i class="fas fa-hand" aria-hidden="true"></i> manual';
+    celula.appendChild(s);
+  }
+
   /* Status na própria linha (Ilha): o mesmo endpoint do arrastar do kanban. */
   var urlStatus = (document.getElementById('fbUrlStatus') || { dataset: {} }).dataset.url || '';
   var tokenCsrf = (document.getElementById('fbCsrf') || { dataset: {} }).dataset.token || '';
@@ -302,6 +311,7 @@ html.dark .fb-novo { color: #A5B4FC; }
       .then(function (res) {
         if (!res.ok) throw new Error(res.j.error === 'permission' ? 'Sem permissão para mudar o status.' : (res.j.error || 'Não foi possível mudar o status.'));
         sel.dataset.st = tr.dataset.st = res.j.status; tr.dataset.status = res.j.status_label;
+        if (res.j.status_manual) fbSeloManual(sel.closest('td'), 'data-status-manual', 'Status definido à mão: a importação da Esteira não troca');
         FB.toast('Venda ' + tr.dataset.venda + ': ' + res.j.status_label + '.', true);
         aplicar();
       })
@@ -322,6 +332,7 @@ html.dark .fb-novo { color: #A5B4FC; }
       .then(function (res) {
         if (!res.ok) throw new Error(res.j.error || 'Não foi possível gravar o agendamento.');
         inp.value = inp.dataset.antes = res.j.data_agendamento; tr.dataset.agenda = res.j.data_agendamento;
+        if (res.j.agendamento_manual) fbSeloManual(inp.closest('td'), 'data-agenda-manual', 'Agendamento definido à mão: a importação da Esteira não troca');
         FB.toast('Venda ' + tr.dataset.venda + ': agendamento ' + (res.j.data_agendamento_fmt || 'removido') + '.', true);
       })
       .catch(function (err) { inp.value = antes; FB.toast(err.message, false); })
