@@ -246,7 +246,7 @@ def editar_venda(pk, post, usuario):
     User = get_user_model()
 
     with transaction.atomic():
-        venda = (Venda.objects.select_for_update().select_related('loja', 'vendedor', 'cliente').filter(pk=pk).first())
+        venda = (Venda.objects.select_for_update(of=('self',)).select_related('loja', 'vendedor', 'cliente').filter(pk=pk).first())
         if venda is None:
             raise VendaInvalida(['Esta venda não existe mais (pode ter sido excluída).'])
         if (post.get('versao') or '') != versao(venda):
@@ -738,7 +738,7 @@ def excluir_venda(pk, usuario, motivo, versao_vista=None):
     if len(motivo) < MOTIVO_MINIMO:
         raise VendaInvalida(['Diga o motivo da exclusão (fica no histórico).'])
     with transaction.atomic():
-        venda = Venda.objects.select_for_update().select_related('loja', 'vendedor', 'created_by', 'cliente').filter(pk=pk).first()
+        venda = Venda.objects.select_for_update(of=('self',)).select_related('loja', 'vendedor', 'created_by', 'cliente').filter(pk=pk).first()
         if venda is None:
             raise VendaInvalida(['Esta venda não existe mais.'])
         if versao_vista is not None and versao_vista != versao(venda):

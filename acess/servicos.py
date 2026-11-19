@@ -904,7 +904,9 @@ def decidir_pedido_desligamento(pedido, decisao, execucao, resposta, usuario, re
     """Agendar usa o mesmo caminho do agendamento feito na tela; recusar exige o motivo."""
     from .models import PedidoDesligamento as Pedido
     with transaction.atomic():
-        pedido = Pedido.objects.select_for_update().select_related('colaborador', 'solicitante').get(pk=pedido.pk)
+        # of=('self',): solicitante é null=True (LEFT JOIN) e o Postgres recusa FOR UPDATE no lado anulável.
+        pedido = (Pedido.objects.select_for_update(of=('self',)).select_related('colaborador', 'solicitante')
+                  .get(pk=pedido.pk))
         if pedido.status != Pedido.ABERTO:
             raise RegraAcess('Este pedido já foi tratado.')
         resposta = str(resposta or '').strip()[:500]
