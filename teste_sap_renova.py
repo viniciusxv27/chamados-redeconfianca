@@ -301,4 +301,18 @@ import glob, re as _re
 ruins = [f for f in ['templates/auditoria_sap/renova.html'] for m in _re.finditer(r'\{#(.*?)#\}', open(f).read(), _re.S) if '\n' in m.group(1)]
 t('nenhum comentário {# #} de várias linhas', not ruins)
 
+print('\n== LOJAS DE SP (19/11/2026) ==')
+itaim = Sector.objects.create(name='Loja Itaim Paulista')
+embu = Sector.objects.create(name='Loja Embu das Artes')
+# A vw_conferencia não conhece os centros de SP: a nota não traz PDV nenhum.
+with mock.patch.object(mysql, 'ler_renovas', return_value=ORDENS + [ordem('2050000099', '999.999.999-99', 'NF99', 'L220', 1)]), \
+        mock.patch.object(mysql, 'ler_vendas_vivogo', return_value=VENDAS):
+    renova.ler_do_sap()
+sp = VendaRenova.objects.get(ordem='2050000099')
+t('ordem de SP (L220) cai na loja de SP', sp.loja == 'ITAIM PAULISTA' and sp.setor_id == itaim.id, (sp.loja, sp.setor_id))
+h = cb.get('/sap/renova/').content.decode()
+t('o filtro lista as lojas de SP, mesmo sem venda ainda',
+  f'value="{itaim.id}"' in h and f'value="{embu.id}"' in h)
+t('quem é de outra loja não vê as de SP no filtro', f'value="{embu.id}"' not in cg.get('/sap/renova/').content.decode())
+
 print(f'\n{OK} OK, {FALHAS} falha(s)')

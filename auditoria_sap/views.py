@@ -637,6 +637,14 @@ def _renovas_visiveis(user):
     return qs.filter(setor_id__in=ids)
 
 
+def _lojas_de_sp_visiveis(user):
+    """As lojas de SP (CODIGOS_DE_LOJA) que a pessoa vê — todas, para quem vê a rede."""
+    from .permissions import CODIGOS_DE_LOJA
+    sp = {normalizar_loja(n) for n in CODIGOS_DE_LOJA.values()}
+    minhas = lojas_visiveis(user)
+    return sp if minhas is None else sp & set(minhas)
+
+
 def _setores_das_lojas(lojas):
     from users.models import Sector
     return [s for s in Sector.objects.all() if normalizar_loja(s.name) in lojas]
@@ -713,7 +721,10 @@ def renova(request):
         'mes': mes,
         'meses': [{'chave': c, 'rotulo': rotulo_mes(c)} for c in meses],
         'loja': loja,
-        'lojas': Sector.objects.filter(id__in=lojas_ids).order_by('name'),
+        # As lojas de SP entram no filtro mesmo sem venda ainda (19/11/2026).
+        'lojas': Sector.objects.filter(
+            Q(id__in=lojas_ids) | Q(id__in=[x.id for x in _setores_das_lojas(_lojas_de_sp_visiveis(request.user))])
+        ).order_by('name'),
         'tem_sem_loja': base.filter(setor__isnull=True).exists() and lojas_visiveis(request.user) is None,
         'busca': busca,
         'ultima': ultima_sincronizacao(),

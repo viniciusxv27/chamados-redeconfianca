@@ -252,15 +252,75 @@ def marcar_possiveis_erros_de_serial(brutas):
             continue
         usados.update((id_vg, id_sap))
         pares += 1
-        vg[MARCA_POSSIVEL_SERIAL] = (
-            f'POSSÍVEL ERRO DE SERIAL ({motivo}) | NO SAP: {_texto(sap.get("PRODUTO_SAP"))} | '
-            f'SERIAL SAP = {_texto(sap.get("SERIAL_SAP")) or "—"} | NF {_texto(sap.get("NUM_FAT_SAP")) or "—"} | '
-            f'CONCILIADO NO D-1')
-        sap[MARCA_POSSIVEL_SERIAL] = (
-            f'POSSÍVEL ERRO DE SERIAL ({motivo}) | NO VIVO GO: VENDA {_texto(vg.get("ID_VENDA")) or "—"} | '
-            f'{_texto(vg.get("PRODUTO_VIVOGO"))} | SERIAL VIVO GO = {_texto(vg.get("SERIAL_VIVOGO")) or "—"} | '
-            f'CONCILIADO NO D-1')
-    return pares
+        _marcar_par(vg, sap, motivo)
+    return pares + _marcar_pelos_indicios_da_query(brutas, usados)
+
+
+def _marcar_par(vg, sap, motivo):
+    vg[MARCA_POSSIVEL_SERIAL] = (
+        f'POSSÍVEL ERRO DE SERIAL ({motivo}) | NO SAP: {_texto(sap.get("PRODUTO_SAP"))} | '
+        f'SERIAL SAP = {_texto(sap.get("SERIAL_SAP")) or "—"} | NF {_texto(sap.get("NUM_FAT_SAP")) or "—"} | '
+        f'CONCILIADO NO D-1')
+    sap[MARCA_POSSIVEL_SERIAL] = (
+        f'POSSÍVEL ERRO DE SERIAL ({motivo}) | NO VIVO GO: VENDA {_texto(vg.get("ID_VENDA")) or "—"} | '
+        f'{_texto(vg.get("PRODUTO_VIVOGO"))} | SERIAL VIVO GO = {_texto(vg.get("SERIAL_VIVOGO")) or "—"} | '
+        f'CONCILIADO NO D-1')
+
+
+# A própria query procura a venda no Vivo GO por CPF, SKU e data e só chama de serial
+# errado quando os três batem (PONTUACAO_INDICIOS = 3). Com dois — o mesmo aparelho em
+# outra cor no mesmo dia para o mesmo cliente, ou o mesmo SKU no mesmo dia com o CPF
+# digitado diferente — ela manda "VENDA NÃO ENCONTRADA NO VIVO GO" (19/11/2026). É a
+# mesma situação de serial errado: sai da lista também.
+INDICIOS_DE_SERIAL = 2
+
+
+def _pontuacao(bruta):
+    try:
+        return int(_texto(bruta.get('PONTUACAO_INDICIOS')) or 0)
+    except ValueError:
+        return 0
+
+
+def _marcar_pelos_indicios_da_query(brutas, usados):
+    """Linhas do SAP com 2 de 3 indícios da query; o item do Vivo GO que sobrou na mesma
+    loja (até ``DIAS_DO_PAR`` dias, mesmo SKU ou serial parecido) sai junto. Devolve quantas."""
+    from .permissions import normalizar_loja
+
+    livres = {}
+    for vg in brutas:
+        if (_texto(vg.get('TIPO_ERRO')) == TIPO_NAO_LANCADA_NO_SAP and id(vg) not in usados
+                and MARCA_POSSIVEL_SERIAL not in vg):
+            livres.setdefault(normalizar_loja(vg.get('PDV')), []).append(vg)
+    marcadas = 0
+    for sap in brutas:
+        if (_texto(sap.get('TIPO_ERRO')) != TIPO_NAO_ENCONTRADA_NO_VIVOGO or id(sap) in usados
+                or MARCA_POSSIVEL_SERIAL in sap or _pontuacao(sap) < INDICIOS_DE_SERIAL):
+            continue
+        indicios = _texto(sap.get('INDICIOS_LOCALIZACAO')) or f'{_pontuacao(sap)} de 3 indícios'
+        motivo = f'a query achou a venda no Vivo GO por 2 de 3 indícios: {indicios}'
+        dia_sap = _data(sap.get('DATA_VENDA')) or _data(sap.get('DATA_FATURA_SAP'))
+        sku_sap = _so_letras_e_numeros(sap.get('COD_MATERIAL_SAP'))
+        serial_sap = _so_letras_e_numeros(sap.get('SERIAL_SAP'))
+        melhor, nota = None, 0.0
+        for vg in livres.get(normalizar_loja(sap.get('PDV')), ()):
+            if id(vg) in usados:
+                continue
+            dia_vg = _data(vg.get('DATA_VENDA'))
+            if not (dia_vg and dia_sap) or abs((dia_vg - dia_sap).days) > DIAS_DO_PAR:
+                continue
+            parecido = _parecido(_so_letras_e_numeros(vg.get('SERIAL_VIVOGO')), serial_sap)
+            mesmo_sku = bool(sku_sap) and _so_letras_e_numeros(vg.get('SKU_VIVOGO')) == sku_sap
+            if (mesmo_sku or parecido >= SERIAL_PARECIDO) and parecido + mesmo_sku > nota:
+                melhor, nota = vg, parecido + mesmo_sku
+        usados.add(id(sap))
+        marcadas += 1
+        if melhor is not None:
+            usados.add(id(melhor))
+            _marcar_par(melhor, sap, motivo)
+        else:
+            sap[MARCA_POSSIVEL_SERIAL] = f'POSSÍVEL ERRO DE SERIAL ({motivo}) | CONCILIADO NO D-1'
+    return marcadas
 
 
 def _mudou(linha, valores):

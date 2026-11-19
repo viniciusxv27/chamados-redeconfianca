@@ -261,5 +261,31 @@ with mock.patch.object(mysql, 'ler_visao_geral', return_value=sem_galaxy), \
 t('Vivo GO fora do ar: o lado SAP continua marcado', marcada(num_fat_sap='NF-CHIP')[0]
   and marcada(id_venda='V-CHIP')[0])
 
+print('\n== 4) 2 DE 3 INDÍCIOS DA QUERY (19/11/2026) ==')
+# A query viu a venda no Vivo GO, mas sem os 3 indícios: chama de "não encontrada".
+indicios = [
+    # mesmo SKU e dia na loja, CPF diferente: o item do Vivo GO que sobrou sai junto.
+    sap('121.212.121-21', '22023386', '220233860409970', 'NF-IND-PAR', '69.00', PDV='EMBU DAS ARTES',
+        PONTUACAO_INDICIOS='2', INDICIOS_LOCALIZACAO='CPF=NÃO | SKU=OK | DATA=OK | VALOR=OK'),
+    # 2 indícios e nenhum item sobrando no Vivo GO: sai sozinha.
+    sap('131.313.131-31', 'TGSA61564000', '356599706085561', 'NF-IND-SO', '1564.04', PDV='ITACIBA',
+        PONTUACAO_INDICIOS='2', INDICIOS_LOCALIZACAO='CPF=OK | SKU=NÃO | DATA=OK | VALOR=OK'),
+    # 1 indício só: continua na lista.
+    sap('141.414.141-41', '22025568', '22025568102717', 'NF-IND-UM', '3999.00', PDV='JACARAÍPE',
+        PONTUACAO_INDICIOS='1', INDICIOS_LOCALIZACAO='CPF=OK | SKU=NÃO | DATA=NÃO | VALOR=NÃO'),
+]
+itens_ind = [vg('V-IND-PAR', '989.898.989-89', '22023386', '220233860490970', '69.00', PDV='EMBU DAS ARTES')]
+with mock.patch.object(mysql, 'ler_visao_geral', return_value=[dict(b) for b in sem_galaxy + indicios]), \
+        mock.patch.object(mysql, 'ler_vendas_sem_sap', return_value=[dict(i) for i in itens + itens_ind]):
+    sincronizar()
+a_, l = marcada(num_fat_sap='NF-IND-PAR')
+t('2 de 3 indícios: a linha do SAP sai', a_ and '2 de 3 indícios' in l.dados[MARCA_POSSIVEL_SERIAL], l and l.dados.get(MARCA_POSSIVEL_SERIAL))
+t('e o item do Vivo GO da mesma loja/dia/SKU sai junto', marcada(id_venda='V-IND-PAR')[0])
+t('2 de 3 sem item do Vivo GO sobrando: sai sozinha', marcada(num_fat_sap='NF-IND-SO')[0])
+t('1 indício só: continua na lista', not marcada(num_fat_sap='NF-IND-UM')[0])
+r, vivogo = na_aba('vivogo')
+t('a aba mostra a de 1 indício e não as de 2', 'NF-IND-UM' in vivogo and not {'NF-IND-PAR', 'NF-IND-SO'} & vivogo, vivogo)
+t('os pares de antes continuam marcados', marcada(num_fat_sap='NF-CHIP')[0] and marcada(id_venda='V-SKU')[0])
+
 print(f'\n{ok} OK / {fail} falhas')
 sys.exit(1 if fail else 0)

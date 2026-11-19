@@ -35,7 +35,7 @@ from django.utils import timezone
 
 from . import mysql
 from .models import CobrancaRenova, ConfiguracaoRenovaSap, VendaRenova
-from .permissions import normalizar_loja
+from .permissions import CODIGOS_DE_LOJA, normalizar_loja
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +130,10 @@ def ler_do_sap(hoje=None):
         nota = str(o.get('num_fat') or '').strip()
         cpf = digitos(o.get('cnpj_cpf'))
         escritorio = str(o.get('escr_vend') or '').strip()
-        loja = loja_do_escritorio.get(escritorio) or loja_da_nota.get(nota, '')
+        # SP (19/11/2026): a vw_conferencia não conhece os centros de SP, então a nota não
+        # traz a loja — o código do escritório (L220/L222/L223) já é a loja.
+        loja = (loja_do_escritorio.get(escritorio) or loja_da_nota.get(nota, '')
+                or CODIGOS_DE_LOJA.get(escritorio.upper(), ''))
         valores = {
             'num_fat': nota[:40],
             'data_fatura': o.get('dt_fatura'),
