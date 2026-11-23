@@ -89,6 +89,11 @@ try:
         username='zzbl.gerente', email='zzbl.gerente@exemplo-teste.local', password='S3nha!teste',
         first_name='ZZ', last_name='Gerente', hierarchy='PADRAO', sector=setor)
     gerente.communication_groups.add(gerentes)
+    # A trava do envio (23/11/2026) segura a loja que tem venda sem resposta:
+    # as paradas de propósito moram numa segunda loja do gerente (a trava em
+    # si é do teste_contestacao_envio_todas_respondidas.py).
+    setor_pendente = Sector.objects.create(name='ZZ Loja Pendente')
+    gerente.sectors.add(setor_pendente)
 
     lote = ExclusionSyncBatch.objects.create(record_type=TipoBase.EXCLUSAO, record_count=6,
                                              created_by=chefe)
@@ -101,8 +106,8 @@ try:
             nome_cliente=f'ZZ Cliente {numero}', record_type=TipoBase.EXCLUSAO)
 
     pronta1, pronta2 = venda(1, 100), venda(2, 200)
-    sem_motivo = venda(3, 300)
-    sem_anexo = venda(4, 400)
+    sem_motivo = venda(3, 300, filial='ZZ LOJA PENDENTE')
+    sem_anexo = venda(4, 400, filial='ZZ LOJA PENDENTE')
     de_outra_loja = venda(5, 500, filial='ZZ OUTRA FILIAL')
 
     def rascunho(registro, motivo='ZZ motivo', com_anexo=True):

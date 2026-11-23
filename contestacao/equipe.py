@@ -18,7 +18,8 @@ time de conferência de venda é apenas o gerente".
   mesma loja; se ainda empatar, a venda fica sem CN.
 - *Gerente*: quem pode contestar (``User.can_create_contestations``). Responde
   toda venda da loja: Sim (motivo e evidência) ou Não (com justificativa), e
-  envia as Sim quando quiser — o envio não espera os de acordo dos Não.
+  só envia com a loja toda respondida (``trava_do_envio``) — mas o envio não
+  espera os de acordo dos Não.
 - *Gestão central* (``_can_manage_contestations``): como o gerente, no escopo dela.
 
 **O de acordo do CN no Não** (``RespostaNaoContesta.situacao_cn``)
@@ -279,6 +280,9 @@ def estado_das_lojas(lote, filiais=None):
     situação (Sim, Não, pendente...) e, dos Não, quantos estão esperando o CN,
     de acordo, automáticos, com discordância ou mantidos. ``loja['ids_para_enviar']``
     são as vendas com Sim pronto — o envio não espera os de acordo.
+    ``loja['ids_faltam']`` são as sem resposta (o "Faltam" da tela, que trava o
+    envio do gerente); ``loja['ids_incompletos']``, as delas que têm Sim sem
+    motivo ou evidência.
     """
     if lote is None:
         return {}
@@ -310,14 +314,14 @@ def estado_das_lojas(lote, filiais=None):
 
     lojas = {}
     for eid, filial, vendedor in vendas:
-        loja = lojas.setdefault(filial, {'filial': filial, 'por_vendedor': {}})
+        loja = lojas.setdefault(filial, {'filial': filial, 'por_vendedor': {}, 'ids_incompletos': set()})
         p = loja['por_vendedor'].setdefault(vendedor, {
             'filial': filial, 'vendedor': vendedor,
             'cn': usuarios.get(donos.get((filial, vendedor))),
             'total': 0, 'contestada': 0, 'sim': 0, 'nao': 0, 'sim_incompleto': 0, 'pendente': 0,
             'cn_aguardando': 0, 'cn_de_acordo': 0, 'cn_automatico': 0, 'cn_discorda': 0,
             'cn_mantido': 0,
-            'ids': [], 'ids_sim': [],
+            'ids': [], 'ids_sim': [], 'ids_faltam': [],
         })
         situacao = situacoes[eid]
         p['total'] += 1
@@ -325,6 +329,10 @@ def estado_das_lojas(lote, filiais=None):
         p['ids'].append(eid)
         if situacao == 'sim':
             p['ids_sim'].append(eid)
+        elif situacao not in RESPONDIDAS:
+            p['ids_faltam'].append(eid)
+            if situacao == 'sim_incompleto':
+                loja['ids_incompletos'].add(eid)
         if situacao == 'nao':
             chave = chave_do_acordo.get(acordos.get(eid))
             if chave:
@@ -344,8 +352,120 @@ def estado_das_lojas(lote, filiais=None):
         loja['cn_discorda'] = sum(p['cn_discorda'] for p in participantes)
         loja['cn_automatico'] = sum(p['cn_automatico'] for p in participantes)
         loja['ids_para_enviar'] = [eid for p in participantes for eid in p['ids_sim']]
+        loja['ids_faltam'] = [eid for p in participantes for eid in p['ids_faltam']]
         loja['para_enviar'] = len(loja['ids_para_enviar'])
     return lojas
+
+
+# ---------------------------------------------------------------------------
+# A trava do envio: o gerente só envia com a loja toda respondida
+# ---------------------------------------------------------------------------
+#
+# Pedido de 23/11/2026: "O gerente na hora de enviar deve enviar todas
+# obrigatoriamente com Sim ou Não, enquanto todas não estiverem no carrinho
+# deve estar travado". "A responder" é o mesmo universo que a tela mostra ao
+# gerente: as vendas do lote atual no escopo dele (``_apply_exclusion_scope_for_user``),
+# e "respondida" é o mesmo ``RESPONDIDAS`` do painel ("Faltam" = pendente +
+# Sim sem motivo ou evidência). Já contestada conta como respondida (qualquer
+# contestação da venda, aberta ou decidida); Não com discordância do CN também
+# (o Não continua lá; o envio não espera os de acordo). A trava é por loja: a
+# loja toda respondida envia, mesmo que outra loja do mesmo gerente ainda não.
+# A gestão central não tem trava (como antes): o escopo dela é a rede.
+
+ITENS_NA_TRAVA = 8           # quantas vendas sem resposta a tela lista por loja
+
+
+def isento_da_trava(user):
+    """Gestão central envia sem esperar a loja responder tudo."""
+    return bool(_views()._can_manage_contestations(user))
+
+
+def trava_do_envio(user, lote, lojas=None, escopo=None, respondidas_agora=()):
+    """O que ainda trava o envio deste gerente.
+
+    Devolve ``{'isento', 'travado', 'faltam', 'lojas': [{'filial', 'faltam',
+    'ids', 'ids_incompletos'}], 'filiais': set}`` — só as lojas com venda sem
+    resposta entram em ``lojas``.
+
+    ``lojas`` (de ``estado_das_lojas``) e ``escopo`` (``[(id, filial)]`` das
+    vendas do lote que o usuário vê) poupam consultas a quem já os tem.
+    ``respondidas_agora``: vendas que o próprio pedido está respondendo com Sim
+    completo (motivo + evidência no formulário, ou arquivo que ainda só está
+    no navegador) — contam como respondidas.
+    """
+    resultado = {'isento': False, 'travado': False, 'faltam': 0, 'lojas': [], 'filiais': set()}
+    if isento_da_trava(user):
+        return dict(resultado, isento=True)
+    if lote is None:
+        return resultado
+    v = _views()
+    if escopo is None:
+        escopo = list(v._apply_exclusion_scope_for_user(
+            v._exclusoes().filter(sync_batch=lote), user).values_list('pk', 'filial'))
+    ids_escopo = {eid for eid, _ in escopo}
+    if lojas is None:
+        lojas = estado_das_lojas(lote, {f for _, f in escopo})
+    respondidas_agora = {int(i) for i in respondidas_agora if str(i).isdigit()}
+    for filial in sorted(lojas):
+        loja = lojas[filial]
+        ids = [eid for eid in loja.get('ids_faltam', [])
+               if eid in ids_escopo and eid not in respondidas_agora]
+        if ids:
+            resultado['lojas'].append({
+                'filial': filial, 'faltam': len(ids), 'ids': ids,
+                'ids_incompletos': [eid for eid in ids if eid in loja.get('ids_incompletos', ())],
+            })
+    resultado['faltam'] = sum(loja['faltam'] for loja in resultado['lojas'])
+    resultado['filiais'] = {loja['filial'] for loja in resultado['lojas']}
+    resultado['travado'] = bool(resultado['lojas'])
+    return resultado
+
+
+def detalhar_trava(trava, limite=ITENS_NA_TRAVA):
+    """Acrescenta a cada loja travada ``itens``: as primeiras vendas sem
+    resposta, com o que a tela precisa para levar a pessoa até elas. Uma
+    consulta só, para todas as lojas."""
+    escolhidos = {eid for loja in trava.get('lojas', []) for eid in loja['ids'][:limite]}
+    dados = {}
+    if escolhidos:
+        for linha in (ExclusionRecord.objects.filter(pk__in=escolhidos)
+                      .values('pk', 'vendedor', 'nome_cliente', 'receita', 'pilar', 'filial')):
+            dados[linha['pk']] = linha
+    for loja in trava.get('lojas', []):
+        incompletos = set(loja.get('ids_incompletos', ()))
+        itens = []
+        for eid in loja['ids'][:limite]:
+            linha = dados.get(eid)
+            if linha is None:
+                continue
+            situacao = 'sim_incompleto' if eid in incompletos else 'pendente'
+            itens.append({
+                'id': eid,
+                'vendedor': linha['vendedor'] or '',
+                'cliente': linha['nome_cliente'] or '',
+                'pilar': linha['pilar'] or '',
+                'valor': f"R$ {linha['receita']:.2f}" if linha['receita'] is not None else '',
+                'situacao': situacao,
+                'rotulo': ROTULO_RESPOSTA[situacao],
+            })
+        loja['itens'] = itens
+        loja['mais'] = max(0, loja['faltam'] - len(itens))
+    return trava
+
+
+def trava_para_json(trava):
+    """A trava sem os ``set`` (para o JsonResponse)."""
+    return {
+        'isento': trava['isento'], 'travado': trava['travado'], 'faltam': trava['faltam'],
+        'lojas': [{'filial': loja['filial'], 'faltam': loja['faltam'],
+                   'itens': loja.get('itens', []), 'mais': loja.get('mais', 0)}
+                  for loja in trava['lojas']],
+    }
+
+
+def ids_sem_resposta(ids):
+    """Das vendas pedidas, as que ainda não têm Sim completo, Não nem contestação."""
+    return [eid for eid, situacao in situacao_das_vendas(ids).items() if situacao not in RESPONDIDAS]
 
 
 def naos_do_cn(user, lote):

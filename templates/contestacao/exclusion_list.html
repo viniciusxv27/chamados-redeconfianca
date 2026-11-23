@@ -216,7 +216,17 @@
     {% if not showing_old_records %}{% include 'contestacao/_equipe_ciclo.html' %}{% endif %}
     {% if venda_filter %}
     <div class="mb-4 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900 flex flex-wrap items-center justify-between gap-2">
-        <span><i class="fas fa-magnifying-glass mr-1"></i> Mostrando só a venda que você abriu. Clique em <strong>Sim</strong> para contestar ou em <strong>Manter o Não</strong> para responder ao CN.</span>
+        <span><i class="fas fa-magnifying-glass mr-1"></i> Mostrando só a venda que você abriu. Responda com <strong>Sim</strong> (contestar) ou <strong>Não</strong> (com justificativa) — numa discordância do CN, <strong>Manter o Não</strong> responde a ele.</span>
+        <a href="{% url 'contestacao:exclusion_list' %}" class="font-semibold hover:underline">Ver todas</a>
+    </div>
+    {% endif %}
+    {% if sem_resposta_filter %}
+    <div class="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900 flex flex-wrap items-center justify-between gap-2">
+        {% if total_records %}
+        <span><i class="fas fa-list-check mr-1"></i> Mostrando só as vendas <strong>sem resposta</strong> ({{ total_records }}): responda cada uma com <strong>Sim</strong> (motivo e evidência) ou <strong>Não</strong> (justificativa) para liberar o envio. Recarregue a página para a lista diminuir.</span>
+        {% else %}
+        <span><i class="fas fa-lock-open mr-1"></i> Nenhuma venda sem resposta aqui: o envio desta loja está liberado.</span>
+        {% endif %}
         <a href="{% url 'contestacao:exclusion_list' %}" class="font-semibold hover:underline">Ver todas</a>
     </div>
     {% endif %}
@@ -610,6 +620,7 @@
                     <div class="text-sm text-white">
                         <span class="font-semibold">pedido de contestação pronto para envio</span>
                         <div id="bulkResumo" class="text-xs text-white/90 mt-0.5"></div>
+                        <div id="bulkTrava" class="hidden text-xs text-white mt-0.5 font-semibold"></div>
                     </div>
                 </div>
                 <div class="flex items-center gap-2 flex-wrap justify-end">
@@ -712,6 +723,7 @@ window.MOTIVOS_CONFERENCIA = {
     fora_do_escopo: 'Fora da sua loja/base',
     nao_encontrada: 'Não está mais na base sincronizada',
     respondida_nao: 'Respondida como Não',
+    loja_com_pendencia: 'A loja ainda tem venda sem resposta (Sim ou Não)',
     falhou: 'Não deu para enviar agora (tente de novo)'
 };
 window.contestationDraftDbName = 'contestacaoDraftsDb';
@@ -950,6 +962,8 @@ window.saveDraftItemOnServer = async function(id, reason, file, substituirNao) {
             produto: item.summary.produto || '-',
         };
     }
+    // Um Sim completo pode ter sido a última resposta que faltava.
+    window.atualizarTrava();
 };
 
 window.removeDraftItemOnServer = async function(id) {
@@ -970,6 +984,7 @@ window.removeDraftItemOnServer = async function(id) {
     if (resp.status === 404) {
         window.serverDraftUnavailable = true;
     }
+    window.atualizarTrava();
 };
 
 window.clearServerDraft = async function() {
@@ -986,6 +1001,7 @@ window.clearServerDraft = async function() {
     if (resp.status === 404) {
         window.serverDraftUnavailable = true;
     }
+    window.atualizarTrava();
 };
 
 window.loadServerDraft = async function() {
@@ -1681,6 +1697,7 @@ window.confirmarNao = async function(id) {
                 : '')
             + '</div>');
         window.showToast(corpo.situacao_cn === 'aguardando' ? 'Não registrado. O CN tem até ' + corpo.prazo_cn + ' para dar o de acordo.' : 'Não registrado.', 'success');
+        window.atualizarTrava(300);
     } catch (_) {
         mostrarErro('Sem conexão agora. Tente de novo.');
     }
@@ -1699,6 +1716,7 @@ window.desfazerNao = async function(id) {
         }
         window.desenharNaoInfo(id, '');
         window.showToast('Não desfeito: a venda voltou a ficar sem resposta.', 'info');
+        window.atualizarTrava(300);
     } catch (_) {
         alert('Sem conexão agora. Tente de novo.');
     }
@@ -1849,6 +1867,115 @@ window.atualizarBalanco = function(atraso) {
             // O painel continua mostrando o que já estava; sem alarme na tela.
         }
     }, atraso === undefined ? 1200 : atraso);
+};
+
+/* A trava do envio (pedido de 23/11/2026): o gerente só envia com toda venda
+ * da loja respondida — Sim (motivo e evidência) ou Não (justificativa). O
+ * quadro #travaEnvio vem do servidor (_trava_envio.html) e é redesenhado
+ * depois de cada Sim ou Não; os data-* dele dizem como ficam os botões. O
+ * servidor recusa o envio do mesmo jeito (loja_com_pendencia). */
+window.estadoDaTrava = function() {
+    const el = document.getElementById('travaEstado');
+    if (!el || el.dataset.gerente !== '1') return null;
+    return {
+        travado: el.dataset.travado === '1',
+        faltam: parseInt(el.dataset.faltam || '0', 10) || 0,
+        livres: parseInt(el.dataset.livres || '0', 10) || 0,
+        paraEnviar: parseInt(el.dataset.paraEnviar || '0', 10) || 0
+    };
+};
+window.aplicarTrava = function() {
+    const trava = window.estadoDaTrava();
+    const travadoTudo = !!(trava && trava.travado && trava.livres === 0);
+    const semResposta = trava ? (trava.faltam + (trava.faltam === 1 ? ' venda sem resposta' : ' vendas sem resposta')) : '';
+    const dica = 'Responda todas as vendas da loja com Sim ou Não para liberar o envio';
+
+    const btn = document.getElementById('btnSubmitAll');
+    if (btn) {
+        btn.disabled = travadoTudo;
+        btn.classList.toggle('opacity-50', travadoTudo);
+        btn.classList.toggle('cursor-not-allowed', travadoTudo);
+        btn.title = travadoTudo ? dica : '';
+        btn.innerHTML = travadoTudo
+            ? '<i class="fas fa-lock mr-2"></i> Travado'
+            : '<i class="fas fa-paper-plane mr-2"></i> Enviar';
+    }
+    const aviso = document.getElementById('bulkTrava');
+    if (aviso) {
+        if (trava && trava.travado) {
+            aviso.innerHTML = '<i class="fas fa-lock mr-1"></i>Envio travado: ' + semResposta + ' na loja · '
+                + '<a href="?sem_resposta=1" class="underline font-semibold">ver quais</a>';
+            aviso.classList.remove('hidden');
+        } else {
+            aviso.innerHTML = '';
+            aviso.classList.add('hidden');
+        }
+    }
+    const btnLoja = document.getElementById('btnEnviarLoja');
+    const textoLoja = document.getElementById('btnEnviarLojaTexto');
+    if (btnLoja && trava) {
+        const livre = trava.paraEnviar > 0;
+        btnLoja.disabled = !livre;
+        btnLoja.classList.toggle('opacity-50', !livre);
+        btnLoja.classList.toggle('cursor-not-allowed', !livre);
+        btnLoja.classList.toggle('hover:opacity-90', livre);
+        btnLoja.title = livre ? '' : (trava.travado ? dica : 'Nenhuma venda com Sim pronta para enviar');
+        if (textoLoja) {
+            textoLoja.innerHTML = (trava.travado && !livre)
+                ? '<i class="fas fa-lock mr-2"></i> Envio travado: ' + trava.faltam + ' sem resposta'
+                : '<i class="fas fa-paper-plane mr-2"></i> Enviar contestações da loja (' + trava.paraEnviar + ')';
+        }
+    }
+};
+window.travaTimer = null;
+window.atualizarTrava = function(atraso) {
+    if (!window.estadoDaTrava()) return;  // gestão central e CN: sem trava
+    clearTimeout(window.travaTimer);
+    window.travaTimer = setTimeout(async () => {
+        const alvo = document.getElementById('travaEnvio');
+        if (!alvo) return;
+        try {
+            const resp = await fetch('{% url "contestacao:trava_fragmento" %}', {cache: 'no-store'});
+            if (resp.ok) {
+                alvo.innerHTML = await resp.text();
+                window.aplicarTrava();
+            }
+        } catch (_) {
+            // Fica o quadro que já estava; o servidor confere no envio.
+        }
+    }, atraso === undefined ? 1200 : atraso);
+};
+/* A trava como a conferência do envio devolve (cart_check / envio): as
+ * vendas sem resposta, com o link para cada uma. */
+window.desenharTravaNaConferencia = function(trava) {
+    const lista = document.getElementById('cartCheckLista');
+    if (!lista || !trava || !trava.travado) return;
+    const caixa = document.createElement('div');
+    caixa.className = 'p-3 rounded-lg border border-red-200 bg-red-50 text-xs text-red-900';
+    let html = '<p class="text-sm font-semibold"><i class="fas fa-lock mr-1"></i>Envio travado: '
+        + trava.faltam + (trava.faltam === 1 ? ' venda sem resposta' : ' vendas sem resposta') + '</p>'
+        + '<p class="mt-0.5">Responda todas com Sim (motivo e evidência) ou Não (justificativa). '
+        + '<a href="?sem_resposta=1" class="font-semibold underline">Ver só as que faltam</a></p>';
+    (trava.lojas || []).forEach((loja) => {
+        if ((trava.lojas || []).length > 1) {
+            html += '<p class="mt-2 font-semibold">' + window.escaparHtml(loja.filial) + ' — ' + loja.faltam + ' sem resposta</p>';
+        }
+        html += '<ul class="mt-1 space-y-1">';
+        (loja.itens || []).forEach((item) => {
+            html += '<li class="flex flex-wrap items-center justify-between gap-2 rounded border border-red-100 bg-white px-2 py-1 text-gray-800">'
+                + '<span><strong>' + window.escaparHtml(item.cliente || 'Cliente') + '</strong> · '
+                + window.escaparHtml(item.vendedor) + ' · ' + window.escaparHtml(item.valor)
+                + ' <span class="text-red-700">(' + window.escaparHtml(item.rotulo) + ')</span></span>'
+                + '<a href="?venda=' + Number(item.id) + '" class="font-semibold text-orange-700 hover:underline">Responder</a></li>';
+        });
+        html += '</ul>';
+        if (loja.mais) {
+            html += '<a href="?sem_resposta=1&filial=' + encodeURIComponent(loja.filial)
+                + '" class="mt-1 inline-block font-semibold text-orange-700 hover:underline">e mais ' + loja.mais + ' — ver todas</a>';
+        }
+    });
+    caixa.innerHTML = html;
+    lista.insertBefore(caixa, lista.firstChild);
 };
 
 window.renderBar = function() {
@@ -2088,8 +2215,8 @@ window.desenharConferencia = function(itens, resumo, rotuloBotao) {
     legenda.textContent = resumo || '';
     lista.innerHTML = '';
 
-    const ordem = { sem_motivo: 0, sem_evidencia: 1, ja_contestada: 2, fora_do_escopo: 3,
-                    nao_encontrada: 4, falhou: 5, pronta: 9 };
+    const ordem = { loja_com_pendencia: 0, sem_motivo: 1, sem_evidencia: 2, ja_contestada: 3, fora_do_escopo: 4,
+                    nao_encontrada: 5, falhou: 6, pronta: 9 };
     itens.slice().sort((a, b) => (ordem[a.situacao] ?? 8) - (ordem[b.situacao] ?? 8)).forEach((item) => {
         const pronta = item.situacao === 'pronta';
         const linha = document.createElement('div');
@@ -2199,18 +2326,20 @@ window.submitAllContestations = async function() {
         document.getElementById('cartCheckProgresso').classList.add('hidden');
         window.desenharConferencia(conferencia.itens, resumo,
             prontas.length > 0 ? ('Enviar ' + prontas.length) : '');
+        window.desenharTravaNaConferencia(conferencia.trava);
     } catch (erro) {
         window.fecharConferencia();
         alert((erro && erro.message) || 'Não deu para conferir o carrinho. Tente de novo.');
     } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-paper-plane mr-2"></i> Enviar';
+        window.aplicarTrava();
     }
 };
 
 /* Envio da loja (gerente): as vendas saem do servidor — toda venda da loja
- * com Sim pronto, do carrinho de quem for (o do CN, o seu) — e vão pelo
- * mesmo envio em pedaços. Loja com CN sem marcar pronto fica de fora. */
+ * com Sim pronto, do carrinho de quem for — e vão pelo mesmo envio em
+ * pedaços. Loja com venda ainda sem Sim nem Não fica de fora (a trava). */
 window.enviarDaLoja = async function() {
     if (window.contestationBlocked) {
         alert('Contestações bloqueadas. Sincronize a planilha novamente para liberar novos envios.');
@@ -2243,21 +2372,23 @@ window.enviarDaLoja = async function() {
             naoProntas: (resp.itens || []).filter((i) => i.situacao !== 'pronta')
         };
         let resumo = prontas.length + ' de ' + resp.total + ' vendas com Sim prontas para enviar.';
-        // O envio não espera nada: só avisa o que ainda está sem resposta.
-        const semResposta = (resp.lojas || []).filter((l) => l.faltam > 0);
-        if (semResposta.length) {
-            resumo += ' Ainda sem resposta: ' + semResposta.map((l) => l.filial + ' (' + l.faltam + ')').join('; ') + '.';
+        // Loja com venda sem resposta não envia: a trava diz quais faltam.
+        const travadas = ((resp.trava && resp.trava.lojas) || []);
+        if (travadas.length) {
+            resumo += ' Travado até responder: ' + travadas.map((l) => l.filial + ' (' + l.faltam + ')').join('; ') + '.';
         }
         if (subida.falhas.length > 0) {
             resumo += ' (' + subida.falhas.length + ' evidência(s) do seu carrinho não subiram; tente de novo)';
         }
         document.getElementById('cartCheckProgresso').classList.add('hidden');
         window.desenharConferencia(resp.itens || [], resumo, prontas.length > 0 ? ('Enviar ' + prontas.length) : '');
+        window.desenharTravaNaConferencia(resp.trava);
     } catch (erro) {
         window.fecharConferencia();
         alert((erro && erro.message) || 'Não deu para conferir as vendas da loja. Tente de novo.');
     } finally {
         if (btn) btn.disabled = false;
+        window.aplicarTrava();
     }
 };
 
@@ -2323,6 +2454,7 @@ window.confirmarEnvioConferido = async function() {
     criadas.forEach((id) => window.removeItemFromCart(id));
     await window.persistPendingDraft().catch(() => {});
     window.renderBar();
+    window.atualizarTrava(0);
 
     // O que sobra no carrinho: o que falhou agora + o que a conferência já
     // tinha apontado como não pronto, tirando o que acabou virando contestação.
@@ -2403,9 +2535,13 @@ document.addEventListener('DOMContentLoaded', function() {
     if (toggleBtn) {
         toggleBtn.addEventListener('click', window.toggleBulkDetails);
     }
+    window.aplicarTrava();
     window.restorePendingDraft().then(() => {
         window.syncLocalDraftToServer().then(() => {
             window.loadServerDraft().then(() => {
+                // O carrinho deste navegador pode ter acabado de subir: a trava
+                // desenhada com a página pode já não ser a de agora.
+                if (Object.keys(window.pendingReasons || {}).length > 0) window.atualizarTrava(0);
                 window.fetchMissingSummaries(Object.keys(window.pendingReasons || {})).then((updated) => {
                     if (!updated) {
                         return;

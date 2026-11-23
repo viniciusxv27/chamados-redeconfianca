@@ -19,6 +19,10 @@ ESSENTIAL_PREFIXES = ('/admin', '/login', '/logout', '/static', '/media')
 PONTO_PREFIXES = ('/ponto/', '/api/tangerino/')
 
 
+def _e_superadmin(user):
+    return bool(user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN')
+
+
 def _is_essential(path):
     return any(path.startswith(p) for p in ESSENTIAL_PREFIXES + PONTO_PREFIXES)
 
@@ -63,6 +67,8 @@ def tem_popup_bloqueante_pendente(user):
     """
     if not user or not getattr(user, 'is_authenticated', False):
         return False
+    if _e_superadmin(user):
+        return False
     try:
         from .models import PortalPopup
         for popup in PortalPopup.objects.filter(is_active=True).order_by('order', 'id'):
@@ -95,6 +101,9 @@ def portal_popup_gate(request):
 
     user = getattr(request, 'user', None)
     if not user or not user.is_authenticated:
+        return empty
+    # Nenhum popup nem trava para o SUPERADMIN (23/11/2026).
+    if _e_superadmin(user):
         return empty
 
     path = request.path or ''

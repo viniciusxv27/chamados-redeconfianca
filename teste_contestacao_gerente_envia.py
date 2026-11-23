@@ -298,16 +298,29 @@ t('Não de venda sem CN no portal não espera de acordo',
   resp(f1).situacao_cn == 'sem_cn' and resp(c1).situacao_cn == 'sem_cn' and resp(f1).prazo_cn is None)
 t('gerente não responde venda de outra loja', nao(cg, d1, 'Fora da loja dele').status_code == 404)
 
-print('Envio das Sim não espera os de acordo')
+print('Envio das Sim não espera os de acordo (mas espera a loja toda respondida)')
 sim(cg, a1, motivo='Gerente contestando a venda da Ana')
 sim(cg, b1, motivo='Gerente contestando a venda do Bruno')
 est = loja_estado()
 t('loja: 2 Sim prontas, 1 Não esperando o CN', est['para_enviar'] == 2 and est['cn_aguardando'] == 1, est)
+# Trava de 23/11/2026 (teste_contestacao_envio_todas_respondidas.py): com venda
+# sem Sim nem Não na loja, nada sai.
 r = conferir_loja(cg)
 j = r.json()
-t('conferência da loja: a1 e b1 prontas, sem trava', r.status_code == 200
+t('conferência da loja travada enquanto falta resposta', r.status_code == 200 and j['prontas'] == []
+  and j['lojas'][0]['travada'] and j['trava']['faltam'] == 3, j)
+t('envio recusado enquanto falta resposta', enviar(cg, [a1]).json()['ignoradas']
+  == [{'id': a1.pk, 'motivo': 'loja_com_pendencia'}])
+# O resto da loja ganha Não (as seções de baixo respondem de novo, com outro texto).
+nao(cg, a3, 'Primeira resposta da a3')
+nao(cg, a4, 'Primeira resposta da a4')
+nao(cg, b2, 'Primeira resposta da b2')
+r = conferir_loja(cg)
+j = r.json()
+t('conferência da loja: a1 e b1 prontas, loja toda respondida', r.status_code == 200
   and sorted(j['prontas']) == sorted([a1.pk, b1.pk]), j)
-t('conferência avisa o que falta responder (sem travar)', j['lojas'] and j['lojas'][0]['faltam'] > 0, j.get('lojas'))
+t('conferência: nada faltando', j['lojas'] and j['lojas'][0]['faltam'] == 0 and not j['trava']['travado'],
+  j.get('lojas'))
 r = enviar(cg, [a1, b1])
 j = r.json()
 t('envio cria as 2 com o Não da a2 ainda esperando a Ana', sorted(j['criadas']) == sorted([a1.pk, b1.pk])
@@ -457,7 +470,7 @@ try:
     t('JS da tela passa no node --check', chk.returncode == 0, chk.stderr[:400])
 except FileNotFoundError:
     print('  (node não encontrado: pulei o --check)')
-t('JS tem o Não com prazo e o envio da loja sem trava',
+t('JS tem o Não com prazo e o envio da loja (sem a trava antiga dos CNs)',
   'window.confirmarNao' in js and 'window.enviarDaLoja' in js and 'aguardando_cns' not in js
   and "corpo.situacao_cn === 'aguardando'" in js)
 r = cg.get(LISTA + '?vendedor=BRUNO%20VEND%C3%8ADOR')

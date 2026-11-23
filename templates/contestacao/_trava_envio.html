@@ -1,0 +1,53 @@
+{% comment %}
+A trava do envio do gerente (pedido de 23/11/2026): "O gerente na hora de
+enviar deve enviar todas obrigatoriamente com Sim ou Não, enquanto todas não
+estiverem no carrinho deve estar travado". A regra mora em
+contestacao/equipe.py (trava_do_envio); o servidor recusa o envio do mesmo
+jeito. Este pedaço é redesenhado pela tela (/contestacao/envio/trava/) depois
+de cada Sim ou Não, e os data-* dizem ao JS como deixar os botões de enviar.
+{% endcomment %}
+{% with trava=equipe.trava %}
+<div id="travaEstado"
+     data-gerente="{% if trava %}1{% else %}0{% endif %}"
+     data-travado="{% if trava.travado %}1{% else %}0{% endif %}"
+     data-faltam="{{ trava.faltam|default:0 }}"
+     data-livres="{{ equipe.lojas_livres|default:0 }}"
+     data-para-enviar="{{ equipe.para_enviar_liberado|default:0 }}">
+{% if trava.travado %}
+    <div class="px-4 py-3 border-b border-red-200 bg-red-50">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="text-sm font-semibold text-red-800">
+                <i class="fas fa-lock mr-1"></i> Envio travado: {{ trava.faltam }} venda{{ trava.faltam|pluralize }} sem resposta
+            </div>
+            <a href="?sem_resposta=1" class="inline-flex items-center gap-1 rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-800 hover:bg-red-100">
+                <i class="fas fa-list-check"></i> Ver só as que faltam
+            </a>
+        </div>
+        <p class="mt-1 text-xs text-red-800">
+            Toda venda precisa de <strong>Sim</strong> (com motivo e evidência) ou <strong>Não</strong> (com justificativa) antes do envio.
+            {% if equipe.lojas_livres %}A loja que já respondeu tudo pode enviar.{% endif %}
+        </p>
+        {% for loja in trava.lojas %}
+        <div class="mt-2">
+            {% if trava.lojas|length > 1 %}<div class="text-xs font-semibold text-red-900">{{ loja.filial }} — {{ loja.faltam }} sem resposta</div>{% endif %}
+            <ul class="mt-1 space-y-1">
+                {% for item in loja.itens %}
+                <li class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-red-100 bg-white px-2 py-1 text-xs text-gray-800">
+                    <span class="min-w-0"><strong>{{ item.cliente|default:"Cliente" }}</strong> · {{ item.vendedor }}{% if item.pilar %} · {{ item.pilar }}{% endif %} · {{ item.valor }} <span class="text-red-700">({{ item.rotulo }})</span></span>
+                    <a href="?venda={{ item.id }}" class="font-semibold text-orange-700 hover:underline whitespace-nowrap">Responder</a>
+                </li>
+                {% endfor %}
+            </ul>
+            {% if loja.mais %}
+            <a href="?sem_resposta=1&filial={{ loja.filial|urlencode }}" class="mt-1 inline-block text-xs font-semibold text-orange-700 hover:underline">e mais {{ loja.mais }} — ver todas</a>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+{% elif trava and equipe.lojas %}
+    <div class="px-4 py-2 border-b border-emerald-100 bg-emerald-50 text-xs font-semibold text-emerald-800">
+        <i class="fas fa-lock-open mr-1"></i> Todas as vendas têm Sim ou Não: envio liberado.
+    </div>
+{% endif %}
+</div>
+{% endwith %}

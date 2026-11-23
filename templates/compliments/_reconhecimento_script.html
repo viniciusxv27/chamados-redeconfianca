@@ -1,0 +1,65 @@
+{% comment %}
+Interações dos reconhecimentos: "Ler tudo" quando o texto não cabe, tempo relativo
+("há 2 horas") nos <time data-rc-quando> e as setas da faixa. Pode ser chamado de novo
+(window.rcReconhecimento.preparar()) depois de inserir cartões.
+{% endcomment %}
+<script>
+(function () {
+    if (window.rcReconhecimento) { window.rcReconhecimento.preparar(); return; }
+    var relativo = ('Intl' in window && Intl.RelativeTimeFormat) ? new Intl.RelativeTimeFormat('pt-BR', { numeric: 'auto' }) : null;
+    var PASSOS = [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]];
+
+    function quando(el) {
+        var t = Date.parse(el.getAttribute('datetime'));
+        if (!relativo || isNaN(t)) { return; }
+        var seg = Math.round((t - Date.now()) / 1000);
+        for (var i = 0; i < PASSOS.length; i++) {
+            if (Math.abs(seg) >= PASSOS[i][1]) {
+                el.textContent = relativo.format(Math.round(seg / PASSOS[i][1]), PASSOS[i][0]);
+                return;
+            }
+        }
+        el.textContent = 'agora';
+    }
+
+    function preparar(raiz) {
+        raiz = raiz || document;
+        raiz.querySelectorAll('[data-rc-quando]').forEach(quando);
+        raiz.querySelectorAll('[data-rc-reco]').forEach(function (cartao) {
+            if (cartao.dataset.rcPronto) { return; }
+            cartao.dataset.rcPronto = '1';
+            var texto = cartao.querySelector('[data-rc-reco-texto]');
+            var mais = cartao.querySelector('[data-rc-reco-mais]');
+            if (!texto || !mais) { return; }
+            if (texto.scrollHeight > texto.clientHeight + 2) {
+                mais.classList.remove('hidden');
+                mais.addEventListener('click', function () {
+                    var aberto = texto.classList.toggle('line-clamp-4') === false;
+                    mais.textContent = aberto ? 'Mostrar menos' : 'Ler tudo';
+                });
+            }
+        });
+        raiz.querySelectorAll('[data-rc-trilho]').forEach(function (trilho) {
+            if (trilho.dataset.rcPronto) { return; }
+            trilho.dataset.rcPronto = '1';
+            var caixa = trilho.closest('[data-rc-trilho-caixa]');
+            if (!caixa) { return; }
+            var ant = caixa.querySelector('[data-rc-trilho-ant]');
+            var prox = caixa.querySelector('[data-rc-trilho-prox]');
+            function passo() { return Math.max(trilho.clientWidth * 0.8, 260); }
+            function atualizar() {
+                if (ant) { ant.disabled = trilho.scrollLeft <= 4; }
+                if (prox) { prox.disabled = trilho.scrollLeft + trilho.clientWidth >= trilho.scrollWidth - 4; }
+            }
+            if (ant) { ant.addEventListener('click', function () { trilho.scrollBy({ left: -passo(), behavior: 'smooth' }); }); }
+            if (prox) { prox.addEventListener('click', function () { trilho.scrollBy({ left: passo(), behavior: 'smooth' }); }); }
+            trilho.addEventListener('scroll', atualizar, { passive: true });
+            window.addEventListener('resize', atualizar);
+            atualizar();
+        });
+    }
+
+    window.rcReconhecimento = { preparar: preparar };
+    preparar();
+})();
+</script>

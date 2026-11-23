@@ -1,0 +1,28 @@
+{% comment %}
+Estilo do cartão de reconhecimento (home e mural). Cores próprias também no tema escuro
+(o tema-escuro.css só remapeia utilitários do Tailwind).
+{% endcomment %}
+<style>
+    .rc-reco {
+        border-radius: 1.1rem;
+        padding: 1.5px;
+        background: linear-gradient(135deg, #fbbf24, #ff6b35 45%, #ec4899);
+        transition: transform .25s cubic-bezier(.2, .8, .2, 1), box-shadow .25s ease;
+    }
+    .rc-reco:hover { transform: translateY(-3px); box-shadow: 0 14px 30px -12px rgba(255, 107, 53, .45); }
+    .rc-reco-miolo { border-radius: calc(1.1rem - 1.5px); }
+    .rc-reco-avatar { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #ffd5c2; }
+    .rc-reco-iniciais { background: linear-gradient(135deg, #ff6b35, #f59e0b); color: #fff; font-weight: 700; font-size: .85rem; }
+    .rc-estrela-cheia { color: #f59e0b; }
+    html.dark .rc-reco-avatar { box-shadow: 0 0 0 2px var(--tema-superficie), 0 0 0 4px #7c3a1d; }
+    html.dark .rc-reco:hover { box-shadow: 0 14px 30px -12px rgba(0, 0, 0, .6); }
+
+    .rc-trilho { scrollbar-width: thin; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+    .rc-trilho::-webkit-scrollbar { height: 6px; }
+    .rc-trilho::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, .45); border-radius: 9999px; }
+
+    @media (prefers-reduced-motion: reduce) {
+        .rc-reco, .rc-reco:hover { transition: none; transform: none; }
+        .rc-trilho { scroll-behavior: auto; }
+    }
+</style>

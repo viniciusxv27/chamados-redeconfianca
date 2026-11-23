@@ -127,6 +127,11 @@ def _get_experience_window_alerts_for_dp():
     }
 
 
+def _saudacao():
+    hora = timezone.localtime().hour
+    return 'Bom dia' if 5 <= hora < 12 else 'Boa tarde' if 12 <= hora < 18 else 'Boa noite'
+
+
 @login_required
 def home_feed(request):
     """View principal da home com feed de comunicados"""
@@ -154,15 +159,17 @@ def home_feed(request):
         Q(send_to_all=True) | Q(recipients=request.user)
     ).distinct().prefetch_related('images', 'liked_by').order_by('-created_at')
     
-    # Buscar elogios recentes para o feed
+    # Reconhecimento (antes "Elogios Recentes"): a faixa da home mostra os mais
+    # recentes e o "Ver todos" leva ao mural com todos (compliments:mural).
     recent_compliments = []
+    total_reconhecimentos = 0
     try:
         from compliments.models import Compliment
-        recent_compliments = Compliment.objects.filter(
-            is_active=True
-        ).select_related(
-            'from_user', 'to_user', 'to_sector'
-        ).order_by('-created_at')[:2]
+        reconhecimentos = Compliment.objects.filter(is_active=True)
+        recent_compliments = list(reconhecimentos.select_related(
+            'from_user', 'to_user', 'to_user__sector', 'to_sector'
+        ).order_by('-created_at')[:12])
+        total_reconhecimentos = reconhecimentos.count()
     except ImportError:
         # App de elogios não disponível
         pass
@@ -202,6 +209,8 @@ def home_feed(request):
         'pinned_communications': pinned_communications,
         'communications': communications,
         'recent_compliments': recent_compliments,
+        'total_reconhecimentos': total_reconhecimentos,
+        'saudacao': _saudacao(),
         'pickup_redemptions': pickup_redemptions,
         'mandatory_trails_pending': mandatory_trails_pending,
         'show_mandatory_trails_popup': bool(mandatory_trails_pending),

@@ -50,7 +50,7 @@ def deve_ir_para_cursos(user, cfg=None):
     """
     if not (user and getattr(user, 'is_authenticated', False)):
         return False
-    if getattr(user, 'hierarchy', '') != 'PADRAO':
+    if getattr(user, 'hierarchy', '') != 'PADRAO' or user.is_superuser:
         return False
     cfg = cfg or config()
     if not pode_ver(user, cfg):

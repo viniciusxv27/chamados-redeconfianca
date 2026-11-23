@@ -98,6 +98,12 @@ try:
         username='zzcc.gerente', email='zzcc.gerente@exemplo-teste.local', password='S3nha!teste',
         first_name='ZZ', last_name='Gerente', hierarchy='PADRAO', sector=setor)
     gerente.communication_groups.add(gerentes)
+    # A trava do envio (23/11/2026) segura a loja que tem venda sem resposta:
+    # o que fica parado de propósito neste teste (sem motivo, sem evidência)
+    # mora numa segunda loja do gerente, para a ZZ LOJA CARRINHO poder enviar.
+    # A trava em si é do teste_contestacao_envio_todas_respondidas.py.
+    setor_pendente = Sector.objects.create(name='ZZ Loja Pendente')
+    gerente.sectors.add(setor_pendente)
     fora = User.objects.create_user(
         username='zzcc.fora', email='zzcc.fora@exemplo-teste.local', password='S3nha!teste',
         first_name='ZZ', last_name='Fora', hierarchy='PADRAO', sector=setor)
@@ -114,8 +120,8 @@ try:
             nome_cliente=f'ZZ Cliente {numero}', record_type=TipoBase.EXCLUSAO)
 
     pronta1, pronta2, pronta3 = venda(1), venda(2), venda(3)
-    sem_motivo = venda(4)
-    sem_anexo = venda(5)
+    sem_motivo = venda(4, filial='ZZ LOJA PENDENTE')
+    sem_anexo = venda(5, filial='ZZ LOJA PENDENTE')
     de_outra_loja = venda(6, filial='ZZ OUTRA FILIAL')
 
     def rascunho(registro, motivo='ZZ motivo', com_anexo=True):
@@ -163,8 +169,10 @@ try:
       all(not i['vendedor'] for i in dados['itens'] if i['situacao'] not in dentro))
 
     r = conferir([sem_anexo.pk], com_arquivo_local=[sem_anexo.pk])
+    # Passa da conferência do item (senão seria sem_evidencia); quem segura é a
+    # trava, porque a sem_motivo, da mesma loja, ainda não tem resposta.
     t('arquivo que ainda só está no navegador conta como evidência',
-      r.json()['itens'][0]['situacao'] == 'pronta', r.json()['itens'][0])
+      r.json()['itens'][0]['situacao'] == 'loja_com_pendencia', r.json()['itens'][0])
 
     t('quem não pode contestar não confere', conferir([pronta1.pk], cliente=cf).status_code == 403)
 
@@ -236,7 +244,7 @@ try:
       marcada['ja_enviada']['em'] == timezone.localtime(antiga_decidida.created_at).strftime('%d/%m/%Y')
       and 'egad' in marcada['ja_enviada']['status'].lower(), marcada.get('ja_enviada'))
 
-    nunca = venda(22)
+    nunca = venda(22, filial='ZZ LOJA PENDENTE')
     ContestationCartDraft.objects.create(user=gerente, exclusion=nunca, reason='ZZ nova')
     r = c.get('/contestacao/carrinho/rascunho/', HTTP_X_REQUESTED_WITH='XMLHttpRequest')
     item_novo = next(i for i in r.json()['items'] if i['exclusion_id'] == nunca.pk)

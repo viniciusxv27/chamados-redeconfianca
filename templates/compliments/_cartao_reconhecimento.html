@@ -1,0 +1,48 @@
+{% comment %}
+Um reconhecimento (Compliment). Usado na faixa da home e no mural (compliments:mural).
+Parâmetro: c. O "Ler tudo" só aparece quando o texto não cabe (script em _reconhecimento_script.html).
+{% endcomment %}
+<article class="rc-reco h-full" data-rc-reco>
+    <div class="rc-reco-miolo h-full bg-white rounded-2xl p-4 flex flex-col gap-3">
+        <div class="flex items-start gap-3">
+            {% if c.to_user %}
+                {% if c.to_user.profile_picture %}
+                <img src="{{ c.to_user.profile_picture.url }}" alt="" loading="lazy"
+                     class="w-11 h-11 rounded-full object-cover flex-shrink-0 rc-reco-avatar">
+                {% else %}
+                <span class="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 rc-reco-avatar rc-reco-iniciais">
+                    {{ c.to_user.first_name|slice:":1"|upper }}{{ c.to_user.last_name|slice:":1"|upper }}
+                </span>
+                {% endif %}
+            {% else %}
+            <span class="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 rc-reco-avatar rc-reco-iniciais">
+                <i class="fas fa-users text-sm"></i>
+            </span>
+            {% endif %}
+            <div class="min-w-0 flex-1">
+                <p class="font-semibold text-gray-900 leading-tight truncate">
+                    {% if c.to_user %}{{ c.to_user.get_full_name }}{% else %}Setor {{ c.to_sector.name }}{% endif %}
+                </p>
+                <p class="text-xs text-gray-500 truncate">
+                    {% if c.to_user %}{{ c.to_user.sector.name|default:"Rede Confiança" }}{% else %}Reconhecimento para a equipe{% endif %}
+                </p>
+                <div class="flex items-center gap-0.5 mt-1" aria-label="{{ c.rating }} de 5 estrelas">
+                    {% for i in "12345" %}
+                    <i class="fas fa-star text-[11px] {% if forloop.counter <= c.rating %}rc-estrela-cheia{% else %}text-gray-300{% endif %}"></i>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="flex-1">
+            <p class="text-sm text-gray-600 leading-relaxed whitespace-pre-line line-clamp-4" data-rc-reco-texto>{{ c.comment }}</p>
+            <button type="button" class="hidden mt-1 text-xs font-semibold text-primary hover:underline" data-rc-reco-mais>Ler tudo</button>
+        </div>
+
+        <div class="flex items-center justify-between gap-2 pt-2 border-t border-gray-100 text-xs text-gray-500">
+            <span class="truncate"><i class="fas fa-heart text-pink-400 mr-1"></i>por <span class="font-medium text-gray-700">{{ c.from_user.get_full_name }}</span></span>
+            <time datetime="{{ c.created_at|date:'c' }}" title="{{ c.created_at|date:'d/m/Y H:i' }}" data-rc-quando
+                  class="whitespace-nowrap">{{ c.created_at|date:"d/m" }}</time>
+        </div>
+    </div>
+</article>

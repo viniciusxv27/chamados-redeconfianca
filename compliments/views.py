@@ -233,3 +233,58 @@ def compliments_for_feed(limit=5):
     ).select_related(
         'from_user', 'to_user', 'to_sector'
     ).order_by('-created_at')[:limit]
+
+# ---------------------------------------------------------------------------
+# Mural de Reconhecimento (23/11/2026): todos os reconhecimentos da rede, para
+# todo mundo — a home mostra os mais recentes e leva para cá no "Ver todos".
+# ---------------------------------------------------------------------------
+POR_PAGINA_DO_MURAL = 24
+FILTROS_DO_MURAL = (('', 'Todos'), ('para_mim', 'Para mim'), ('meu_setor', 'Meu setor'), ('que_fiz', 'Que eu fiz'))
+
+
+def _mural_filtrado(request):
+    user = request.user
+    qs = (Compliment.objects.filter(is_active=True)
+          .select_related('from_user', 'to_user', 'to_user__sector', 'to_sector')
+          .order_by('-created_at'))
+    ver = request.GET.get('ver') or ''
+    if ver == 'para_mim':
+        qs = qs.filter(Q(to_user=user) | (Q(to_sector=user.sector) if user.sector_id else Q(pk__in=[])))
+    elif ver == 'meu_setor' and user.sector_id:
+        qs = qs.filter(Q(to_sector=user.sector) | Q(to_user__sector=user.sector))
+    elif ver == 'que_fiz':
+        qs = qs.filter(from_user=user)
+    else:
+        ver = ''
+    busca = (request.GET.get('q') or '').strip()
+    for termo in busca.split()[:5]:
+        qs = qs.filter(Q(to_user__first_name__icontains=termo) | Q(to_user__last_name__icontains=termo)
+                       | Q(from_user__first_name__icontains=termo) | Q(from_user__last_name__icontains=termo)
+                       | Q(to_sector__name__icontains=termo) | Q(to_user__sector__name__icontains=termo)
+                       | Q(comment__icontains=termo))
+    return qs, ver, busca
+
+
+@login_required
+def mural(request):
+    """Todos os reconhecimentos, com busca e filtro; "Carregar mais" pede a página seguinte (parcial)."""
+    qs, ver, busca = _mural_filtrado(request)
+    pagina = Paginator(qs, POR_PAGINA_DO_MURAL).get_page(request.GET.get('pagina'))
+    if request.GET.get('parcial'):
+        return render(request, 'compliments/_mural_pagina.html', {'pagina': pagina})
+    from django.utils import timezone
+    hoje = timezone.localdate()
+    ativos = Compliment.objects.filter(is_active=True)
+    contexto = {
+        'pagina': pagina,
+        'ver': ver,
+        'busca': busca,
+        'filtros': FILTROS_DO_MURAL,
+        'total_filtrado': pagina.paginator.count,
+        'numeros': {
+            'total': ativos.count(),
+            'no_mes': ativos.filter(created_at__year=hoje.year, created_at__month=hoje.month).count(),
+            'para_mim': ativos.filter(to_user=request.user).count(),
+        },
+    }
+    return render(request, 'compliments/mural.html', contexto)

@@ -27,6 +27,9 @@ class PreRegistrationAdjustmentMiddleware(MiddlewareMixin):
         user = getattr(request, 'user', None)
         if user is None or not user.is_authenticated:
             return None
+        # Nenhuma trava prende o SUPERADMIN (23/11/2026): é quem destrava os outros.
+        if user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN':
+            return None
 
         # Usuários do django admin / sem o campo (ex.: AnonymousUser) passam direto.
         needs_adjustment = getattr(user, 'needs_pre_registration_adjustment', None)

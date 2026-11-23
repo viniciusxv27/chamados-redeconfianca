@@ -54,17 +54,20 @@ A regra mora em contestacao/equipe.py.
             <p class="text-sm text-gray-700 mt-0.5">
                 Responda cada venda: <strong>Sim</strong> (motivo e evidência) vai para a contestação;
                 <strong>Não</strong> (com justificativa) vai para o de acordo do CN, que tem {{ equipe.prazo_horas }} h —
-                depois disso fica de acordo automático. O envio das Sim não espera os de acordo.
+                depois disso fica de acordo automático.
+                {% if equipe.trava %}O envio só libera com <strong>todas</strong> as vendas da loja respondidas, mas não espera os de acordo.{% else %}O envio das Sim não espera os de acordo.{% endif %}
             </p>
         </div>
         {% if not contestation_blocked %}
         <button type="button" id="btnEnviarLoja" onclick="enviarDaLoja()"
-                class="inline-flex items-center px-4 py-2 text-sm font-semibold text-white rounded-lg transition {% if equipe.para_enviar %}hover:opacity-90{% else %}opacity-50 cursor-not-allowed{% endif %}"
-                style="background-color: #9a3412" {% if not equipe.para_enviar %}disabled title="Nenhuma venda com Sim pronta para enviar"{% endif %}>
-            <i class="fas fa-paper-plane mr-2"></i> Enviar contestações da loja ({{ equipe.para_enviar }})
+                class="inline-flex items-center px-4 py-2 text-sm font-semibold text-white rounded-lg transition {% if equipe.para_enviar_liberado %}hover:opacity-90{% else %}opacity-50 cursor-not-allowed{% endif %}"
+                style="background-color: #9a3412" {% if not equipe.para_enviar_liberado %}disabled title="{% if equipe.trava.travado %}Responda todas as vendas com Sim ou Não para liberar o envio{% else %}Nenhuma venda com Sim pronta para enviar{% endif %}"{% endif %}>
+            <span id="btnEnviarLojaTexto">{% if equipe.trava.travado and not equipe.para_enviar_liberado %}<i class="fas fa-lock mr-2"></i> Envio travado: {{ equipe.trava.faltam }} sem resposta{% else %}<i class="fas fa-paper-plane mr-2"></i> Enviar contestações da loja ({{ equipe.para_enviar_liberado }}){% endif %}</span>
         </button>
         {% endif %}
     </div>
+
+    <div id="travaEnvio">{% include 'contestacao/_trava_envio.html' %}</div>
 
     {% if equipe.discordancias %}
     <div class="px-4 py-3 border-b border-red-100 bg-red-50/60">
@@ -92,7 +95,7 @@ A regra mora em contestacao/equipe.py.
             <summary class="cursor-pointer flex flex-wrap items-center gap-2 text-sm">
                 <span class="font-semibold text-gray-900">{{ loja.filial }}</span>
                 {% if loja.faltam %}
-                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold"><i class="fas fa-pen"></i>{{ loja.faltam }} sem resposta</span>
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold"><i class="fas {% if loja.travada %}fa-lock{% else %}fa-pen{% endif %}"></i>{{ loja.faltam }} sem resposta{% if loja.travada %} · envio travado{% endif %}</span>
                 {% else %}
                 <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold"><i class="fas fa-circle-check"></i>Tudo respondido</span>
                 {% endif %}
@@ -122,7 +125,7 @@ A regra mora em contestacao/equipe.py.
                             <td class="py-1.5 pr-2 text-right">{{ p.total }}</td>
                             <td class="py-1.5 pr-2 text-right">{{ p.sim }}{% if p.contestada %} <span class="text-gray-400">+{{ p.contestada }} enviada{{ p.contestada|pluralize }}</span>{% endif %}</td>
                             <td class="py-1.5 pr-2 text-right">{{ p.nao }}</td>
-                            <td class="py-1.5 pr-2 text-right {% if p.faltam %}font-semibold text-red-700{% endif %}">{{ p.faltam }}</td>
+                            <td class="py-1.5 pr-2 text-right {% if p.faltam %}font-semibold text-red-700{% endif %}">{% if p.faltam %}<a href="?sem_resposta=1&vendedor={{ p.vendedor|urlencode }}&filial={{ p.filial|urlencode }}" class="hover:underline" title="Ver só as vendas dele sem resposta">{{ p.faltam }}</a>{% else %}0{% endif %}</td>
                             <td class="py-1.5 pr-2">
                                 {% if p.nao %}
                                 <span class="inline-flex flex-wrap gap-x-2 gap-y-0.5">

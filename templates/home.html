@@ -73,7 +73,59 @@
 
     @keyframes rc-popup-sai { to { opacity: 0; } }
 
+    /* ===== Home (23/11/2026): topo, reconhecimento, feed ===== */
+    .rc-hero {
+        background:
+            radial-gradient(circle at 90% -20%, rgba(255, 255, 255, .30), transparent 45%),
+            radial-gradient(circle at -10% 120%, rgba(236, 72, 153, .35), transparent 50%),
+            linear-gradient(135deg, #ff6b35 0%, #f7931e 55%, #f59e0b 100%);
+    }
+    html.dark .rc-hero {
+        background:
+            radial-gradient(circle at 90% -20%, rgba(255, 255, 255, .10), transparent 45%),
+            radial-gradient(circle at -10% 120%, rgba(157, 40, 101, .45), transparent 50%),
+            linear-gradient(135deg, #b8441c 0%, #a85a12 55%, #8a5a0b 100%);
+    }
+    .rc-hero-suave { color: rgba(255, 255, 255, .86); }
+    .rc-hero-avatar { box-shadow: 0 0 0 3px rgba(255, 255, 255, .55); background: rgba(255, 255, 255, .2); }
+    .rc-hero-saldo { background: rgba(255, 255, 255, .18); border: 1px solid rgba(255, 255, 255, .3); }
+    .rc-hero-acao {
+        background: rgba(255, 255, 255, .14);
+        border: 1px solid rgba(255, 255, 255, .18);
+        transition: transform .2s cubic-bezier(.2, .8, .2, 1), background-color .2s ease;
+    }
+    .rc-hero-acao:hover { background: rgba(255, 255, 255, .26); transform: translateY(-2px); }
+    .rc-hero-acao:active { transform: scale(.96); }
+    .rc-hero-acao i { transition: transform .25s cubic-bezier(.2, .8, .2, 1); }
+    .rc-hero-acao:hover i { transform: scale(1.15) rotate(-6deg); }
+
+    .rc-secao-titulo { display: flex; align-items: center; gap: .6rem; }
+    .rc-secao-icone {
+        width: 2.25rem; height: 2.25rem; border-radius: .8rem;
+        display: inline-flex; align-items: center; justify-content: center; color: #fff;
+    }
+
+    .rc-post { transition: box-shadow .25s ease, transform .25s cubic-bezier(.2, .8, .2, 1); }
+    .rc-post:hover { box-shadow: 0 18px 40px -24px rgba(15, 23, 42, .35); transform: translateY(-2px); }
+    .rc-recolhido { max-height: 22rem; overflow: hidden; position: relative; }
+    .rc-recolhido::after {
+        content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 5rem;
+        background: linear-gradient(to bottom, rgba(255, 255, 255, 0), #fff);
+    }
+    /* No escuro o texto do comunicado é uma folha clara (.prose em tema-escuro.css): o esmaecido acompanha. */
+    html.dark .rc-recolhido::after { background: linear-gradient(to bottom, rgba(246, 247, 249, 0), #f6f7f9); }
+
+    /* Entrada ao rolar. O repouso é VISÍVEL: o JS só esconde (rc-espera) o que está abaixo
+     * da dobra, dentro de um quadro já pintado, e mostra de novo por IntersectionObserver,
+     * por tempo (3 s) ou quando a aba volta — nada fica escondido se o JS ou o quadro falhar. */
+    .rc-espera { opacity: 0; transform: translateY(18px); }
+    .rc-entra { animation: rc-entra .55s cubic-bezier(.2, .8, .2, 1); }
+    @keyframes rc-entra { from { opacity: 0; transform: translateY(18px); } }
+
     @media (prefers-reduced-motion: reduce) {
+        .rc-hero-acao, .rc-hero-acao i, .rc-post { transition: none; }
+        .rc-hero-acao:hover, .rc-post:hover, .rc-hero-acao:hover i { transform: none; }
+        .rc-entra { animation: none; }
         #experience-window-modal.rc-anima:not(.hidden),
         #mandatory-trails-modal.rc-anima:not(.hidden),
         #experience-window-modal.rc-anima:not(.hidden) .experience-window-card,
@@ -82,18 +134,13 @@
         }
     }
 </style>
+{% include 'compliments/_reconhecimento_estilo.html' %}
 {% endblock %}
 
 {% block content %}
 {% csrf_token %}
 <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
     {% include 'cameras/_alerta_dashboard.html' %}
-    <!-- Page Header -->
-    <div class="mb-6">
-        <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">Bem-vindo, {{ user.first_name }}!</h1>
-        <p class="text-gray-600 mt-2">Fique por dentro dos últimos comunicados</p>
-    </div>
-
     {% if show_experience_window_popup %}
     <div id="experience-window-modal" class="fixed inset-0 z-50 hidden">
         <div class="absolute inset-0 bg-black bg-opacity-50" id="experience-window-backdrop"></div>
@@ -248,57 +295,73 @@
     {# Rotina gerencial de hoje: só para quem tem rotina liberada (context processor rotina_menu). #}
     {% if rotina_liberada %}{% include 'rotina/_home.html' %}{% endif %}
 
-    <!-- User Info Card -->
-    <div class="bg-white rounded-xl shadow-sm p-4 sm:p-6 mb-6">
-        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div class="flex items-center gap-3 sm:gap-4 min-w-0 w-full lg:w-auto">
-                <div class="w-12 h-12 sm:w-16 sm:h-16 bg-primary rounded-full flex items-center justify-center">
+    <!-- Topo: saudação, quem é e atalhos -->
+    <section class="rc-hero relative overflow-hidden rounded-3xl text-white shadow-lg mb-6" data-rc-revela>
+        <div class="relative p-5 sm:p-7">
+            <div class="flex items-center gap-4">
+                <a href="{% url 'profile' %}" class="rc-hero-avatar w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden" title="Meu perfil">
                     {% if user.profile_picture %}
-                        <img src="{{ user.profile_picture.url }}" alt="Foto de perfil" class="w-full h-full rounded-full object-cover">
+                        <img src="{{ user.profile_picture.url }}" alt="Foto de perfil" class="w-full h-full object-cover">
                     {% else %}
-                        <span class="text-white font-bold text-lg sm:text-xl">{{ user.first_name.0 }}{{ user.last_name.0 }}</span>
+                        <span class="font-bold text-xl sm:text-2xl">{{ user.first_name.0 }}{{ user.last_name.0 }}</span>
                     {% endif %}
-                </div>
-                <div class="min-w-0">
-                    <h2 class="text-lg sm:text-xl font-semibold text-gray-900 truncate">{{ user.full_name }}</h2>
-                    <p class="text-gray-600 text-sm break-words">
-                        {{ user.get_hierarchy_display }}
-                        {% if user.primary_sector %}
-                            - {{ user.primary_sector.name }}
-                        {% endif %}
+                </a>
+                <div class="min-w-0 flex-1">
+                    <p class="rc-hero-suave text-sm sm:text-base">{{ saudacao|default:"Olá" }},</p>
+                    <h1 class="text-2xl sm:text-3xl font-bold leading-tight truncate">{{ user.first_name|default:user.full_name }}!</h1>
+                    <p class="rc-hero-suave text-xs sm:text-sm truncate">
+                        {{ user.get_hierarchy_display }}{% if user.primary_sector %} · {{ user.primary_sector.name }}{% endif %}
                     </p>
                 </div>
-            </div>
-            <div class="flex flex-col sm:flex-row sm:flex-wrap lg:flex-nowrap items-stretch sm:items-center gap-2 sm:gap-3 w-full lg:w-auto">
                 {% if user.hierarchy != 'PADRAO' and user.hierarchy != 'ADMINISTRATIVO' and user.hierarchy != 'SUPERVISOR' %}
-                <div class="bg-primary text-white px-4 py-2 rounded-full font-bold text-center whitespace-nowrap">
-                    C$ {{ user.balance_cs }}
+                <div class="rc-hero-saldo hidden sm:flex flex-col items-end rounded-2xl px-4 py-2 flex-shrink-0">
+                    <span class="rc-hero-suave text-[11px] uppercase tracking-wide">Saldo</span>
+                    <span class="text-lg font-bold whitespace-nowrap">C$ {{ user.balance_cs }}</span>
                 </div>
                 {% endif %}
-                <a href="{% url 'marketplace' %}" class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors text-center whitespace-nowrap">
-                    <i class="fas fa-store mr-2"></i>
-                    Mercadinho
-                </a>
-                {% if user.can_manage_users %}
-                <a href="{% url 'communications:create_communication' %}" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors text-center whitespace-nowrap">
-                    <i class="fas fa-plus mr-2"></i>
-                    Criar Comunicado
-                </a>
+            </div>
+            <div class="flex items-center justify-between gap-3 mt-4">
+                {% now "l, j \d\e F" as hoje_por_extenso %}
+                <p class="rc-hero-suave text-sm first-letter:uppercase">{{ hoje_por_extenso|lower }}</p>
+                {% if user.hierarchy != 'PADRAO' and user.hierarchy != 'ADMINISTRATIVO' and user.hierarchy != 'SUPERVISOR' %}
+                <span class="sm:hidden rc-hero-saldo rounded-full px-3 py-1 text-sm font-bold whitespace-nowrap">C$ {{ user.balance_cs }}</span>
                 {% endif %}
             </div>
+            <nav class="grid grid-cols-3 {% if user.can_manage_users %}sm:grid-cols-6{% else %}sm:grid-cols-5{% endif %} gap-2 sm:gap-3 mt-5" aria-label="Atalhos">
+                <a href="{% url 'ticket_create' %}" class="rc-hero-acao rounded-2xl px-2 py-3 flex flex-col items-center gap-1.5 text-center">
+                    <i class="fas fa-plus-circle text-lg"></i><span class="text-xs font-medium leading-tight">Novo chamado</span>
+                </a>
+                <a href="{% url 'tickets_list' %}" class="rc-hero-acao rounded-2xl px-2 py-3 flex flex-col items-center gap-1.5 text-center">
+                    <i class="fas fa-list-check text-lg"></i><span class="text-xs font-medium leading-tight">Meus chamados</span>
+                </a>
+                <a href="{% url 'compliments:create' %}" class="rc-hero-acao rounded-2xl px-2 py-3 flex flex-col items-center gap-1.5 text-center">
+                    <i class="fas fa-heart text-lg"></i><span class="text-xs font-medium leading-tight">Reconhecer</span>
+                </a>
+                <a href="{% url 'communications:communications_list' %}" class="rc-hero-acao rounded-2xl px-2 py-3 flex flex-col items-center gap-1.5 text-center">
+                    <i class="fas fa-bullhorn text-lg"></i><span class="text-xs font-medium leading-tight">Comunicados</span>
+                </a>
+                <a href="{% url 'marketplace' %}" class="rc-hero-acao rounded-2xl px-2 py-3 flex flex-col items-center gap-1.5 text-center">
+                    <i class="fas fa-store text-lg"></i><span class="text-xs font-medium leading-tight">Mercadinho</span>
+                </a>
+                {% if user.can_manage_users %}
+                <a href="{% url 'communications:create_communication' %}" class="rc-hero-acao rounded-2xl px-2 py-3 flex flex-col items-center gap-1.5 text-center">
+                    <i class="fas fa-pen-to-square text-lg"></i><span class="text-xs font-medium leading-tight">Criar comunicado</span>
+                </a>
+                {% endif %}
+            </nav>
         </div>
-    </div>
+    </section>
 
     <!-- Pinned Communications -->
     {% if pinned_communications %}
-    <div class="mb-6">
-        <h2 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
-            <i class="fas fa-thumbtack text-red-500 mr-2"></i>
-            Comunicados Fixados
+    <div class="mb-8" data-rc-revela>
+        <h2 class="rc-secao-titulo text-xl font-bold text-gray-900 mb-4">
+            <span class="rc-secao-icone bg-red-500"><i class="fas fa-thumbtack text-sm"></i></span>
+            Fixados
         </h2>
         <div class="space-y-4">
             {% for comm in pinned_communications %}
-            <div class="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-xl p-4 sm:p-6">
+            <div class="rc-post bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-2xl p-4 sm:p-6">
                 <div class="flex items-start space-x-4">
                     <div class="w-10 h-10 sm:w-12 sm:h-12 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
                         <i class="fas fa-thumbtack text-white"></i>
@@ -343,86 +406,73 @@
     </div>
     {% endif %}
 
-    <!-- Recent Compliments -->
-    {% if recent_compliments %}
-    <div class="mb-6">
-        <h2 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
-            <i class="fas fa-star text-yellow-500 mr-2"></i>
-            Elogios Recentes
-        </h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {% for compliment in recent_compliments %}
-            <div class="relative bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 rounded-3xl p-[2px] hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
-                <div class="bg-white rounded-3xl p-6 h-full">
-                    <div class="flex items-start space-x-4">
-                        <div class="relative flex-shrink-0">
-                            <!-- Estrelas ao redor -->
-                            <i class="fas fa-star text-purple-400 text-xs absolute -top-1 -left-1 animate-pulse"></i>
-                            <i class="fas fa-star text-pink-400 text-xs absolute -top-1 -right-1 animate-pulse" style="animation-delay: 0.2s;"></i>
-                            <i class="fas fa-star text-purple-300 text-xs absolute -bottom-1 -left-1 animate-pulse" style="animation-delay: 0.4s;"></i>
-                            <i class="fas fa-star text-pink-300 text-xs absolute -bottom-1 -right-1 animate-pulse" style="animation-delay: 0.6s;"></i>
-                            
-                            <!-- Ícone principal -->
-                            <div class="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center shadow-lg relative z-10 p-2">
-                                <img src="{% static 'images/logo-t.png' %}" alt="Logo" class="w-full h-full object-contain">
-                            </div>
-                        </div>
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-start justify-between gap-3 mb-3">
-                                <p class="text-sm text-gray-700 leading-relaxed">
-                                    <span class="font-bold text-gray-900">{{ compliment.from_user.get_full_name }}</span> para
-                                    {% if compliment.to_user %}
-                                        <span class="font-bold text-gray-900">{{ compliment.to_user.get_full_name }}</span>
-                                    {% else %}
-                                        o setor <span class="font-bold text-gray-900">{{ compliment.to_sector.name }}</span>
-                                    {% endif %}
-                                </p>
-                                <div class="flex items-center space-x-0.5 flex-shrink-0">
-                                    {% for i in "12345" %}
-                                        {% if forloop.counter <= compliment.rating %}
-                                            <i class="fas fa-star text-purple-500 text-base"></i>
-                                        {% else %}
-                                            <i class="fas fa-star text-gray-300 text-base"></i>
-                                        {% endif %}
-                                    {% endfor %}
-                                </div>
-                            </div>
-                            <p class="text-xs text-gray-500 mb-3 font-medium">{{ compliment.created_at|date:"d/m/Y H:i" }}</p>
-                            <p class="text-sm text-gray-600 leading-relaxed mb-3">{{ compliment.comment|truncatewords:15 }}</p>
-                            {% if compliment.to_user == user or compliment.to_sector == user.sector %}
-                            <a href="{% url 'compliments:detail' compliment.id %}" class="inline-flex items-center gap-2 text-xs font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 hover:gap-3 transition-all">
-                                VER DETALHES <i class="fas fa-arrow-right"></i>
-                            </a>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
+    {# Reconhecimento: era a seção de elogios recentes (23/11/2026). #}
+    <section class="mb-8" data-rc-revela data-rc-trilho-caixa>
+        <div class="flex items-end justify-between gap-3 mb-4">
+            <div class="min-w-0">
+                <h2 class="rc-secao-titulo text-xl font-bold text-gray-900">
+                    <span class="rc-secao-icone" style="background:linear-gradient(135deg,#f59e0b,#ec4899)"><i class="fas fa-award text-sm"></i></span>
+                    Reconhecimento
+                </h2>
+                <p class="text-sm text-gray-500 mt-1">
+                    {% if total_reconhecimentos %}{{ total_reconhecimentos }} reconhecimento{{ total_reconhecimentos|pluralize }} na rede{% else %}Quem fez a diferença aparece aqui{% endif %}
+                </p>
             </div>
-            {% endfor %}
+            <div class="flex items-center gap-2 flex-shrink-0">
+                {% if recent_compliments %}
+                <button type="button" data-rc-trilho-ant aria-label="Anteriores"
+                        class="hidden md:inline-flex w-9 h-9 items-center justify-center rounded-full bg-white border border-gray-200 text-gray-600 hover:text-orange-600 hover:border-orange-300 transition-colors disabled:opacity-40 disabled:cursor-default">
+                    <i class="fas fa-chevron-left text-sm"></i>
+                </button>
+                <button type="button" data-rc-trilho-prox aria-label="Próximos"
+                        class="hidden md:inline-flex w-9 h-9 items-center justify-center rounded-full bg-white border border-gray-200 text-gray-600 hover:text-orange-600 hover:border-orange-300 transition-colors disabled:opacity-40 disabled:cursor-default">
+                    <i class="fas fa-chevron-right text-sm"></i>
+                </button>
+                {% endif %}
+                <a href="{% url 'compliments:mural' %}" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-semibold text-orange-600 hover:bg-orange-50 transition-colors">
+                    Ver todos <i class="fas fa-arrow-right text-xs"></i>
+                </a>
+            </div>
         </div>
-        <div class="text-center mt-4">
-            <a href="{% url 'compliments:dashboard' %}" class="text-yellow-600 hover:text-yellow-800 font-medium text-sm">
-                Ver todos os elogios →
+        {% if recent_compliments %}
+        <div class="rc-trilho flex gap-4 overflow-x-auto snap-x snap-mandatory pb-3 -mx-4 px-4 sm:mx-0 sm:px-0" data-rc-trilho>
+            {% for c in recent_compliments %}
+            <div class="snap-start flex-shrink-0 w-[16.5rem] sm:w-72">{% include 'compliments/_cartao_reconhecimento.html' with c=c %}</div>
+            {% endfor %}
+            <a href="{% url 'compliments:mural' %}"
+               class="snap-start flex-shrink-0 w-44 rounded-2xl border-2 border-dashed border-orange-200 bg-white flex flex-col items-center justify-center gap-2 text-center p-4 text-orange-600 hover:border-orange-400 hover:bg-orange-50 transition-colors">
+                <span class="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center"><i class="fas fa-arrow-right"></i></span>
+                <span class="text-sm font-semibold">Ver todos os reconhecimentos</span>
+                {% if total_reconhecimentos %}<span class="text-xs text-gray-500">{{ total_reconhecimentos }} no mural</span>{% endif %}
             </a>
         </div>
-    </div>
-    {% endif %}
+        {% else %}
+        <div class="rounded-2xl bg-white border border-gray-100 p-6 flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
+            <span class="w-14 h-14 rounded-full bg-orange-50 flex items-center justify-center flex-shrink-0"><i class="fas fa-award text-2xl text-orange-400"></i></span>
+            <div class="flex-1">
+                <p class="font-semibold text-gray-900">Ninguém foi reconhecido ainda</p>
+                <p class="text-sm text-gray-500">Seja o primeiro a reconhecer o trabalho de um colega.</p>
+            </div>
+            <a href="{% url 'compliments:create' %}" class="px-4 py-2 rounded-xl bg-primary text-white text-sm font-medium hover:bg-orange-600">Reconhecer alguém</a>
+        </div>
+        {% endif %}
+    </section>
 
     <!-- Communications Feed -->
     <div class="mb-6">
-        <h2 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
-            <i class="fas fa-rss text-primary mr-2"></i>
-            Feed de Comunicados
+        <h2 class="rc-secao-titulo text-xl font-bold text-gray-900 mb-4" data-rc-revela>
+            <span class="rc-secao-icone bg-primary"><i class="fas fa-bullhorn text-sm"></i></span>
+            Comunicados
         </h2>
         
         {% if communications %}
         <div class="space-y-6">
             {% for comm in communications %}
-            <article class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow">
+            <article class="rc-post bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden" data-rc-revela>
                 <!-- Post Header -->
-                <div class="p-4 sm:p-6 border-b border-gray-100">
+                <div class="px-4 sm:px-6 pt-4 sm:pt-5">
                     <div class="flex items-center space-x-3">
-                        <div class="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
+                        <div class="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0" style="background:linear-gradient(135deg,#ff6b35,#f59e0b)">
                             {% if comm.sender_group %}
                                 <i class="fas fa-users text-white"></i>
                             {% else %}
@@ -437,7 +487,7 @@
                                     {{ comm.sender.full_name }}
                                 {% endif %}
                             </h3>
-                            <p class="text-sm text-gray-500">{{ comm.created_at|date:"d/m/Y \à\s H:i" }}</p>
+                            <p class="text-sm text-gray-500"><time datetime="{{ comm.created_at|date:'c' }}" title="{{ comm.created_at|date:'d/m/Y H:i' }}" data-rc-quando>{{ comm.created_at|date:"d/m/Y \à\s H:i" }}</time></p>
                         </div>
                         {% if comm.is_pinned %}
                         <div class="flex items-center">
@@ -557,13 +607,16 @@
                     </div>
                     {% endif %}
                     
-                    <div class="prose prose-sm sm:prose max-w-none">
+                    <div class="prose prose-sm sm:prose max-w-none" data-rc-recolhe>
                         {{ comm.message|safe }}
                     </div>
+                    <button type="button" class="hidden mt-2 text-sm font-semibold text-primary hover:underline" data-rc-recolhe-botao>
+                        Continuar lendo <i class="fas fa-chevron-down text-xs ml-1"></i>
+                    </button>
                 </div>
 
                 <!-- Post Actions -->
-                <div class="px-4 sm:px-6 py-3 bg-gray-50 border-t border-gray-100">
+                <div class="px-4 sm:px-6 py-3 border-t border-gray-100">
                     <div class="flex items-center justify-between">
                         <div class="flex items-center space-x-4">
                             {% include 'communications/reaction_buttons.html' with communication=comm %}
@@ -599,28 +652,6 @@
         {% endif %}
     </div>
 
-    <!-- Quick Actions -->
-    <div class="bg-white rounded-xl shadow-sm p-4 sm:p-6 mb-6">
-        <h3 class="text-lg font-semibold text-gray-900 mb-4">Ações Rápidas</h3>
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <a href="{% url 'ticket_create' %}" class="flex flex-col items-center p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
-                <i class="fas fa-plus text-blue-600 text-2xl mb-2"></i>
-                <span class="text-sm font-medium text-blue-800">Novo Chamado</span>
-            </a>
-            <a href="{% url 'tickets_list' %}" class="flex flex-col items-center p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors">
-                <i class="fas fa-list text-green-600 text-2xl mb-2"></i>
-                <span class="text-sm font-medium text-green-800">Meus Chamados</span>
-            </a>
-            <a href="{% url 'communications:communications_list' %}" class="flex flex-col items-center p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors">
-                <i class="fas fa-bullhorn text-purple-600 text-2xl mb-2"></i>
-                <span class="text-sm font-medium text-purple-800">Comunicados</span>
-            </a>
-            <a href="{% url 'marketplace' %}" class="flex flex-col items-center p-4 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors">
-                <i class="fas fa-store text-yellow-600 text-2xl mb-2"></i>
-                <span class="text-sm font-medium text-yellow-800">Mercadinho</span>
-            </a>
-        </div>
-    </div>
 </div>
 
 <!-- PWA Install Prompt -->
@@ -1006,5 +1037,46 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 
+</script>
+{% include 'compliments/_reconhecimento_script.html' %}
+<script>
+(function () {
+    'use strict';
+    // "Continuar lendo": só no comunicado longo (sem JS ele aparece inteiro).
+    document.querySelectorAll('[data-rc-recolhe]').forEach(function (caixa) {
+        var botao = caixa.parentElement.querySelector('[data-rc-recolhe-botao]');
+        if (!botao || caixa.scrollHeight < 460) { return; }
+        caixa.classList.add('rc-recolhido');
+        botao.classList.remove('hidden');
+        botao.addEventListener('click', function () {
+            var fechado = caixa.classList.toggle('rc-recolhido');
+            botao.innerHTML = fechado ? 'Continuar lendo <i class="fas fa-chevron-down text-xs ml-1"></i>'
+                                      : 'Mostrar menos <i class="fas fa-chevron-up text-xs ml-1"></i>';
+            if (fechado) { caixa.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+        });
+    });
+
+    // Entrada ao rolar — sem nunca deixar nada escondido (ver .rc-espera no CSS).
+    var calmo = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (calmo || !('IntersectionObserver' in window) || document.visibilityState !== 'visible') { return; }
+    var blocos = [].slice.call(document.querySelectorAll('[data-rc-revela]'));
+    function mostrar(el) {
+        if (!el.classList.contains('rc-espera')) { return; }
+        el.classList.remove('rc-espera');
+        el.classList.add('rc-entra');
+    }
+    function mostrarTudo() { blocos.forEach(mostrar); }
+    requestAnimationFrame(function () {
+        var dobra = window.innerHeight;
+        var olho = new IntersectionObserver(function (entradas) {
+            entradas.forEach(function (e) { if (e.isIntersecting) { olho.unobserve(e.target); mostrar(e.target); } });
+        }, { rootMargin: '0px 0px -40px 0px' });
+        blocos.forEach(function (el) {
+            if (el.getBoundingClientRect().top > dobra) { el.classList.add('rc-espera'); olho.observe(el); }
+        });
+        setTimeout(function () { if (document.visibilityState !== 'visible') { mostrarTudo(); } }, 3000);
+        document.addEventListener('visibilitychange', function () { if (document.visibilityState !== 'visible') { mostrarTudo(); } });
+    });
+})();
 </script>
 {% endblock %}

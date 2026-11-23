@@ -1,0 +1,5 @@
+{% comment %}Uma página do mural: os cartões e, se houver, o marcador da próxima (lido pelo "Carregar mais").{% endcomment %}
+{% for c in pagina %}
+<div class="rc-mural-item">{% include 'compliments/_cartao_reconhecimento.html' with c=c %}</div>
+{% endfor %}
+{% if pagina.has_next %}<span hidden data-rc-proxima="{{ pagina.next_page_number }}"></span>{% endif %}

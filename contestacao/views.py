@@ -384,6 +384,9 @@ ROTULO_SITUACAO = {
     'fora_do_escopo': 'Fora da sua loja/base',
     'nao_encontrada': 'Não está mais na base sincronizada',
     'respondida_nao': 'Respondida como Não',
+    # A trava do envio (equipe.trava_do_envio): a venda está pronta, mas a loja
+    # dela ainda tem venda sem Sim nem Não.
+    'loja_com_pendencia': 'A loja ainda tem venda sem resposta (Sim ou Não)',
 }
 
 
@@ -1083,6 +1086,11 @@ def exclusion_list(request):
         qs = qs.filter(pk=int(venda_filter))
     else:
         venda_filter = ''
+    # "Ver as que faltam" da trava do envio: só as vendas ainda sem Sim
+    # completo, Não ou contestação — o mesmo critério do "Faltam" do painel.
+    sem_resposta_filter = request.GET.get('sem_resposta') == '1' and not show_old
+    if sem_resposta_filter:
+        qs = qs.filter(pk__in=equipe.ids_sem_resposta(list(qs.values_list('pk', flat=True))))
 
     # Pilares e filiais filtrados pelos setores acessíveis do usuário (para a UI)
     pilares = qs.values_list('pilar', flat=True).distinct().order_by('pilar')
@@ -1165,6 +1173,7 @@ def exclusion_list(request):
         'balanco': _balanco_do_ciclo(request.user, sync_state),
         'vendedor_filter': vendedor_filter,
         'venda_filter': venda_filter,
+        'sem_resposta_filter': sem_resposta_filter,
         'respostas_nao': respostas_nao,
         'sim_de_outros': sim_de_outros,
         'equipe': painel_equipe,
@@ -1180,11 +1189,14 @@ def _painel_da_equipe(user, lote, qs_escopo_lote=None):
     - CN: os Não que o gerente deu nas vendas dele, para dar o de acordo (24 h)
       ou discordar, e quantas o gerente está contestando;
     - gerente / gestão central: o que falta responder em cada loja, os de acordo
-      dos CNs e as discordâncias que voltaram para ele decidir.
+      dos CNs e as discordâncias que voltaram para ele decidir;
+    - gerente: a trava do envio (``equipe.trava_do_envio``) — loja com venda
+      sem Sim nem Não não envia, e o painel diz quais faltam.
     """
     papel = equipe.papel(user)
     vazio = {'papel': papel, 'lojas': [], 'naos': [], 'discordancias': [], 'lote': lote,
-             'pode_enviar': False, 'para_enviar': 0, 'aguardando': 0, 'sim_do_cn': 0}
+             'pode_enviar': False, 'para_enviar': 0, 'aguardando': 0, 'sim_do_cn': 0,
+             'trava': None, 'para_enviar_liberado': 0, 'lojas_livres': 0}
     if lote is None or qs_escopo_lote is None:
         return vazio
     if papel == 'cn':
@@ -1198,14 +1210,29 @@ def _painel_da_equipe(user, lote, qs_escopo_lote=None):
                                              if sit in ('pendente', 'sim_incompleto')),
                     total_do_cn=len(ids),
                     prazo_horas=int(equipe.PRAZO_CN.total_seconds() // 3600))
-    filiais = set(qs_escopo_lote.values_list('filial', flat=True).distinct())
-    lojas = equipe.estado_das_lojas(lote, filiais)
+    trava = None
+    if papel == 'gerente':
+        escopo = list(qs_escopo_lote.values_list('pk', 'filial'))
+        filiais = {f for _, f in escopo}
+        lojas = equipe.estado_das_lojas(lote, filiais)
+        trava = equipe.detalhar_trava(equipe.trava_do_envio(user, lote, lojas=lojas, escopo=escopo))
+    else:
+        # Gestão central (e quem só olha): sem trava no envio.
+        filiais = set(qs_escopo_lote.values_list('filial', flat=True).distinct())
+        lojas = equipe.estado_das_lojas(lote, filiais)
+    travadas = trava['filiais'] if trava else set()
     lista = [lojas[f] for f in sorted(lojas)]
+    for loja in lista:
+        loja['travada'] = loja['filial'] in travadas
     return dict(
         vazio,
         lojas=lista,
         discordancias=equipe.discordancias(lote, filiais),
         pode_enviar=papel in ('gerente', 'central'),
+        trava=trava,
+        # O que o botão manda de fato: só das lojas toda respondida.
+        para_enviar_liberado=sum(loja['para_enviar'] for loja in lista if not loja['travada']),
+        lojas_livres=sum(1 for loja in lista if not loja['travada']),
         para_enviar=sum(loja['para_enviar'] for loja in lista),
         faltam=sum(loja['faltam'] for loja in lista),
         aguardando=sum(loja['cn_aguardando'] for loja in lista),
@@ -1266,6 +1293,19 @@ def balanco_fragmento(request):
     sync_state = _get_sync_window_state(request.user)
     return render(request, 'contestacao/_balanco.html',
                   {'balanco': _balanco_do_ciclo(request.user, sync_state)})
+
+
+@login_required
+def trava_fragmento(request):
+    """O quadro da trava do envio, redesenhado pela tela depois de cada Sim ou
+    Não — o botão de enviar destrava sem recarregar a página."""
+    if not _can_access_contestation_module(request.user):
+        return HttpResponse(status=403)
+    lote = _get_latest_sync_batch()
+    escopo = (None if lote is None
+              else _apply_exclusion_scope_for_user(_exclusoes().filter(sync_batch=lote), request.user))
+    painel = _painel_da_equipe(request.user, lote, qs_escopo_lote=escopo)
+    return render(request, 'contestacao/_trava_envio.html', {'equipe': painel})
 
 
 @login_required
@@ -1613,8 +1653,18 @@ def create_contestation(request, exclusion_id):
     if request.method == 'POST':
         reason = request.POST.get('reason', '').strip()
         attachment = request.FILES.get('attachment')
+        # A mesma trava do envio em lote: este caminho antigo não pode ser a
+        # porta dos fundos dela.
+        trava = (equipe.trava_do_envio(request.user, _get_latest_sync_batch(),
+                                       respondidas_agora=[exclusion.pk]) if reason else None)
         if not reason:
             messages.error(request, 'Informe o motivo da contestação.')
+        elif trava and exclusion.filial in trava['filiais']:
+            faltam = next(loja['faltam'] for loja in trava['lojas'] if loja['filial'] == exclusion.filial)
+            messages.error(request, (
+                f'Envio travado: a loja {exclusion.filial} ainda tem {faltam} venda(s) sem resposta. '
+                'Responda todas com Sim ou Não antes de enviar.'))
+            return redirect(reverse('contestacao:exclusion_list') + '?sem_resposta=1')
         else:
             dono_id = equipe.dono_da_venda(exclusion)
             c = Contestation.objects.create(
@@ -1716,6 +1766,21 @@ def _conferir_itens_do_carrinho(user, ids, com_arquivo_local=(), sync_state=None
     return linhas, prontas
 
 
+def _aplicar_trava(linhas, prontas, trava):
+    """Tira das prontas as vendas de loja travada (``equipe.trava_do_envio``):
+    a linha passa a dizer ``loja_com_pendencia``. Só a venda pronta muda — a
+    que já não ia (sem motivo, fora do escopo...) continua com o motivo dela."""
+    travadas = trava['filiais'] if trava else set()
+    if not travadas:
+        return linhas, prontas
+    barradas = set()
+    for linha in linhas:
+        if linha['situacao'] == 'pronta' and linha['filial'] in travadas:
+            linha['situacao'] = 'loja_com_pendencia'
+            barradas.add(linha['id'])
+    return linhas, [eid for eid in prontas if eid not in barradas]
+
+
 @login_required
 @require_POST
 def cart_check(request):
@@ -1728,6 +1793,10 @@ def cart_check(request):
     Com ``{"loja": true}`` é a conferência do envio do gerente: os ids saem do
     servidor — toda venda da loja (das lojas dele) que está num carrinho com
     motivo e evidência, de quem for.
+
+    A trava do envio (pedido de 23/11/2026): enquanto a loja tiver venda sem
+    Sim nem Não, nada dela vai — as prontas voltam como ``loja_com_pendencia``
+    e ``trava`` diz quantas e quais faltam. A gestão central não tem trava.
     """
     if not _can_create_contestations(request.user):
         return JsonResponse({'success': False, 'error': _MSG_SO_GERENTE_ENVIA}, status=403)
@@ -1755,20 +1824,30 @@ def cart_check(request):
 
     da_loja = bool(payload.get('loja'))
     lojas = []
+    lote = _get_latest_sync_batch()
+    trava = None
     if da_loja:
-        lote = _get_latest_sync_batch()
-        escopo = (_apply_exclusion_scope_for_user(_exclusoes().filter(sync_batch=lote), request.user)
-                  if lote is not None else _exclusoes().none())
-        estado = equipe.estado_das_lojas(lote, set(escopo.values_list('filial', flat=True).distinct()))
-        no_escopo = set(escopo.values_list('pk', flat=True))
-        ids = [eid for f in sorted(estado) for eid in estado[f]['ids_para_enviar'] if eid in no_escopo]
-        lojas = [{'filial': f, 'faltam': estado[f]['faltam'],
+        escopo = (list(_apply_exclusion_scope_for_user(_exclusoes().filter(sync_batch=lote), request.user)
+                       .values_list('pk', 'filial'))
+                  if lote is not None else [])
+        estado = equipe.estado_das_lojas(lote, {f for _, f in escopo})
+        trava = equipe.trava_do_envio(request.user, lote, lojas=estado, escopo=escopo)
+        no_escopo = {pk for pk, _ in escopo}
+        # Loja travada nem entra na conferência: a trava diz o que falta nela.
+        ids = [eid for f in sorted(estado) if f not in trava['filiais']
+               for eid in estado[f]['ids_para_enviar'] if eid in no_escopo]
+        lojas = [{'filial': f, 'faltam': estado[f]['faltam'], 'travada': f in trava['filiais'],
                   'cn_aguardando': estado[f]['cn_aguardando'], 'cn_discorda': estado[f]['cn_discorda']}
                  for f in sorted(estado)]
 
     linhas, prontas = _conferir_itens_do_carrinho(
         request.user, ids, payload.get('com_arquivo_local') or [], sync_state,
         da_loja=da_loja)
+    if trava is None:
+        # O carrinho de quem confere: o que ele está mandando agora (pronto)
+        # já conta como respondido.
+        trava = equipe.trava_do_envio(request.user, lote, respondidas_agora=prontas)
+    linhas, prontas = _aplicar_trava(linhas, prontas, trava)
     return JsonResponse({
         'success': True,
         'total': len(linhas),
@@ -1776,6 +1855,7 @@ def cart_check(request):
         'itens': linhas,
         'lote': LOTE_CARRINHO,
         'lojas': lojas,
+        'trava': equipe.trava_para_json(equipe.detalhar_trava(trava)),
     })
 
 
@@ -1798,7 +1878,9 @@ def bulk_create_contestation(request):
     O rascunho que vale pode ser o de qualquer pessoa da loja
     (``equipe.rascunho_para_envio``), a contestação fica no nome do CN dono da
     venda e guarda quem preencheu e quem enviou. O envio não espera os de
-    acordo dos CNs nos Não.
+    acordo dos CNs nos Não — mas espera a loja: venda de loja com alguma venda
+    ainda sem Sim nem Não volta como ``loja_com_pendencia`` (``equipe.trava_do_envio``;
+    a gestão central não tem trava).
     """
     if not _can_create_contestations(request.user):
         return JsonResponse({'success': False, 'error': _MSG_SO_GERENTE_ENVIA}, status=403)
@@ -1880,6 +1962,9 @@ def bulk_create_contestation(request):
 
     created_ids = []
     ignoradas = []
+    # Primeiro decide o que cada item seria (sem criar nada): a trava do envio
+    # precisa saber quais vendas este pedido já está respondendo com Sim.
+    decididos = []
     for item in itens:
         eid = item['exclusion_id']
         exclusion = exclusions_by_id.get(eid)
@@ -1899,20 +1984,30 @@ def bulk_create_contestation(request):
         else:
             preenchido_por = rascunho.user
 
+        motivo = None
         if exclusion is None:
-            ignoradas.append({'id': eid, 'motivo': 'fora_do_escopo'})
-            continue
-        if eid in already_contested:
-            ignoradas.append({'id': eid, 'motivo': 'ja_contestada'})
-            continue
-        if not reason:
-            ignoradas.append({'id': eid, 'motivo': 'respondida_nao' if eid in com_nao else 'sem_motivo'})
-            continue
-        if not attachment:
-            ignoradas.append({'id': eid, 'motivo': 'sem_evidencia'})
-            continue
-        if eid in com_nao and not (item['reason'] or rascunho):
-            ignoradas.append({'id': eid, 'motivo': 'respondida_nao'})
+            motivo = 'fora_do_escopo'
+        elif eid in already_contested:
+            motivo = 'ja_contestada'
+        elif not reason:
+            motivo = 'respondida_nao' if eid in com_nao else 'sem_motivo'
+        elif not attachment:
+            motivo = 'sem_evidencia'
+        elif eid in com_nao and not (item['reason'] or rascunho):
+            motivo = 'respondida_nao'
+        decididos.append((eid, exclusion, dono_id, reason, attachment, preenchido_por, motivo))
+
+    # A trava do envio (pedido de 23/11/2026): loja com venda sem Sim nem Não
+    # não envia nada — nem pelo JavaScript, nem por pedido feito à mão.
+    aptos = [d[0] for d in decididos if d[6] is None]
+    trava = equipe.trava_do_envio(request.user, lote_atual, respondidas_agora=aptos) if aptos else None
+    travadas = trava['filiais'] if trava else set()
+
+    for eid, exclusion, dono_id, reason, attachment, preenchido_por, motivo in decididos:
+        if motivo is None and exclusion.filial in travadas:
+            motivo = 'loja_com_pendencia'
+        if motivo:
+            ignoradas.append({'id': eid, 'motivo': motivo})
             continue
 
         # Dois envios ao mesmo tempo (o gerente e o supervisor, ou o mesmo
@@ -1954,13 +2049,16 @@ def bulk_create_contestation(request):
     if created_ids:
         ContestationCartDraft.objects.filter(exclusion_id__in=created_ids).delete()
 
-    return JsonResponse({
+    resposta = {
         'success': True,
         'created': len(created_ids),
         'criadas': created_ids,
         'ignoradas': ignoradas,
         'enviadas': len(itens),
-    })
+    }
+    if travadas:
+        resposta['trava'] = equipe.trava_para_json(equipe.detalhar_trava(trava))
+    return JsonResponse(resposta)
 
 
 def _venda_do_ciclo_para_responder(request, exclusion_id):
