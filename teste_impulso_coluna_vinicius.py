@@ -169,9 +169,17 @@ t('o card dele concluído é vermelho', 'imp-card-vinicius' in card(h, 'Dele con
 t('o card de outra pessoa no A Fazer não é vermelho', 'imp-card-vinicius' not in card(h, 'De outra pessoa'))
 t('caixa volta marcada', 'name="a_fazer_vinicius" value="1"' in h and 'checked' in h[h.index('data-filtro-a-fazer-vinicius'):h.index('A fazer Vinicius', h.index('data-filtro-a-fazer-vinicius'))])
 t('dá para arrastar para as outras colunas', h.count('data-status="A_FAZER"') == 2 and 'data-droppable="true"' in h)
+# 24/11/2026: "deve somar aos outros filtros" — a caixa se combina com os demais (antes ignorava).
 r, c = colunas(cs, '?a_fazer_vinicius=1&colaborador=999999')
-t('mostra tudo dele mesmo com outros filtros', len(c['A Fazer Vinicius']) == 3 and c['A Fazer'] == []
-  and c[E] == ['Dele em andamento'] and c[ENT] == ['Dele em avaliação'], c)
+t('somado a um colaborador sem metas, a coluna dele fica vazia', c['A Fazer Vinicius'] == [] and c['A Fazer'] == []
+  and c[E] == [] and c[ENT] == [], c)
+r, c = colunas(cs, '?a_fazer_vinicius=1&colaborador=%d' % ana.id)
+t('somado ao colaborador dele, traz as dele daquele colaborador', set(c['A Fazer Vinicius']) == {'Do Vinicius 1', 'Do Vinicius 2', 'Dele mês que vem'}
+  and c[ENT] == ['Dele em avaliação'] and 'Dele em andamento' in c[E], c)
+r, c = colunas(cs, '?a_fazer_vinicius=1&criado_por=%d' % gestor.id)
+t('somado a "criado por" outra pessoa, nada dele entra', c['A Fazer Vinicius'] == [] and 'Dele em andamento' not in c[E], c)
+r, c = colunas(cs, '?a_fazer_vinicius=1&q=zzzz-ninguem')
+t('somado a uma busca por nome sem resultado, a coluna fica vazia', c['A Fazer Vinicius'] == [], c)
 r = cs.get(U + '?a_fazer_vinicius=1&colaborador=%d' % ana.id)
 h = r.content.decode()
 forma = h[h.index('data-filtro-a-fazer-vinicius'):h.index('A fazer Vinicius', h.index('data-filtro-a-fazer-vinicius'))]

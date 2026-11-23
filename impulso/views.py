@@ -298,10 +298,14 @@ def _criadores_de_metas(user):
     return User.objects.filter(id__in=ids).order_by('first_name', 'last_name', 'email')
 
 
-def _metas_do_kanban(request):
-    """(queryset, filtros, colaborador_id): o recorte do Kanban, igual na tela e no "Mostrar mais"."""
+def _metas_do_kanban(request, base=None):
+    """(queryset, filtros, colaborador_id): o recorte do Kanban, igual na tela e no "Mostrar mais".
+
+    ``base``: de onde partir (padrão: as metas que a pessoa vê). O "A fazer Vinicius"
+    passa a dele para receber os mesmos filtros da tela (24/11/2026).
+    """
     user = request.user
-    metas = _metas_do_usuario(user).select_related('colaborador', 'gestor')
+    metas = (_metas_do_usuario(user) if base is None else base).select_related('colaborador', 'gestor')
 
     colaborador_id = _int_or_none(request.GET.get('colaborador'))
     if colaborador_id:
@@ -421,9 +425,10 @@ def metas_kanban(request):
     metas = abertas + concluidas
     equipe_ids = _marcar_cards(metas, user, gestor)
 
-    # Com "A fazer Vinicius" marcado entra TUDO o que ele criou e ainda não foi
-    # concluído — de qualquer mês e sem os outros filtros da tela (05/11/2026:
-    # "deve mostrar tudo criado pelo vinicius"). O que está em A Fazer vai para a
+    # Com "A fazer Vinicius" marcado entra o que ele criou e ainda não foi concluído,
+    # SOMADO aos outros filtros da tela — colaborador, criado por, criadas por mim, nome,
+    # setor e mês (24/11/2026: "deve somar aos outros filtros"; antes, de 05/11, ignorava
+    # todos e trazia tudo dele de qualquer mês). O que está em A Fazer vai para a
     # coluna "A Fazer Vinicius"; o resto fica na coluna do SEU status (17/11/2026),
     # sempre com o card vermelho. Cada card aparece uma vez só; concluída segue o
     # recorte da "Concluída" (paginada) e fica vermelha se for dele.
@@ -435,8 +440,9 @@ def metas_kanban(request):
         # de colaborador fora da equipe dele (17/11/2026: "liberar todas").
         base = (Meta.objects.filter(aprovacao=Meta.Aprovacao.APROVADA) if user.id in IDS_A_FAZER_VINICIUS_MARCADO
                 else _metas_do_usuario(user))
+        base, _f, _c = _metas_do_kanban(request, base=base)
         dele = _por_entrega_e_prioridade(
-            base.select_related('colaborador', 'gestor').prefetch_related('itens')
+            base.prefetch_related('itens')
             .filter(created_by_id=ID_VINICIUS).exclude(status=Meta.Status.CONCLUIDA))
         # Só os que o recorte da tela não trouxe passam pelo _marcar_cards de novo.
         novos = [m for m in dele if m.id not in ja_na_tela]
