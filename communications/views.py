@@ -127,6 +127,14 @@ def _get_experience_window_alerts_for_dp():
     }
 
 
+def _avisos_ocultos(user):
+    try:
+        from portal_popups.context_processors import avisos_ocultos_do_superadmin
+        return avisos_ocultos_do_superadmin(user)
+    except Exception:
+        return []
+
+
 def _saudacao():
     hora = timezone.localtime().hour
     return 'Bom dia' if 5 <= hora < 12 else 'Boa tarde' if 12 <= hora < 18 else 'Boa noite'
@@ -210,6 +218,7 @@ def home_feed(request):
         'communications': communications,
         'recent_compliments': recent_compliments,
         'total_reconhecimentos': total_reconhecimentos,
+        'avisos_ocultos': _avisos_ocultos(request.user),
         'saudacao': _saudacao(),
         'pickup_redemptions': pickup_redemptions,
         'mandatory_trails_pending': mandatory_trails_pending,

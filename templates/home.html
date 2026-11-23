@@ -73,59 +73,7 @@
 
     @keyframes rc-popup-sai { to { opacity: 0; } }
 
-    /* ===== Home (23/11/2026): topo, reconhecimento, feed ===== */
-    .rc-hero {
-        background:
-            radial-gradient(circle at 90% -20%, rgba(255, 255, 255, .30), transparent 45%),
-            radial-gradient(circle at -10% 120%, rgba(236, 72, 153, .35), transparent 50%),
-            linear-gradient(135deg, #ff6b35 0%, #f7931e 55%, #f59e0b 100%);
-    }
-    html.dark .rc-hero {
-        background:
-            radial-gradient(circle at 90% -20%, rgba(255, 255, 255, .10), transparent 45%),
-            radial-gradient(circle at -10% 120%, rgba(157, 40, 101, .45), transparent 50%),
-            linear-gradient(135deg, #b8441c 0%, #a85a12 55%, #8a5a0b 100%);
-    }
-    .rc-hero-suave { color: rgba(255, 255, 255, .86); }
-    .rc-hero-avatar { box-shadow: 0 0 0 3px rgba(255, 255, 255, .55); background: rgba(255, 255, 255, .2); }
-    .rc-hero-saldo { background: rgba(255, 255, 255, .18); border: 1px solid rgba(255, 255, 255, .3); }
-    .rc-hero-acao {
-        background: rgba(255, 255, 255, .14);
-        border: 1px solid rgba(255, 255, 255, .18);
-        transition: transform .2s cubic-bezier(.2, .8, .2, 1), background-color .2s ease;
-    }
-    .rc-hero-acao:hover { background: rgba(255, 255, 255, .26); transform: translateY(-2px); }
-    .rc-hero-acao:active { transform: scale(.96); }
-    .rc-hero-acao i { transition: transform .25s cubic-bezier(.2, .8, .2, 1); }
-    .rc-hero-acao:hover i { transform: scale(1.15) rotate(-6deg); }
-
-    .rc-secao-titulo { display: flex; align-items: center; gap: .6rem; }
-    .rc-secao-icone {
-        width: 2.25rem; height: 2.25rem; border-radius: .8rem;
-        display: inline-flex; align-items: center; justify-content: center; color: #fff;
-    }
-
-    .rc-post { transition: box-shadow .25s ease, transform .25s cubic-bezier(.2, .8, .2, 1); }
-    .rc-post:hover { box-shadow: 0 18px 40px -24px rgba(15, 23, 42, .35); transform: translateY(-2px); }
-    .rc-recolhido { max-height: 22rem; overflow: hidden; position: relative; }
-    .rc-recolhido::after {
-        content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 5rem;
-        background: linear-gradient(to bottom, rgba(255, 255, 255, 0), #fff);
-    }
-    /* No escuro o texto do comunicado é uma folha clara (.prose em tema-escuro.css): o esmaecido acompanha. */
-    html.dark .rc-recolhido::after { background: linear-gradient(to bottom, rgba(246, 247, 249, 0), #f6f7f9); }
-
-    /* Entrada ao rolar. O repouso é VISÍVEL: o JS só esconde (rc-espera) o que está abaixo
-     * da dobra, dentro de um quadro já pintado, e mostra de novo por IntersectionObserver,
-     * por tempo (3 s) ou quando a aba volta — nada fica escondido se o JS ou o quadro falhar. */
-    .rc-espera { opacity: 0; transform: translateY(18px); }
-    .rc-entra { animation: rc-entra .55s cubic-bezier(.2, .8, .2, 1); }
-    @keyframes rc-entra { from { opacity: 0; transform: translateY(18px); } }
-
     @media (prefers-reduced-motion: reduce) {
-        .rc-hero-acao, .rc-hero-acao i, .rc-post { transition: none; }
-        .rc-hero-acao:hover, .rc-post:hover, .rc-hero-acao:hover i { transform: none; }
-        .rc-entra { animation: none; }
         #experience-window-modal.rc-anima:not(.hidden),
         #mandatory-trails-modal.rc-anima:not(.hidden),
         #experience-window-modal.rc-anima:not(.hidden) .experience-window-card,
@@ -134,6 +82,7 @@
         }
     }
 </style>
+{% include '_rc_animacoes.html' %}
 {% include 'compliments/_reconhecimento_estilo.html' %}
 {% endblock %}
 
@@ -296,7 +245,10 @@
     {% if rotina_liberada %}{% include 'rotina/_home.html' %}{% endif %}
 
     <!-- Topo: saudação, quem é e atalhos -->
-    <section class="rc-hero relative overflow-hidden rounded-3xl text-white shadow-lg mb-6" data-rc-revela>
+    <section class="rc-hero rc-surge relative overflow-hidden rounded-3xl text-white shadow-lg mb-6">
+        <span class="rc-forma rc-forma-1" aria-hidden="true"></span>
+        <span class="rc-forma rc-forma-2" aria-hidden="true"></span>
+        <span class="rc-forma rc-forma-3" aria-hidden="true"></span>
         <div class="relative p-5 sm:p-7">
             <div class="flex items-center gap-4">
                 <a href="{% url 'profile' %}" class="rc-hero-avatar w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden" title="Meu perfil">
@@ -307,7 +259,7 @@
                     {% endif %}
                 </a>
                 <div class="min-w-0 flex-1">
-                    <p class="rc-hero-suave text-sm sm:text-base">{{ saudacao|default:"Olá" }},</p>
+                    <p class="rc-hero-suave text-sm sm:text-base">{{ saudacao|default:"Olá" }}, <span class="rc-acena" aria-hidden="true">👋</span></p>
                     <h1 class="text-2xl sm:text-3xl font-bold leading-tight truncate">{{ user.first_name|default:user.full_name }}!</h1>
                     <p class="rc-hero-suave text-xs sm:text-sm truncate">
                         {{ user.get_hierarchy_display }}{% if user.primary_sector %} · {{ user.primary_sector.name }}{% endif %}
@@ -323,28 +275,38 @@
             <div class="flex items-center justify-between gap-3 mt-4">
                 {% now "l, j \d\e F" as hoje_por_extenso %}
                 <p class="rc-hero-suave text-sm first-letter:uppercase">{{ hoje_por_extenso|lower }}</p>
-                {% if user.hierarchy != 'PADRAO' and user.hierarchy != 'ADMINISTRATIVO' and user.hierarchy != 'SUPERVISOR' %}
-                <span class="sm:hidden rc-hero-saldo rounded-full px-3 py-1 text-sm font-bold whitespace-nowrap">C$ {{ user.balance_cs }}</span>
-                {% endif %}
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    {% if avisos_ocultos %}
+                    <button type="button" data-rc-avisos-abrir data-rc-pop
+                            class="rc-vidro inline-flex items-center gap-2 rounded-full pl-2 pr-3 py-1 text-xs sm:text-sm font-semibold whitespace-nowrap"
+                            title="Popups e travas que não aparecem para o SUPERADMIN">
+                        <span class="rc-ponto-vivo w-6 h-6 rounded-full bg-white text-orange-600 flex items-center justify-center text-[11px] font-bold">{{ avisos_ocultos|length }}</span>
+                        <span>aviso{{ avisos_ocultos|length|pluralize }} não mostrado{{ avisos_ocultos|length|pluralize }}</span>
+                    </button>
+                    {% endif %}
+                    {% if user.hierarchy != 'PADRAO' and user.hierarchy != 'ADMINISTRATIVO' and user.hierarchy != 'SUPERVISOR' %}
+                    <span class="sm:hidden rc-hero-saldo rounded-full px-3 py-1 text-sm font-bold whitespace-nowrap">C$ {{ user.balance_cs }}</span>
+                    {% endif %}
+                </div>
             </div>
             <nav class="grid grid-cols-3 {% if user.can_manage_users %}sm:grid-cols-6{% else %}sm:grid-cols-5{% endif %} gap-2 sm:gap-3 mt-5" aria-label="Atalhos">
-                <a href="{% url 'ticket_create' %}" class="rc-hero-acao rounded-2xl px-2 py-3 flex flex-col items-center gap-1.5 text-center">
+                <a href="{% url 'ticket_create' %}" style="--i: 1" class="rc-hero-acao rc-sobe rounded-2xl px-2 py-3 flex flex-col items-center gap-1.5 text-center">
                     <i class="fas fa-plus-circle text-lg"></i><span class="text-xs font-medium leading-tight">Novo chamado</span>
                 </a>
-                <a href="{% url 'tickets_list' %}" class="rc-hero-acao rounded-2xl px-2 py-3 flex flex-col items-center gap-1.5 text-center">
+                <a href="{% url 'tickets_list' %}" style="--i: 2" class="rc-hero-acao rc-sobe rounded-2xl px-2 py-3 flex flex-col items-center gap-1.5 text-center">
                     <i class="fas fa-list-check text-lg"></i><span class="text-xs font-medium leading-tight">Meus chamados</span>
                 </a>
-                <a href="{% url 'compliments:create' %}" class="rc-hero-acao rounded-2xl px-2 py-3 flex flex-col items-center gap-1.5 text-center">
+                <a href="{% url 'compliments:create' %}" style="--i: 3" class="rc-hero-acao rc-sobe rounded-2xl px-2 py-3 flex flex-col items-center gap-1.5 text-center">
                     <i class="fas fa-heart text-lg"></i><span class="text-xs font-medium leading-tight">Reconhecer</span>
                 </a>
-                <a href="{% url 'communications:communications_list' %}" class="rc-hero-acao rounded-2xl px-2 py-3 flex flex-col items-center gap-1.5 text-center">
+                <a href="{% url 'communications:communications_list' %}" style="--i: 4" class="rc-hero-acao rc-sobe rounded-2xl px-2 py-3 flex flex-col items-center gap-1.5 text-center">
                     <i class="fas fa-bullhorn text-lg"></i><span class="text-xs font-medium leading-tight">Comunicados</span>
                 </a>
-                <a href="{% url 'marketplace' %}" class="rc-hero-acao rounded-2xl px-2 py-3 flex flex-col items-center gap-1.5 text-center">
+                <a href="{% url 'marketplace' %}" style="--i: 5" class="rc-hero-acao rc-sobe rounded-2xl px-2 py-3 flex flex-col items-center gap-1.5 text-center">
                     <i class="fas fa-store text-lg"></i><span class="text-xs font-medium leading-tight">Mercadinho</span>
                 </a>
                 {% if user.can_manage_users %}
-                <a href="{% url 'communications:create_communication' %}" class="rc-hero-acao rounded-2xl px-2 py-3 flex flex-col items-center gap-1.5 text-center">
+                <a href="{% url 'communications:create_communication' %}" style="--i: 6" class="rc-hero-acao rc-sobe rounded-2xl px-2 py-3 flex flex-col items-center gap-1.5 text-center">
                     <i class="fas fa-pen-to-square text-lg"></i><span class="text-xs font-medium leading-tight">Criar comunicado</span>
                 </a>
                 {% endif %}
@@ -396,7 +358,7 @@
                                 </span>
                                 <span>{{ comm.created_at|date:"d/m/Y H:i" }}</span>
                             </div>
-                            {% include 'communications/reaction_buttons.html' with communication=comm %}
+                            <div class="rc-reacoes">{% include 'communications/reaction_buttons.html' with communication=comm %}</div>
                         </div>
                     </div>
                 </div>
@@ -404,6 +366,62 @@
             {% endfor %}
         </div>
     </div>
+    {% endif %}
+
+    {% if avisos_ocultos %}
+    <div id="rcAvisosOcultos" class="fixed inset-0 z-[9995] hidden" role="dialog" aria-modal="true" aria-labelledby="rcAvisosTitulo">
+        <div class="rc-modal-fundo absolute inset-0" data-rc-avisos-fechar></div>
+        <div class="relative flex min-h-full items-start sm:items-center justify-center p-3 sm:p-4">
+            <div class="rc-modal-cartao w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[calc(100dvh-2rem)]">
+                <div class="rc-hero px-5 py-4 text-white flex items-start justify-between gap-3">
+                    <div>
+                        <h3 id="rcAvisosTitulo" class="text-lg font-bold"><i class="fas fa-bell mr-2"></i>Avisos não mostrados</h3>
+                        <p class="rc-hero-suave text-xs mt-0.5">Popups e travas que valem para a sua audiência, mas não prendem o SUPERADMIN.</p>
+                    </div>
+                    <button type="button" data-rc-avisos-fechar class="rc-vidro w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" aria-label="Fechar"><i class="fas fa-times"></i></button>
+                </div>
+                <ul class="flex-1 min-h-0 overflow-y-auto divide-y divide-gray-100">
+                    {% for aviso in avisos_ocultos %}
+                    <li class="px-5 py-4 rc-sobe" style="--i: {{ forloop.counter }}">
+                        <div class="flex items-start gap-3">
+                            <span class="w-9 h-9 rounded-xl bg-orange-50 text-orange-500 flex items-center justify-center flex-shrink-0"><i class="fas {{ aviso.icone|default:'fa-bell' }}"></i></span>
+                            <div class="min-w-0 flex-1">
+                                <p class="font-semibold text-gray-900">{{ aviso.titulo }}
+                                    {% if aviso.bloqueante %}<span class="ml-1 align-middle text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-red-50 text-red-600">trava os outros</span>{% endif %}
+                                </p>
+                                {% if aviso.texto %}<p class="text-sm text-gray-600 mt-0.5 line-clamp-3">{{ aviso.texto|striptags }}</p>{% endif %}
+                            </div>
+                        </div>
+                        {% if aviso.url %}
+                        <div class="mt-3 flex justify-end">
+                            <a href="{{ aviso.url }}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-sm font-medium hover:bg-orange-600">
+                                {{ aviso.rotulo|default:"Abrir" }} <i class="fas fa-arrow-right text-xs"></i>
+                            </a>
+                        </div>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                <div class="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-3">
+                    <a href="{% url 'home' %}?ver_avisos=1" class="text-sm font-semibold text-orange-600 hover:underline">
+                        <i class="fas fa-eye mr-1"></i>Mostrar como popup
+                    </a>
+                    <button type="button" data-rc-avisos-fechar class="px-4 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-700 hover:bg-gray-100">Fechar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+    (function () {
+        var janela = document.getElementById('rcAvisosOcultos');
+        if (!janela) { return; }
+        function abrir() { janela.classList.remove('hidden'); }
+        function fechar() { janela.classList.add('hidden'); }
+        document.querySelectorAll('[data-rc-avisos-abrir]').forEach(function (b) { b.addEventListener('click', abrir); });
+        janela.querySelectorAll('[data-rc-avisos-fechar]').forEach(function (b) { b.addEventListener('click', fechar); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { fechar(); } });
+    })();
+    </script>
     {% endif %}
 
     {# Reconhecimento: era a seção de elogios recentes (23/11/2026). #}
@@ -415,7 +433,7 @@
                     Reconhecimento
                 </h2>
                 <p class="text-sm text-gray-500 mt-1">
-                    {% if total_reconhecimentos %}{{ total_reconhecimentos }} reconhecimento{{ total_reconhecimentos|pluralize }} na rede{% else %}Quem fez a diferença aparece aqui{% endif %}
+                    {% if total_reconhecimentos %}<span data-rc-conta="{{ total_reconhecimentos }}">{{ total_reconhecimentos }}</span> reconhecimento{{ total_reconhecimentos|pluralize }} na rede{% else %}Quem fez a diferença aparece aqui{% endif %}
                 </p>
             </div>
             <div class="flex items-center gap-2 flex-shrink-0">
@@ -437,7 +455,7 @@
         {% if recent_compliments %}
         <div class="rc-trilho flex gap-4 overflow-x-auto snap-x snap-mandatory pb-3 -mx-4 px-4 sm:mx-0 sm:px-0" data-rc-trilho>
             {% for c in recent_compliments %}
-            <div class="snap-start flex-shrink-0 w-[16.5rem] sm:w-72">{% include 'compliments/_cartao_reconhecimento.html' with c=c %}</div>
+            <div class="snap-start flex-shrink-0 w-[16.5rem] sm:w-72 rc-sobe" style="--i: {{ forloop.counter }}">{% include 'compliments/_cartao_reconhecimento.html' with c=c %}</div>
             {% endfor %}
             <a href="{% url 'compliments:mural' %}"
                class="snap-start flex-shrink-0 w-44 rounded-2xl border-2 border-dashed border-orange-200 bg-white flex flex-col items-center justify-center gap-2 text-center p-4 text-orange-600 hover:border-orange-400 hover:bg-orange-50 transition-colors">
@@ -619,7 +637,7 @@
                 <div class="px-4 sm:px-6 py-3 border-t border-gray-100">
                     <div class="flex items-center justify-between">
                         <div class="flex items-center space-x-4">
-                            {% include 'communications/reaction_buttons.html' with communication=comm %}
+                            <div class="rc-reacoes">{% include 'communications/reaction_buttons.html' with communication=comm %}</div>
                         </div>
                         <a href="{% url 'communications:communication_detail' comm.id %}" class="text-primary hover:text-orange-600 text-sm font-medium">
                             Ver mais <i class="fas fa-arrow-right ml-1"></i>
@@ -1039,44 +1057,5 @@ setInterval(() => {
 
 </script>
 {% include 'compliments/_reconhecimento_script.html' %}
-<script>
-(function () {
-    'use strict';
-    // "Continuar lendo": só no comunicado longo (sem JS ele aparece inteiro).
-    document.querySelectorAll('[data-rc-recolhe]').forEach(function (caixa) {
-        var botao = caixa.parentElement.querySelector('[data-rc-recolhe-botao]');
-        if (!botao || caixa.scrollHeight < 460) { return; }
-        caixa.classList.add('rc-recolhido');
-        botao.classList.remove('hidden');
-        botao.addEventListener('click', function () {
-            var fechado = caixa.classList.toggle('rc-recolhido');
-            botao.innerHTML = fechado ? 'Continuar lendo <i class="fas fa-chevron-down text-xs ml-1"></i>'
-                                      : 'Mostrar menos <i class="fas fa-chevron-up text-xs ml-1"></i>';
-            if (fechado) { caixa.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
-        });
-    });
-
-    // Entrada ao rolar — sem nunca deixar nada escondido (ver .rc-espera no CSS).
-    var calmo = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (calmo || !('IntersectionObserver' in window) || document.visibilityState !== 'visible') { return; }
-    var blocos = [].slice.call(document.querySelectorAll('[data-rc-revela]'));
-    function mostrar(el) {
-        if (!el.classList.contains('rc-espera')) { return; }
-        el.classList.remove('rc-espera');
-        el.classList.add('rc-entra');
-    }
-    function mostrarTudo() { blocos.forEach(mostrar); }
-    requestAnimationFrame(function () {
-        var dobra = window.innerHeight;
-        var olho = new IntersectionObserver(function (entradas) {
-            entradas.forEach(function (e) { if (e.isIntersecting) { olho.unobserve(e.target); mostrar(e.target); } });
-        }, { rootMargin: '0px 0px -40px 0px' });
-        blocos.forEach(function (el) {
-            if (el.getBoundingClientRect().top > dobra) { el.classList.add('rc-espera'); olho.observe(el); }
-        });
-        setTimeout(function () { if (document.visibilityState !== 'visible') { mostrarTudo(); } }, 3000);
-        document.addEventListener('visibilitychange', function () { if (document.visibilityState !== 'visible') { mostrarTudo(); } });
-    });
-})();
-</script>
+{% include '_rc_animacoes_script.html' %}
 {% endblock %}

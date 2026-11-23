@@ -1,0 +1,98 @@
+{% comment %}
+Interações compartilhadas da home e do comunicado: entrada ao rolar, números que contam,
+barra de leitura, voltar ao topo, "pop" nos botões e o "Continuar lendo". Incluir uma vez,
+no fim da página. Tudo falha para o estado visível.
+{% endcomment %}
+<div id="rcProgresso" aria-hidden="true"></div>
+<button type="button" id="rcTopo" hidden aria-label="Voltar ao topo"><i class="fas fa-arrow-up"></i></button>
+<script>
+(function () {
+    'use strict';
+    var calmo = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // "Continuar lendo": só no texto longo (sem JS ele aparece inteiro).
+    document.querySelectorAll('[data-rc-recolhe]').forEach(function (caixa) {
+        var botao = caixa.parentElement.querySelector('[data-rc-recolhe-botao]');
+        if (!botao || caixa.scrollHeight < 460) { return; }
+        caixa.classList.add('rc-recolhido');
+        botao.classList.remove('hidden');
+        botao.addEventListener('click', function () {
+            var fechado = caixa.classList.toggle('rc-recolhido');
+            botao.innerHTML = fechado ? 'Continuar lendo <i class="fas fa-chevron-down text-xs ml-1"></i>'
+                                      : 'Mostrar menos <i class="fas fa-chevron-up text-xs ml-1"></i>';
+            if (fechado) { caixa.scrollIntoView({ block: 'nearest', behavior: calmo ? 'auto' : 'smooth' }); }
+        });
+    });
+
+    // "Pop" ao tocar em botões das reações, atalhos e afins.
+    document.addEventListener('click', function (e) {
+        var alvo = e.target.closest && e.target.closest('[data-rc-pop], .rc-reacoes button, .rc-reacoes a');
+        if (!alvo || calmo) { return; }
+        alvo.classList.remove('rc-pop');
+        void alvo.offsetWidth;
+        alvo.classList.add('rc-pop');
+    });
+
+    // Números que contam (data-rc-conta="123"). O texto final já está no HTML.
+    function contar(el) {
+        var fim = parseInt(el.getAttribute('data-rc-conta'), 10);
+        if (calmo || !fim || fim < 2 || !window.requestAnimationFrame) { return; }
+        var inicio = null, dur = Math.min(1400, 400 + fim * 8);
+        function passo(t) {
+            if (inicio === null) { inicio = t; }
+            var p = Math.min(1, (t - inicio) / dur);
+            el.textContent = Math.round(fim * (1 - Math.pow(1 - p, 3))).toLocaleString('pt-BR');
+            if (p < 1) { requestAnimationFrame(passo); } else { el.textContent = fim.toLocaleString('pt-BR'); }
+        }
+        requestAnimationFrame(passo);
+    }
+
+    // Barra de leitura e "voltar ao topo".
+    var barra = document.getElementById('rcProgresso');
+    var topo = document.getElementById('rcTopo');
+    var agendado = false;
+    function rolou() {
+        agendado = false;
+        var max = document.documentElement.scrollHeight - window.innerHeight;
+        var p = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
+        if (barra) { barra.style.transform = 'scaleX(' + p.toFixed(4) + ')'; }
+        if (topo) { topo.hidden = window.scrollY < 700; }
+    }
+    window.addEventListener('scroll', function () {
+        if (!agendado) { agendado = true; (window.requestAnimationFrame || setTimeout)(rolou); }
+    }, { passive: true });
+    rolou();
+    if (topo) {
+        topo.addEventListener('click', function () { window.scrollTo({ top: 0, behavior: calmo ? 'auto' : 'smooth' }); });
+    }
+
+    // Entrada ao rolar (e os números contam quando aparecem).
+    var contadores = [].slice.call(document.querySelectorAll('[data-rc-conta]'));
+    if (calmo || !('IntersectionObserver' in window) || document.visibilityState !== 'visible') {
+        return;
+    }
+    var olhoConta = new IntersectionObserver(function (entradas) {
+        entradas.forEach(function (e) { if (e.isIntersecting) { olhoConta.unobserve(e.target); contar(e.target); } });
+    });
+    contadores.forEach(function (el) { olhoConta.observe(el); });
+
+    var blocos = [].slice.call(document.querySelectorAll('[data-rc-revela]'));
+    function mostrar(el) {
+        if (!el.classList.contains('rc-espera')) { return; }
+        el.classList.remove('rc-espera');
+        el.classList.add('rc-entra');
+    }
+    function mostrarTudo() { blocos.forEach(mostrar); }
+    requestAnimationFrame(function () {
+        var dobra = window.innerHeight;
+        var olho = new IntersectionObserver(function (entradas) {
+            entradas.forEach(function (e) { if (e.isIntersecting) { olho.unobserve(e.target); mostrar(e.target); } });
+        }, { rootMargin: '0px 0px -40px 0px' });
+        blocos.forEach(function (el) {
+            if (el.getBoundingClientRect().top > dobra) { el.classList.add('rc-espera'); olho.observe(el); }
+        });
+        document.addEventListener('visibilitychange', function () { if (document.visibilityState !== 'visible') { mostrarTudo(); } });
+        window.addEventListener('pagehide', mostrarTudo);
+    });
+})();
+</script>

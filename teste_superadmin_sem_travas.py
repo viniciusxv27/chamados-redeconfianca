@@ -111,6 +111,28 @@ try:
         t('para as outras travas, o colaborador tem popup bloqueante pendente', pp.tem_popup_bloqueante_pendente(comum))
         t('o SUPERADMIN não', not pp.tem_popup_bloqueante_pendente(sa) and not pp.tem_popup_bloqueante_pendente(su))
 
+    print('\n== AVISOS NÃO MOSTRADOS (botão do SUPERADMIN) ==')
+    popup_fake = SimpleNamespace(title='ZZ Pesquisa de clima', message='Responda a pesquisa', action_url='/clima/',
+                                 action_label='Responder', is_within_window=lambda: True, applies_to=lambda u: True,
+                                 is_completed_by=lambda u: False, is_blocking_now=lambda: True)
+    lista2 = mock.MagicMock()
+    lista2.order_by.return_value = [popup_fake]
+    with mock.patch('portal_popups.models.PortalPopup.objects.filter', return_value=lista2), \
+            mock.patch('acess.popup_login.campanha_pendente', return_value=None), \
+            mock.patch.object(pp, '_deve_bater_ponto', return_value=False):
+        av = pp.avisos_ocultos_do_superadmin(sa)
+        t('o SUPERADMIN vê o popup que deixou de aparecer', len(av) == 1 and av[0]['titulo'] == 'ZZ Pesquisa de clima'
+          and av[0]['bloqueante'] and av[0]['url'] == '/clima/', av)
+        t('colaborador comum não tem lista (ele recebe o popup)', pp.avisos_ocultos_do_superadmin(comum) == [])
+        home = SimpleNamespace(url_name='home', namespace='')
+        r = pedido(sa, '/'); r.resolver_match = home
+        t('na home sem pedir, nada de popup', pp.portal_popup_gate(r)['portal_popup'] is None)
+        r = rf.get('/?ver_avisos=1'); r.user = sa; r.resolver_match = home
+        ctx = pp.portal_popup_gate(r)
+        t('"Mostrar como popup" abre o popup, sem travar', ctx['portal_popup'] is popup_fake and ctx['portal_popup_blocking'] is False, ctx)
+        r = rf.get('/tickets/?ver_avisos=1'); r.user = sa; r.resolver_match = SimpleNamespace(url_name='tickets_list', namespace='')
+        t('fora da home o ?ver_avisos não abre nada', pp.portal_popup_gate(r)['portal_popup'] is None)
+
     print('\n== HOME → /cursos/ ==')
     with mock.patch.object(cursos_perm, 'pode_ver', return_value=True), \
             mock.patch.object(cursos_perm, 'pendencias', return_value=['curso']):

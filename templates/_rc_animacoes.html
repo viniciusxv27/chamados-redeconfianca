@@ -1,0 +1,142 @@
+{% comment %}
+Visual e animações compartilhados da home (/) e do comunicado (/communications/<id>/) — 23/11/2026.
+
+Regra de segurança (ver o comentário dos popups em home.html): nada fica escondido por
+padrão. Entrada com `animation` só tira a opacidade durante a própria animação; o que
+depende de JS (rc-espera) só é escondido pelo script dentro de um quadro já pintado e
+sempre volta (IntersectionObserver, visibilitychange). Com prefers-reduced-motion, nada mexe.
+{% endcomment %}
+<style>
+    /* ---------- topo em degradê vivo ---------- */
+    .rc-hero {
+        background:
+            radial-gradient(circle at 90% -20%, rgba(255, 255, 255, .30), transparent 45%),
+            radial-gradient(circle at -10% 120%, rgba(236, 72, 153, .35), transparent 50%),
+            linear-gradient(120deg, #ff6b35, #f7931e, #f59e0b, #ff6b35, #ec6a3d);
+        background-size: 100% 100%, 100% 100%, 300% 300%;
+        animation: rc-gradiente 16s ease-in-out infinite alternate;
+    }
+    html.dark .rc-hero {
+        background:
+            radial-gradient(circle at 90% -20%, rgba(255, 255, 255, .10), transparent 45%),
+            radial-gradient(circle at -10% 120%, rgba(157, 40, 101, .45), transparent 50%),
+            linear-gradient(120deg, #b8441c, #a85a12, #8a5a0b, #b8441c, #9a3f1f);
+        background-size: 100% 100%, 100% 100%, 300% 300%;
+    }
+    @keyframes rc-gradiente {
+        from { background-position: 0 0, 0 0, 0% 50%; }
+        to   { background-position: 0 0, 0 0, 100% 50%; }
+    }
+    .rc-forma { position: absolute; border-radius: 9999px; pointer-events: none; background: rgba(255, 255, 255, .13); }
+    .rc-forma-1 { width: 11rem; height: 11rem; right: -3rem; top: -4rem; animation: rc-flutua 9s ease-in-out infinite; }
+    .rc-forma-2 { width: 6rem; height: 6rem; right: 22%; bottom: -2.5rem; animation: rc-flutua 11s ease-in-out -3s infinite reverse; }
+    .rc-forma-3 { width: 2.5rem; height: 2.5rem; left: 46%; top: 1.2rem; background: rgba(255, 255, 255, .18); animation: rc-flutua 7s ease-in-out -1s infinite; }
+    @keyframes rc-flutua {
+        0%, 100% { transform: translate(0, 0) scale(1); }
+        50%      { transform: translate(-14px, 12px) scale(1.06); }
+    }
+    .rc-hero-suave { color: rgba(255, 255, 255, .86); }
+    .rc-hero-avatar { box-shadow: 0 0 0 3px rgba(255, 255, 255, .55); background: rgba(255, 255, 255, .2); transition: transform .3s cubic-bezier(.2, .8, .2, 1); }
+    .rc-hero-avatar:hover { transform: scale(1.06) rotate(-3deg); }
+    .rc-hero-saldo, .rc-vidro { background: rgba(255, 255, 255, .18); border: 1px solid rgba(255, 255, 255, .3); }
+    .rc-vidro { transition: background-color .2s ease, transform .2s cubic-bezier(.2, .8, .2, 1); }
+    .rc-vidro:hover { background: rgba(255, 255, 255, .28); transform: translateY(-1px); }
+    .rc-acena { display: inline-block; transform-origin: 70% 70%; animation: rc-acena 2.2s ease-in-out .4s 2; }
+    @keyframes rc-acena {
+        0%, 60%, 100% { transform: rotate(0); }
+        10%, 30% { transform: rotate(16deg); }
+        20%, 40% { transform: rotate(-8deg); }
+        50% { transform: rotate(10deg); }
+    }
+
+    /* ---------- atalhos do topo ---------- */
+    .rc-hero-acao {
+        position: relative; overflow: hidden;
+        background: rgba(255, 255, 255, .14);
+        border: 1px solid rgba(255, 255, 255, .18);
+        transition: transform .2s cubic-bezier(.2, .8, .2, 1), background-color .2s ease, box-shadow .2s ease;
+    }
+    .rc-hero-acao::after {          /* brilho que atravessa no hover */
+        content: ''; position: absolute; top: 0; bottom: 0; left: -60%; width: 40%;
+        background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .35), transparent);
+        transform: skewX(-20deg); transition: left .6s ease;
+    }
+    .rc-hero-acao:hover { background: rgba(255, 255, 255, .26); transform: translateY(-3px); box-shadow: 0 10px 20px -12px rgba(0, 0, 0, .35); }
+    .rc-hero-acao:hover::after { left: 130%; }
+    .rc-hero-acao:active { transform: scale(.95); }
+    .rc-hero-acao i { transition: transform .3s cubic-bezier(.2, .8, .2, 1); }
+    .rc-hero-acao:hover i { transform: scale(1.2) rotate(-8deg); }
+
+    /* ---------- entrada em cascata (style="--i: N") ---------- */
+    .rc-sobe { animation: rc-sobe .6s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(var(--i, 0) * 70ms + 80ms); }
+    @keyframes rc-sobe { from { opacity: 0; transform: translateY(16px) scale(.98); } }
+    .rc-surge { animation: rc-surge .7s cubic-bezier(.2, .8, .2, 1) both; }
+    @keyframes rc-surge { from { opacity: 0; transform: translateY(-10px) scale(.985); } }
+
+    /* ---------- títulos de seção ---------- */
+    .rc-secao-titulo { display: flex; align-items: center; gap: .6rem; }
+    .rc-secao-icone {
+        width: 2.25rem; height: 2.25rem; border-radius: .8rem; flex-shrink: 0;
+        display: inline-flex; align-items: center; justify-content: center; color: #fff;
+        box-shadow: 0 8px 18px -10px rgba(255, 107, 53, .8);
+        transition: transform .35s cubic-bezier(.2, .8, .2, 1);
+    }
+    .rc-secao-titulo:hover .rc-secao-icone { transform: rotate(-10deg) scale(1.08); }
+
+    /* ---------- cartões ---------- */
+    .rc-post { transition: box-shadow .25s ease, transform .25s cubic-bezier(.2, .8, .2, 1); }
+    .rc-post:hover { box-shadow: 0 18px 40px -24px rgba(15, 23, 42, .35); transform: translateY(-2px); }
+    .rc-recolhido { max-height: 22rem; overflow: hidden; position: relative; }
+    .rc-recolhido::after {
+        content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 5rem;
+        background: linear-gradient(to bottom, rgba(255, 255, 255, 0), #fff);
+    }
+    /* No escuro o texto do comunicado é uma folha clara (.prose em tema-escuro.css): o esmaecido acompanha. */
+    html.dark .rc-recolhido::after { background: linear-gradient(to bottom, rgba(246, 247, 249, 0), #f6f7f9); }
+
+    /* ---------- toque nos botões ---------- */
+    .rc-pop { animation: rc-pop .35s cubic-bezier(.2, .8, .2, 1); }
+    @keyframes rc-pop { 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
+    .rc-ponto-vivo { position: relative; }
+    .rc-ponto-vivo::before {
+        content: ''; position: absolute; inset: -4px; border-radius: inherit;
+        border: 2px solid rgba(255, 255, 255, .7); animation: rc-pulsa 1.8s ease-out infinite;
+    }
+    @keyframes rc-pulsa { from { opacity: .9; transform: scale(.9); } to { opacity: 0; transform: scale(1.25); } }
+
+    /* ---------- entrada ao rolar ---------- */
+    .rc-espera { opacity: 0; transform: translateY(18px); }
+    .rc-entra { animation: rc-entra .6s cubic-bezier(.2, .8, .2, 1); }
+    @keyframes rc-entra { from { opacity: 0; transform: translateY(18px); } }
+
+    /* ---------- barra de leitura e voltar ao topo ---------- */
+    #rcProgresso {
+        position: fixed; left: 0; top: 0; height: 3px; width: 100%; z-index: 70; pointer-events: none;
+        background: linear-gradient(90deg, #ff6b35, #f59e0b, #ec4899);
+        transform-origin: 0 50%; transform: scaleX(0);
+    }
+    #rcTopo {
+        position: fixed; right: 1rem; bottom: 6.5rem; z-index: 55;
+        width: 2.75rem; height: 2.75rem; border-radius: 9999px;
+        display: flex; align-items: center; justify-content: center;
+        background: #fff; color: #ff6b35; box-shadow: 0 10px 25px -10px rgba(15, 23, 42, .45);
+        border: 1px solid #ffe1d3;
+        transition: opacity .25s ease, transform .25s cubic-bezier(.2, .8, .2, 1);
+    }
+    #rcTopo[hidden] { display: none; }
+    #rcTopo:hover { transform: translateY(-3px); }
+    html.dark #rcTopo { background: var(--tema-superficie); border-color: var(--tema-borda); }
+
+    /* ---------- avisos não mostrados (SUPERADMIN) ---------- */
+    .rc-modal-fundo { background: rgba(15, 23, 42, .55); }
+    .rc-modal-cartao { animation: rc-surge .35s cubic-bezier(.2, .8, .2, 1); }
+
+    @media (prefers-reduced-motion: reduce) {
+        .rc-hero, .rc-forma, .rc-acena, .rc-sobe, .rc-surge, .rc-entra, .rc-pop,
+        .rc-ponto-vivo::before, .rc-modal-cartao { animation: none !important; }
+        .rc-hero-acao, .rc-hero-acao i, .rc-post, .rc-secao-icone, .rc-vidro, .rc-hero-avatar { transition: none; }
+        .rc-hero-acao:hover, .rc-post:hover, .rc-hero-acao:hover i, .rc-secao-titulo:hover .rc-secao-icone,
+        .rc-vidro:hover, .rc-hero-avatar:hover { transform: none; }
+        .rc-hero-acao::after { display: none; }
+    }
+</style>

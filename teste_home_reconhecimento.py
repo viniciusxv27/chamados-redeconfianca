@@ -118,6 +118,34 @@ try:
         t('a parcial traz só os cartões da página seguinte', r.status_code == 200 and '<html' not in parte.lower()
           and parte.count('data-rc-reco') >= 1 and 'data-rc-proxima' not in parte)
 
+    print('\n== ANIMAÇÕES E AVISOS (SUPERADMIN) ==')
+    html = ca.get('/').content.decode()
+    t('a home tem as animações compartilhadas (degradê vivo, cascata, barra de leitura)',
+      'rc-forma-1' in html and 'rc-sobe' in html and 'id="rcProgresso"' in html and 'data-rc-conta=' in html)
+    t('colaborador comum não vê o botão de avisos', 'data-rc-avisos-abrir' not in html)
+    chefe = User.objects.create_user(username='zzrec.chefe', email='zzrec.chefe@exemplo-teste.local', password='S3nha!teste',
+                                     first_name='Zzchefe', last_name='Super', hierarchy='SUPERADMIN')
+    cc = Client(); cc.force_login(chefe)
+    falsos = [{'titulo': 'ZZ Pesquisa de clima', 'texto': 'Responda', 'url': '/clima/', 'rotulo': 'Responder',
+               'icone': 'fa-bell', 'bloqueante': True}]
+    with mock.patch('communications.views._avisos_ocultos', return_value=falsos):
+        html = cc.get('/').content.decode()
+    t('SUPERADMIN com aviso oculto vê o botão e a lista', 'data-rc-avisos-abrir' in html and '1</span>' in html
+      and 'ZZ Pesquisa de clima' in html and 'trava os outros' in html and '?ver_avisos=1' in html)
+
+    print('\n== DETALHE DO COMUNICADO NO MESMO ESTILO ==')
+    from communications.models import Communication
+    com = Communication.objects.create(title='ZZ Comunicado estilizado', message='<p>ZZ corpo</p>', sender=bia,
+                                       title_color='#123456')
+    com.recipients.add(ana)
+    r = ca.get(f'/communications/{com.id}/')
+    html = r.content.decode()
+    t('o detalhe abre', r.status_code == 200, r.status_code)
+    t('com o topo em degradê, autor e tempo relativo', 'rc-hero' in html and 'Zzbia Elogiadora' in html and 'data-rc-quando' in html)
+    t('o título na cor escolhida', 'style="color: #123456"' in html and 'ZZ Comunicado estilizado' in html)
+    t('e as animações compartilhadas', 'id="rcProgresso"' in html and 'rc-reacoes' in html)
+    t('comentários e confirmação de leitura continuam', 'id="comment-form"' in html and 'ESTOU_CIENTE' in html)
+
     print('\n== TEMPLATES ==')
     ruins = [f for f in ('templates/home.html', 'templates/compliments/mural.html',
                          'templates/compliments/_cartao_reconhecimento.html', 'templates/compliments/_mural_pagina.html')

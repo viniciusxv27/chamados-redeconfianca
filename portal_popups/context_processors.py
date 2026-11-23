@@ -80,6 +80,36 @@ def tem_popup_bloqueante_pendente(user):
         return False
 
 
+def avisos_ocultos_do_superadmin(user):
+    """O que a regra "nada trava o SUPERADMIN" deixou de mostrar a ele (botão da home).
+
+    [{titulo, texto, url, rotulo, icone, bloqueante}] — os popups do portal no ar para a
+    audiência dele e ainda não concluídos, e a pergunta do Acess sobre login com erro.
+    Falha para lista vazia.
+    """
+    if not (user and getattr(user, 'is_authenticated', False) and _e_superadmin(user)):
+        return []
+    itens = []
+    try:
+        from .models import PortalPopup
+        for popup in PortalPopup.objects.filter(is_active=True).order_by('order', 'id'):
+            if popup.is_within_window() and popup.applies_to(user) and not popup.is_completed_by(user):
+                itens.append({'titulo': popup.title, 'texto': popup.message, 'url': popup.action_url or '',
+                              'rotulo': popup.action_label or 'Abrir', 'icone': 'fa-window-maximize',
+                              'bloqueante': popup.is_blocking_now()})
+    except Exception:
+        pass
+    try:
+        from acess.popup_login import campanha_pendente
+        campanha = campanha_pendente(user)
+        if campanha:
+            itens.append({'titulo': campanha.get('titulo') or 'Login com erro', 'texto': campanha.get('pergunta') or '',
+                          'url': '/?ver_avisos=1', 'rotulo': 'Responder', 'icone': 'fa-key', 'bloqueante': False})
+    except Exception:
+        pass
+    return itens
+
+
 def _com_popup_do_acess(ctx, user, is_home):
     """Na home, sem popup de /popups/ na vez: o popup "login com erro" do Acess, se houver.
 
@@ -102,11 +132,20 @@ def portal_popup_gate(request):
     user = getattr(request, 'user', None)
     if not user or not user.is_authenticated:
         return empty
-    # Nenhum popup nem trava para o SUPERADMIN (23/11/2026).
-    if _e_superadmin(user):
-        return empty
 
     path = request.path or ''
+    resolver = getattr(request, 'resolver_match', None)
+    is_home = bool(resolver) and resolver.url_name == 'home' and not resolver.namespace
+
+    # Nenhum popup nem trava para o SUPERADMIN (23/11/2026). Ele vê o que ficou de
+    # fora pelo botão "avisos não mostrados" da home; o "Mostrar como popup" de lá
+    # (?ver_avisos=1) abre o popup na home, sempre pulável.
+    so_pulavel = False
+    if _e_superadmin(user):
+        if not (is_home and request.GET.get('ver_avisos') == '1'):
+            return empty
+        so_pulavel = True
+
     if _is_essential(path):
         return empty
 
@@ -114,9 +153,6 @@ def portal_popup_gate(request):
     # jornada, aí o portal cobra o "de acordo".
     if _deve_bater_ponto(user):
         return empty
-
-    resolver = getattr(request, 'resolver_match', None)
-    is_home = bool(resolver) and resolver.url_name == 'home' and not resolver.namespace
 
     try:
         from .models import PortalPopup
@@ -150,7 +186,7 @@ def portal_popup_gate(request):
             if popup.is_blocking_now():
                 if on_action_page(popup):
                     return empty
-                return {'portal_popup': popup, 'portal_popup_blocking': True}
+                return {'portal_popup': popup, 'portal_popup_blocking': not so_pulavel}
 
         # Nenhum bloqueante pendente: mostra o primeiro pulável, apenas na home.
         if is_home:

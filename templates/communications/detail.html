@@ -2,69 +2,65 @@
 
 {% block title %}{{ communication.title }}{% endblock %}
 
+{% block extra_css %}
+{% include '_rc_animacoes.html' %}
+{% endblock %}
+
 {% block content %}
 {% csrf_token %}
-<div class="min-h-screen bg-gray-50">
-    <!-- Header -->
-    <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
-        <div class="px-4 sm:px-6 py-4">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between space-y-4 sm:space-y-0">
-                <div class="min-w-0 flex-1">
-                    <h1 class="text-xl sm:text-2xl font-bold text-gray-900 flex items-center">
-                        <i class="fas fa-bullhorn text-primary mr-2 sm:mr-3"></i>
-                        Comunicado
-                    </h1>
-                    <p class="text-gray-600 mt-1 text-sm sm:text-base truncate">{{ communication.title }}</p>
-                </div>
-                <div class="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
-                    {% if communication.sender == user or user.hierarchy == 'SUPERADMIN' %}
-                        <a href="{% url 'communications:edit_communication' communication.id %}" class="bg-blue-500 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center text-sm sm:text-base">
-                            <i class="fas fa-edit mr-1 sm:mr-2"></i>
-                            Editar
-                        </a>
-                        <a href="{% url 'communications:delete_communication' communication.id %}" class="bg-red-500 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center text-sm sm:text-base">
-                            <i class="fas fa-trash mr-1 sm:mr-2"></i>
-                            Excluir
-                        </a>
-                    {% endif %}
-                    <a href="{% url 'communications:communications_list' %}" class="bg-gray-100 text-gray-700 px-3 sm:px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center text-sm sm:text-base">
-                        <i class="fas fa-arrow-left mr-1 sm:mr-2"></i>
-                        Voltar
+<div class="min-h-screen">
+    <div class="max-w-4xl mx-auto px-4 sm:px-0">
+    <section class="rc-hero rc-surge relative overflow-hidden rounded-3xl text-white shadow-lg mb-6">
+        <span class="rc-forma rc-forma-1" aria-hidden="true"></span>
+        <span class="rc-forma rc-forma-2" aria-hidden="true"></span>
+        <div class="relative p-5 sm:p-7">
+            <div class="flex items-center justify-between gap-3 flex-wrap">
+                <a href="{% url 'communications:communications_list' %}" class="rc-vidro inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium">
+                    <i class="fas fa-arrow-left text-xs"></i> Comunicados
+                </a>
+                {% if communication.sender == user or user.hierarchy == 'SUPERADMIN' %}
+                <div class="flex items-center gap-2">
+                    <a href="{% url 'communications:edit_communication' communication.id %}" data-rc-pop
+                       class="rc-vidro inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium">
+                        <i class="fas fa-pen text-xs"></i> Editar
                     </a>
+                    <a href="{% url 'communications:delete_communication' communication.id %}"
+                       class="rc-vidro inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium hover:!bg-red-500">
+                        <i class="fas fa-trash text-xs"></i> Excluir
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+            <div class="flex items-center gap-2 mt-5 flex-wrap">
+                <span class="rc-vidro rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide"><i class="fas fa-bullhorn mr-1"></i>Comunicado</span>
+                {% if communication.obrigatorio %}<span class="rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide bg-white text-red-600"><i class="fas fa-lock mr-1"></i>Obrigatório</span>{% endif %}
+                {% if communication.is_pinned %}<span class="rc-vidro rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide"><i class="fas fa-thumbtack mr-1"></i>Fixado</span>{% endif %}
+            </div>
+            <div class="flex items-center gap-3 mt-4">
+                {% if communication.sender.profile_picture %}
+                <img src="{{ communication.sender.profile_picture.url }}" alt="" class="rc-hero-avatar w-12 h-12 rounded-full object-cover flex-shrink-0">
+                {% else %}
+                <span class="rc-hero-avatar w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 font-bold">{{ communication.sender.first_name|slice:":1"|upper }}{{ communication.sender.last_name|slice:":1"|upper }}</span>
+                {% endif %}
+                <div class="min-w-0">
+                    <p class="font-semibold truncate">{{ communication.sender.full_name }}</p>
+                    <p class="rc-hero-suave text-sm">
+                        <time datetime="{{ communication.created_at|date:'c' }}" title="{{ communication.created_at|date:'d/m/Y H:i' }}" data-rc-quando>{{ communication.created_at|date:"d/m/Y H:i" }}</time>
+                        · {% if communication.send_to_all %}<i class="fas fa-globe-americas text-xs"></i> Para todos{% else %}<i class="fas fa-user-group text-xs"></i> Para grupos e pessoas{% endif %}
+                    </p>
                 </div>
             </div>
         </div>
+    </section>
     </div>
 
     <!-- Communication Content -->
     <div class="max-w-4xl mx-auto px-4 sm:px-0">
-        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-            <!-- Header Info -->
-            <div class="px-4 sm:px-6 py-4 border-b border-gray-200 bg-gray-50">
-                <div class="flex items-center justify-between">
-                    <div class="min-w-0 flex-1">
-                        <h2 class="text-lg sm:text-xl font-semibold text-gray-900 leading-tight"{% if communication.title_color %} style="color: {{ communication.title_color }}"{% endif %}>{{ communication.title }}</h2>
-                        <div class="flex flex-col sm:flex-row sm:items-center sm:space-x-4 mt-2 text-xs sm:text-sm text-gray-600 space-y-1 sm:space-y-0">
-                            <div class="flex items-center">
-                                <i class="fas fa-user mr-1"></i>
-                                <span class="truncate">{{ communication.sender.full_name }}</span>
-                            </div>
-                            <div class="flex items-center">
-                                <i class="fas fa-clock mr-1"></i>
-                                <span>{{ communication.created_at|date:"d/m/Y H:i" }}</span>
-                            </div>
-                            {% if communication.send_to_all %}
-                            <div class="flex items-center">
-                                <i class="fas fa-globe mr-1"></i>
-                                <span class="hidden sm:inline">Enviado para todos os usuários</span>
-                                <span class="sm:hidden">Para todos</span>
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
+        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden rc-sobe" style="--i: 2">
+            <div class="px-4 sm:px-6 pt-5 sm:pt-6">
+                <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 leading-tight break-words"{% if communication.title_color %} style="color: {{ communication.title_color }}"{% endif %}>{{ communication.title }}</h1>
             </div>
-            
+
             <!-- Message Content -->
             <div class="px-4 sm:px-6 py-4 sm:py-6">
                 {% if communication.image or communication.images.exists %}
@@ -126,7 +122,7 @@
                 
                 <!-- Reactions Section -->
                 <div class="mt-6 pt-4 border-t border-gray-200">
-                    {% include 'communications/reaction_buttons.html' with communication=communication %}
+                    <div class="rc-reacoes">{% include 'communications/reaction_buttons.html' with communication=communication %}</div>
                     
                     <!-- Reactions Details -->
                     {% if reactions_info.likes.count > 0 or reactions_info.views.count > 0 %}
@@ -250,9 +246,9 @@
             </div>
             
             <!-- Comments Section -->
-            <div class="px-6 py-4 border-t border-gray-200">
-                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                    <i class="fas fa-comments text-primary mr-2"></i>
+            <div class="px-4 sm:px-6 py-5 border-t border-gray-200" data-rc-revela>
+                <h3 class="rc-secao-titulo text-lg font-bold text-gray-900 mb-4">
+                    <span class="rc-secao-icone bg-primary"><i class="fas fa-comments text-sm"></i></span>
                     Comentários
                     <span class="ml-2 text-sm font-normal text-gray-500" id="comment-count">
                         ({{ communication.comments.count }})
@@ -279,12 +275,12 @@
                                 name="content" 
                                 id="comment-content"
                                 rows="3" 
-                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
+                                class="w-full px-4 py-3 border border-gray-200 rounded-2xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-primary focus:border-transparent resize-none transition-colors"
                                 placeholder="Adicione um comentário..."
                                 required></textarea>
                             <div class="mt-2 flex items-center justify-between">
                                 <p class="text-xs text-gray-500">Seja respeitoso e construtivo nos comentários.</p>
-                                <button type="submit" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors text-sm">
+                                <button type="submit" data-rc-pop class="bg-primary text-white px-4 py-2 rounded-xl hover:bg-orange-600 transition-colors text-sm font-medium shadow-sm">
                                     <i class="fas fa-paper-plane mr-1"></i>
                                     Comentar
                                 </button>
@@ -334,8 +330,11 @@
             
             <!-- Action Buttons -->
             {% if communication.sender != user %}
-            <div class="px-6 py-4 bg-gray-50 border-t border-gray-200">
-                <h3 class="text-lg font-semibold text-gray-900 mb-2">Confirmação de Leitura</h3>
+            <div class="px-4 sm:px-6 py-5 bg-gray-50 border-t border-gray-200" data-rc-revela>
+                <h3 class="rc-secao-titulo text-lg font-bold text-gray-900 mb-3">
+                    <span class="rc-secao-icone bg-green-500"><i class="fas fa-check-double text-sm"></i></span>
+                    Confirmação de leitura
+                </h3>
                 {% if communication.obrigatorio %}
                 <p class="mb-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                     <i class="fas fa-lock mr-1.5"></i>Este comunicado é <strong>obrigatório</strong>: o portal fica travado até você dar o "Estou Ciente".
@@ -348,12 +347,12 @@
                     {% csrf_token %}
                     <div class="flex flex-wrap gap-3">
                         <button type="submit" name="status" value="ESTOU_CIENTE"
-                                class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center">
+                                data-rc-pop class="bg-green-600 text-white px-5 py-2.5 rounded-xl hover:bg-green-700 hover:-translate-y-0.5 transition-all shadow-sm flex items-center font-medium">
                             <i class="fas fa-check mr-2"></i>
                             Estou Ciente
                         </button>
                         <button type="submit" name="status" value="ESTOU_COM_DUVIDA" 
-                                class="bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition-colors flex items-center">
+                                data-rc-pop class="bg-yellow-500 text-white px-5 py-2.5 rounded-xl hover:bg-yellow-600 hover:-translate-y-0.5 transition-all shadow-sm flex items-center font-medium">
                             <i class="fas fa-question mr-2"></i>
                             Estou com Dúvida
                         </button>
@@ -385,26 +384,29 @@
             
             <!-- Status de Usuários (apenas para quem criou o comunicado) -->
             {% if is_sender and users_status %}
-            <div class="px-6 py-4 border-t border-gray-200">
-                <h3 class="text-lg font-semibold text-gray-900 mb-4">Status dos Destinatários</h3>
+            <div class="px-4 sm:px-6 py-5 border-t border-gray-200" data-rc-revela>
+                <h3 class="rc-secao-titulo text-lg font-bold text-gray-900 mb-4">
+                    <span class="rc-secao-icone bg-indigo-500"><i class="fas fa-users text-sm"></i></span>
+                    Status dos destinatários
+                </h3>
                 
                 <!-- Estatísticas -->
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
-                    <div class="bg-red-50 p-3 rounded-lg text-center">
+                    <div class="bg-red-50 p-4 rounded-2xl text-center rc-post">
                         <div class="text-2xl font-bold text-red-600">
-                            {{ status_counts.not_viewed }}
+                            <span data-rc-conta="{{ status_counts.not_viewed }}">{{ status_counts.not_viewed }}</span>
                         </div>
                         <div class="text-sm text-red-800">Não Visualizados</div>
                     </div>
-                    <div class="bg-yellow-50 p-3 rounded-lg text-center">
+                    <div class="bg-yellow-50 p-4 rounded-2xl text-center rc-post">
                         <div class="text-2xl font-bold text-yellow-600">
-                            {{ status_counts.with_doubt }}
+                            <span data-rc-conta="{{ status_counts.with_doubt }}">{{ status_counts.with_doubt }}</span>
                         </div>
                         <div class="text-sm text-yellow-800">Com Dúvidas</div>
                     </div>
-                    <div class="bg-green-50 p-3 rounded-lg text-center">
+                    <div class="bg-green-50 p-4 rounded-2xl text-center rc-post">
                         <div class="text-2xl font-bold text-green-600">
-                            {{ status_counts.aware }}
+                            <span data-rc-conta="{{ status_counts.aware }}">{{ status_counts.aware }}</span>
                         </div>
                         <div class="text-sm text-green-800">Cientes</div>
                     </div>
@@ -638,5 +640,7 @@ document.addEventListener('keydown', function(e) {
     }
 });
 </script>
+{% include 'compliments/_reconhecimento_script.html' %}
+{% include '_rc_animacoes_script.html' %}
 {% include 'communications/_anexos_script.html' %}
 {% endblock %}
