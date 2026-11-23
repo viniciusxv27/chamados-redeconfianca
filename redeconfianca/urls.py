@@ -16,6 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include, re_path
+from django.views.generic import TemplateView
 
 from core import busca as core_busca
 from django.conf import settings
@@ -93,6 +94,8 @@ urlpatterns = [
     path('sw.js', service_worker_view, name='service_worker'),  # Service Worker na raiz
     path('OneSignalSDKWorker.js', onesignal_worker_view, name='onesignal_worker'),  # OneSignal Service Worker
     path('', home_feed, name='home'),  # Home feed como página inicial
+    # Política de privacidade pública (Play Store / App Store exigem; sem login) — 23/11/2026.
+    path('privacidade/', TemplateView.as_view(template_name='privacidade.html'), name='privacidade'),
     path('login/', login_view, name='login'),  # Login na raiz
     path('logout/', logout_view, name='logout'),  # Logout na raiz
     path('commission/', include('users.urls_commission')),  # Comissionamento na raiz
