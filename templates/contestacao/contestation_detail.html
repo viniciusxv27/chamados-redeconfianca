@@ -155,10 +155,17 @@
         </div>
         {% endif %}
 
+        {% if sou_o_cn and not de_acordo_meu %}{% if c.status == 'accepted' or c.status == 'rejected' and not c.confirmed_by %}
+        <div class="px-5 py-4 bg-gray-50 text-sm text-gray-700">
+            <i class="fas fa-eye mr-1"></i> Parecer do gestor: <strong>{% if c.status == 'accepted' %}aprovada{% else %}rejeitada{% endif %}</strong>.
+            Você acompanha por aqui; quem dá o de acordo ou questiona o time de conferência de vendas é o gerente da loja.
+        </div>
+        {% endif %}{% endif %}
+
         <!-- Ação: Gerente confirma/nega (aprovação) -->
         {% if c.status == 'accepted' and de_acordo_meu %}
         <div class="px-5 py-4 bg-blue-50 space-y-3">
-            <h3 class="text-xs uppercase font-semibold text-blue-700 mb-2"><i class="fas fa-info-circle mr-1"></i> Gestor aprovou — dê o de acordo ou negue</h3>
+            <h3 class="text-xs uppercase font-semibold text-blue-700 mb-2"><i class="fas fa-info-circle mr-1"></i> Gestor aprovou — dê o de acordo ou negue (questiona a conferência de vendas)</h3>
             <input type="text" id="conf-notes" placeholder="Observação (opcional)"
                    class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
             <div class="flex gap-3">
@@ -183,7 +190,7 @@
         <!-- Ação: Gerente confirma/nega (rejeição) -->
         {% if c.status == 'rejected' and not c.confirmed_by and de_acordo_meu %}
         <div class="px-5 py-4 bg-red-50 space-y-3">
-            <h3 class="text-xs uppercase font-semibold text-red-700 mb-2"><i class="fas fa-exclamation-circle mr-1"></i> Gestor rejeitou — dê o de acordo ou negue</h3>
+            <h3 class="text-xs uppercase font-semibold text-red-700 mb-2"><i class="fas fa-exclamation-circle mr-1"></i> Gestor rejeitou — dê o de acordo ou negue (questiona a conferência de vendas)</h3>
             <input type="text" id="conf-notes" placeholder="Observação (opcional)"
                    class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-red-500 focus:border-red-500">
             <div class="flex gap-3">

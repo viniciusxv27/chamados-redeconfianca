@@ -1,4 +1,69 @@
+{% comment %}
+O Não de uma venda (o gerente responde) e o de acordo do CN dono dela: 24 h
+para concordar ou discordar; passou o prazo, "De acordo automático por prazo
+expirado". Discordância volta para o gerente: contesta (Sim) ou mantém o Não.
+{% endcomment %}
 <div class="rounded-md border border-gray-300 bg-gray-50 px-2 py-1 text-gray-700">
-    <span class="font-semibold"><i class="fas fa-hand mr-1"></i>Não:</span> {{ resp.justificativa }}
-    <span class="block text-gray-500">por {{ resp.preenchido_por.full_name|default:"—" }} em {{ resp.atualizado_em|date:"d/m H:i" }}{% if not contestation_blocked %} · <button type="button" class="underline hover:text-gray-800" onclick="desfazerNao({{ resp.exclusion_id }})">desfazer</button>{% endif %}</span>
+    <span class="font-semibold"><i class="fas fa-hand mr-1"></i>Não do gerente:</span> {{ resp.justificativa }}
+    <span class="block text-gray-500">por {{ resp.preenchido_por.full_name|default:"—" }} em {{ resp.atualizado_em|date:"d/m H:i" }}{% if papel != 'cn' and not contestation_blocked %} · <button type="button" class="underline hover:text-gray-800" onclick="desfazerNao({{ resp.exclusion_id }})">desfazer</button>{% endif %}</span>
+
+    {% if resp.situacao_cn == 'aguardando' %}
+    <div class="mt-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-900" data-acordo="aguardando">
+        <i class="fas fa-hourglass-half mr-1"></i>{% if resp.cn_id == user.pk %}Seu de acordo{% else %}De acordo do CN{% endif %} até <strong>{{ resp.prazo_cn|date:"d/m H:i" }}</strong> — depois disso fica de acordo automático.
+        {% if resp.cn_id == user.pk %}
+        <div class="mt-1.5 flex flex-wrap items-start gap-2">
+            <form method="post" action="{% url 'contestacao:cn_de_acordo_nao' resp.exclusion_id %}">
+                {% csrf_token %}
+                <input type="hidden" name="acao" value="de_acordo">
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button type="submit" class="px-2.5 py-1 rounded-md bg-emerald-600 text-white font-semibold hover:bg-emerald-700"><i class="fas fa-check mr-1"></i>De acordo</button>
+            </form>
+            <details class="min-w-0">
+                <summary class="cursor-pointer list-none px-2.5 py-1 rounded-md border border-amber-300 bg-white font-semibold text-amber-900 hover:bg-amber-100"><i class="fas fa-comment-slash mr-1"></i>Discordo</summary>
+                <form method="post" action="{% url 'contestacao:cn_de_acordo_nao' resp.exclusion_id %}" class="mt-1.5 space-y-1.5">
+                    {% csrf_token %}
+                    <input type="hidden" name="acao" value="discorda">
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <textarea name="motivo" rows="2" required minlength="{{ min_justificativa }}" class="w-full rounded border border-gray-300 px-2 py-1 text-xs" placeholder="Por que esta venda deveria ser contestada?"></textarea>
+                    <button type="submit" class="px-2.5 py-1 rounded-md bg-amber-600 text-white font-semibold hover:bg-amber-700">Enviar para o gerente</button>
+                </form>
+            </details>
+        </div>
+        {% endif %}
+    </div>
+    {% elif resp.situacao_cn == 'de_acordo' %}
+    <div class="mt-1 text-emerald-800" data-acordo="de_acordo"><i class="fas fa-circle-check mr-1"></i>CN de acordo em {{ resp.cn_respondido_em|date:"d/m H:i" }}</div>
+    {% elif resp.situacao_cn == 'automatico' %}
+    <div class="mt-1" data-acordo="automatico">
+        <span class="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 font-semibold text-slate-700"><i class="fas fa-clock-rotate-left"></i>De acordo automático por prazo expirado</span>
+        <span class="text-gray-500">({{ resp.cn_respondido_em|date:"d/m H:i" }})</span>
+    </div>
+    {% elif resp.situacao_cn == 'discorda' %}
+    <div class="mt-1 rounded border border-red-200 bg-red-50 px-2 py-1 text-red-900" data-acordo="discorda">
+        <i class="fas fa-comment-slash mr-1"></i><strong>CN discordou</strong> em {{ resp.cn_respondido_em|date:"d/m H:i" }}: {{ resp.cn_motivo }}
+        {% if papel == 'cn' %}
+        <div class="text-red-800">Com o gerente para decidir.</div>
+        {% else %}
+        <div class="mt-1.5 flex flex-wrap items-start gap-2">
+            {% if not contestation_blocked %}
+            <button type="button" onclick="openReason({{ resp.exclusion_id }})" class="px-2.5 py-1 rounded-md text-white font-semibold" style="background-color:#FF6B35"><i class="fas fa-check mr-1"></i>Contestar (Sim)</button>
+            {% endif %}
+            <details class="min-w-0">
+                <summary class="cursor-pointer list-none px-2.5 py-1 rounded-md border border-gray-300 bg-white font-semibold text-gray-800 hover:bg-gray-100"><i class="fas fa-hand mr-1"></i>Manter o Não</summary>
+                <form method="post" action="{% url 'contestacao:manter_nao' resp.exclusion_id %}" class="mt-1.5 space-y-1.5">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <textarea name="resposta" rows="2" required minlength="{{ min_justificativa }}" class="w-full rounded border border-gray-300 px-2 py-1 text-xs" placeholder="Responda ao CN por que o Não fica"></textarea>
+                    <button type="submit" class="px-2.5 py-1 rounded-md bg-gray-700 text-white font-semibold hover:bg-gray-800">Manter o Não</button>
+                </form>
+            </details>
+        </div>
+        {% endif %}
+    </div>
+    {% elif resp.situacao_cn == 'mantido' %}
+    <div class="mt-1 text-gray-700" data-acordo="mantido">
+        <i class="fas fa-comment-slash mr-1"></i>CN discordou: {{ resp.cn_motivo }}<br>
+        <i class="fas fa-reply mr-1"></i><strong>Gerente manteve o Não</strong>{% if resp.mantido_por %} ({{ resp.mantido_por.full_name }}, {{ resp.mantido_em|date:"d/m H:i" }}){% endif %}: {{ resp.gerente_resposta }}
+    </div>
+    {% endif %}
 </div>

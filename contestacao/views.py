@@ -21,7 +21,7 @@ from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_POST
 
 from .models import (ExclusionRecord, ExclusionSyncBatch, Contestation,
-                     ContestationHistory, ContestationCartDraft, ParteDoCN,
+                     ContestationHistory, ContestationCartDraft,
                      RespostaNaoContesta, TipoBase)
 from . import equipe
 from users.models import Sector, SystemConfig, User
@@ -96,14 +96,15 @@ def _can_create_contestations(user):
 
 def _can_access_contestation_module(user):
     """Abre /contestacao/. O CN (vendedor com venda na base do ciclo) entra
-    também — só para responder as próprias vendas (ver contestacao/equipe.py)."""
+    também — para ver as próprias vendas e dar o de acordo nos Não do gerente
+    (ver contestacao/equipe.py)."""
     if _acesso_ao_modulo_sem_cn(user):
         return True
     return equipe.e_cn(user)
 
 
 def _acesso_so_como_cn(user):
-    """Só entra porque é CN: vê e responde apenas as próprias vendas.
+    """Só entra porque é CN: vê apenas as próprias vendas (e dá o de acordo nos Não).
 
     ``e_cn`` primeiro: vem do cache, e para quase todo mundo é falso — assim o
     escopo não paga as consultas de permissão a cada chamada."""
@@ -382,7 +383,6 @@ ROTULO_SITUACAO = {
     'ja_contestada': 'Já contestada neste ciclo',
     'fora_do_escopo': 'Fora da sua loja/base',
     'nao_encontrada': 'Não está mais na base sincronizada',
-    'aguardando_cns': 'Esperando os CNs da loja marcarem pronto',
     'respondida_nao': 'Respondida como Não',
 }
 
@@ -1077,6 +1077,12 @@ def exclusion_list(request):
     vendedor_filter = request.GET.get('vendedor', '').strip()
     if vendedor_filter:
         qs = qs.filter(vendedor__iexact=vendedor_filter)
+    # "Contestar" numa discordância do CN: abre só aquela venda.
+    venda_filter = request.GET.get('venda', '').strip()
+    if venda_filter.isdigit():
+        qs = qs.filter(pk=int(venda_filter))
+    else:
+        venda_filter = ''
 
     # Pilares e filiais filtrados pelos setores acessíveis do usuário (para a UI)
     pilares = qs.values_list('pilar', flat=True).distinct().order_by('pilar')
@@ -1102,11 +1108,15 @@ def exclusion_list(request):
     page_number = request.GET.get('page')
     records_page = paginator.get_page(page_number)
 
-    # O "Não" de cada venda da página (com a justificativa e quem respondeu):
-    # antes ele só escondia a linha no navegador de quem clicou.
+    # O "Não" de cada venda da página (com a justificativa, quem respondeu e o
+    # de acordo do CN). Prazo de 24 h vencido vira de acordo automático antes
+    # de desenhar — a tela nunca mostra "aguardando" de prazo que já passou.
+    ids_da_pagina = [r.pk for r in records_page]
+    equipe.expirar_prazos(ids=ids_da_pagina)
     respostas_nao = {
         r.exclusion_id: r for r in RespostaNaoContesta.objects.filter(
-            exclusion_id__in=[r.pk for r in records_page]).select_related('preenchido_por')
+            exclusion_id__in=ids_da_pagina).select_related(
+                'preenchido_por', 'cn_respondido_por', 'mantido_por')
     }
     # O Sim que está no carrinho de OUTRA pessoa (o CN, ou o gerente por ele):
     # quem olha a loja precisa ver que a venda já tem resposta e de quem.
@@ -1154,6 +1164,7 @@ def exclusion_list(request):
         # Sem isto, quem enviou 20 e viu chegar 13 não tinha onde conferir.
         'balanco': _balanco_do_ciclo(request.user, sync_state),
         'vendedor_filter': vendedor_filter,
+        'venda_filter': venda_filter,
         'respostas_nao': respostas_nao,
         'sim_de_outros': sim_de_outros,
         'equipe': painel_equipe,
@@ -1164,39 +1175,42 @@ def exclusion_list(request):
 
 
 def _painel_da_equipe(user, lote, qs_escopo_lote=None):
-    """O quadro "quem já fez a sua parte" do topo de /contestacao/.
+    """O quadro do topo de /contestacao/.
 
-    - CN: as próprias linhas (uma por loja onde tem venda) e como está a loja;
-    - gerente: todos os vendedores das lojas dele, e o envio da loja;
-    - gestão central: as lojas do escopo dela, sem trava para enviar.
+    - CN: os Não que o gerente deu nas vendas dele, para dar o de acordo (24 h)
+      ou discordar, e quantas o gerente está contestando;
+    - gerente / gestão central: o que falta responder em cada loja, os de acordo
+      dos CNs e as discordâncias que voltaram para ele decidir.
     """
     papel = equipe.papel(user)
-    vazio = {'papel': papel, 'lojas': [], 'minhas': [], 'lote': lote,
-             'pode_enviar': False, 'para_enviar': 0}
+    vazio = {'papel': papel, 'lojas': [], 'naos': [], 'discordancias': [], 'lote': lote,
+             'pode_enviar': False, 'para_enviar': 0, 'aguardando': 0, 'sim_do_cn': 0}
     if lote is None or qs_escopo_lote is None:
         return vazio
+    if papel == 'cn':
+        naos = equipe.naos_do_cn(user, lote)
+        ids = list(qs_escopo_lote.values_list('pk', flat=True))
+        situacoes = equipe.situacao_das_vendas(ids)
+        return dict(vazio, naos=naos,
+                    aguardando=sum(1 for r in naos if r.aguardando_cn),
+                    sim_do_cn=sum(1 for sit in situacoes.values() if sit in ('sim', 'contestada')),
+                    pendentes_do_gerente=sum(1 for sit in situacoes.values()
+                                             if sit in ('pendente', 'sim_incompleto')),
+                    total_do_cn=len(ids),
+                    prazo_horas=int(equipe.PRAZO_CN.total_seconds() // 3600))
     filiais = set(qs_escopo_lote.values_list('filial', flat=True).distinct())
     lojas = equipe.estado_das_lojas(lote, filiais)
     lista = [lojas[f] for f in sorted(lojas)]
-    minhas = []
-    for loja in lista:
-        for p in loja['participantes']:
-            if p['cn'] is not None and p['cn'].pk == user.pk:
-                # O CN vê como anda a loja dele, sem a lista dos colegas.
-                minhas.append(dict(p, loja_cns=loja['cns'], loja_cns_prontos=loja['cns_prontos'],
-                                   loja_liberada=loja['liberada']))
-    pode_enviar = papel in ('gerente', 'central')
-    para_enviar = sum(loja['para_enviar'] for loja in lista
-                      if loja['liberada'] or papel == 'central')
-    return {
-        'papel': papel,
-        'lojas': lista,
-        'minhas': minhas,
-        'lote': lote,
-        'pode_enviar': pode_enviar,
-        'para_enviar': para_enviar,
-        'alguma_travada': any(not loja['liberada'] for loja in lista),
-    }
+    return dict(
+        vazio,
+        lojas=lista,
+        discordancias=equipe.discordancias(lote, filiais),
+        pode_enviar=papel in ('gerente', 'central'),
+        para_enviar=sum(loja['para_enviar'] for loja in lista),
+        faltam=sum(loja['faltam'] for loja in lista),
+        aguardando=sum(loja['cn_aguardando'] for loja in lista),
+        prazo_horas=int(equipe.PRAZO_CN.total_seconds() // 3600),
+    )
 
 
 @login_required
@@ -1371,10 +1385,10 @@ def cart_draft_upsert(request):
     if not exclusion:
         return JsonResponse({'success': False, 'error': 'Registro nao encontrado no seu escopo.'}, status=404)
 
-    # Responder é do CN dono da venda ou de quem contesta pela loja (o gerente).
-    if not _can_create_contestations(request.user) and not equipe.pode_responder(request.user, exclusion):
+    # Quem responde as vendas é o gerente (o CN só dá o de acordo nos Não).
+    if not equipe.pode_responder(request.user, exclusion):
         return JsonResponse({'success': False,
-                             'error': 'Só o CN dono da venda ou o gerente da loja responde por ela.'},
+                             'error': 'Quem responde as vendas é o gerente da loja.'},
                             status=403)
 
     # Venda respondida "Não": o Sim só entra quando é a pessoa clicando em Sim
@@ -1478,7 +1492,7 @@ def cart_draft_sync(request):
         if RespostaNaoContesta.objects.filter(exclusion=exclusion).exists():
             unresolved.append({'local_id': local_id, 'motivo': 'respondida_nao'})
             continue
-        if not _can_create_contestations(request.user) and not equipe.pode_responder(request.user, exclusion):
+        if not equipe.pode_responder(request.user, exclusion):
             unresolved.append({'local_id': local_id, 'motivo': 'fora_do_escopo'})
             continue
 
@@ -1596,14 +1610,6 @@ def create_contestation(request, exclusion_id):
         messages.warning(request, 'Já existe uma contestação em andamento para este registro.')
         return redirect('contestacao:exclusion_list')
 
-    # A mesma trava do envio em lote: o gerente só envia quando os CNs da loja
-    # terminaram. Gestão central segue sem trava.
-    if (not _can_manage_contestations(request.user)
-            and not equipe.venda_liberada(exclusion, equipe.filiais_liberadas([exclusion]))):
-        messages.error(request, 'A loja ainda tem CN sem marcar a parte dele como pronta. '
-                                'O envio libera quando todos terminarem.')
-        return redirect('contestacao:exclusion_list')
-
     if request.method == 'POST':
         reason = request.POST.get('reason', '').strip()
         attachment = request.FILES.get('attachment')
@@ -1638,22 +1644,22 @@ def create_contestation(request, exclusion_id):
 # do corpo — era um POST único com todas as fotos que dava "erro de conexão".
 LOTE_CARRINHO = 5
 
-_MSG_SO_GERENTE_ENVIA = ('Quem envia as contestações é o gerente da loja. '
-                         'Responda as suas vendas e marque a sua parte como pronta.')
+_MSG_SO_GERENTE_ENVIA = ('Quem responde e envia as contestações é o gerente da loja. '
+                         'Você dá o de acordo nas vendas que ele marcar como Não.')
 
 
 def _conferir_itens_do_carrinho(user, ids, com_arquivo_local=(), sync_state=None,
-                                da_loja=False, com_trava=False):
+                                da_loja=False):
     """Como está cada item do carrinho, antes de enviar.
 
     Devolve (linhas, prontas). Cada linha diz a situação daquele item:
     pronta, sem_motivo, sem_evidencia, ja_contestada, fora_do_escopo,
-    nao_encontrada, respondida_nao ou aguardando_cns — para a tela poder dizer
-    exatamente o que não vai passar, em vez de o item sumir no meio do envio.
+    nao_encontrada ou respondida_nao — para a tela poder dizer exatamente o que
+    não vai passar, em vez de o item sumir no meio do envio.
 
     ``da_loja``: o envio do gerente — vale o carrinho de qualquer pessoa da loja
-    (o do CN, o dele), não só o de quem confere. ``com_trava``: item pronto de
-    loja com CN ainda trabalhando vira ``aguardando_cns``.
+    (o dele, o de outro gerente), não só o de quem confere. O envio não espera
+    os de acordo dos CNs nos Não (pedido de 23/11/2026).
     """
     sync_state = sync_state or _get_sync_window_state(user)
     ids = [i for i in dict.fromkeys(ids) if i]
@@ -1682,7 +1688,6 @@ def _conferir_itens_do_carrinho(user, ids, com_arquivo_local=(), sync_state=None
     )
     com_nao = set(RespostaNaoContesta.objects.filter(exclusion_id__in=ids)
                   .values_list('exclusion_id', flat=True))
-    liberadas = equipe.filiais_liberadas(no_escopo.values()) if com_trava else set()
 
     linhas, prontas = [], []
     for eid in ids:
@@ -1698,8 +1703,6 @@ def _conferir_itens_do_carrinho(user, ids, com_arquivo_local=(), sync_state=None
             situacao = 'sem_motivo'
         elif not ((rascunho and rascunho.attachment) or eid in com_arquivo_local):
             situacao = 'sem_evidencia'
-        elif com_trava and not equipe.venda_liberada(venda, liberadas):
-            situacao = 'aguardando_cns'
         else:
             situacao = 'pronta'
             prontas.append(eid)
@@ -1724,7 +1727,7 @@ def cart_check(request):
 
     Com ``{"loja": true}`` é a conferência do envio do gerente: os ids saem do
     servidor — toda venda da loja (das lojas dele) que está num carrinho com
-    motivo e evidência, de quem for — e vale a trava dos CNs.
+    motivo e evidência, de quem for.
     """
     if not _can_create_contestations(request.user):
         return JsonResponse({'success': False, 'error': _MSG_SO_GERENTE_ENVIA}, status=403)
@@ -1750,7 +1753,6 @@ def cart_check(request):
                       else 'É necessário sincronizar a planilha antes de criar novas contestações.'),
         }, status=400)
 
-    central = _can_manage_contestations(request.user)
     da_loja = bool(payload.get('loja'))
     lojas = []
     if da_loja:
@@ -1760,14 +1762,13 @@ def cart_check(request):
         estado = equipe.estado_das_lojas(lote, set(escopo.values_list('filial', flat=True).distinct()))
         no_escopo = set(escopo.values_list('pk', flat=True))
         ids = [eid for f in sorted(estado) for eid in estado[f]['ids_para_enviar'] if eid in no_escopo]
-        lojas = [{'filial': f, 'liberada': estado[f]['liberada'], 'cns': estado[f]['cns'],
-                  'cns_prontos': estado[f]['cns_prontos'],
-                  'faltando': [p['cn'].get_full_name() or p['vendedor'] for p in estado[f]['cns_faltando']]}
+        lojas = [{'filial': f, 'faltam': estado[f]['faltam'],
+                  'cn_aguardando': estado[f]['cn_aguardando'], 'cn_discorda': estado[f]['cn_discorda']}
                  for f in sorted(estado)]
 
     linhas, prontas = _conferir_itens_do_carrinho(
         request.user, ids, payload.get('com_arquivo_local') or [], sync_state,
-        da_loja=da_loja, com_trava=not central)
+        da_loja=da_loja)
     return JsonResponse({
         'success': True,
         'total': len(linhas),
@@ -1793,11 +1794,11 @@ def bulk_create_contestation(request):
     fora, com o motivo. Antes ela só dizia quantas foram criadas: item sem
     evidência sumia calado, e o carrinho era apagado como se tudo tivesse ido.
 
-    Fluxo por equipe (17/11/2026): quem envia é o gerente (``can_create``); o
-    CN só prepara. O rascunho que vale pode ser o de qualquer pessoa da loja
+    Quem responde e envia é o gerente (``can_create``; fluxo de 23/11/2026).
+    O rascunho que vale pode ser o de qualquer pessoa da loja
     (``equipe.rascunho_para_envio``), a contestação fica no nome do CN dono da
-    venda e guarda quem preencheu e quem enviou. Loja com CN sem marcar pronto
-    não envia (``aguardando_cns``) — a não ser para a gestão central.
+    venda e guarda quem preencheu e quem enviou. O envio não espera os de
+    acordo dos CNs nos Não.
     """
     if not _can_create_contestations(request.user):
         return JsonResponse({'success': False, 'error': _MSG_SO_GERENTE_ENVIA}, status=403)
@@ -1867,8 +1868,6 @@ def bulk_create_contestation(request):
                 if d.user_id == request.user.pk}
     com_nao = set(RespostaNaoContesta.objects.filter(exclusion_id__in=exclusion_ids)
                   .values_list('exclusion_id', flat=True))
-    central = _can_manage_contestations(request.user)
-    liberadas = set() if central else equipe.filiais_liberadas(exclusions_by_id.values())
     lote_atual = _get_latest_sync_batch()
     donos = equipe.donos_para(lote_atual, {(e.filial, e.vendedor) for e in exclusions_by_id.values()})
 
@@ -1914,9 +1913,6 @@ def bulk_create_contestation(request):
             continue
         if eid in com_nao and not (item['reason'] or rascunho):
             ignoradas.append({'id': eid, 'motivo': 'respondida_nao'})
-            continue
-        if not central and not equipe.venda_liberada(exclusion, liberadas):
-            ignoradas.append({'id': eid, 'motivo': 'aguardando_cns'})
             continue
 
         # Dois envios ao mesmo tempo (o gerente e o supervisor, ou o mesmo
@@ -1983,7 +1979,7 @@ def _venda_do_ciclo_para_responder(request, exclusion_id):
         return None, JsonResponse({'success': False, 'error': 'Venda não encontrada no seu escopo.'}, status=404)
     if not equipe.pode_responder(request.user, venda):
         return None, JsonResponse({'success': False,
-                                   'error': 'Só o CN dono da venda ou o gerente da loja responde por ela.'},
+                                   'error': 'Quem responde as vendas é o gerente da loja.'},
                                   status=403)
     return venda, None
 
@@ -1991,9 +1987,12 @@ def _venda_do_ciclo_para_responder(request, exclusion_id):
 @login_required
 @require_POST
 def responder_nao(request, exclusion_id):
-    """Responde "Não" a uma venda: ela não vai ser contestada, e a justificativa
-    é obrigatória. Vale para a loja toda (uma resposta por venda) e tira a
-    venda do carrinho de quem a tinha — a resposta mais nova é esta."""
+    """O gerente responde "Não" a uma venda: ela não vai ser contestada, e a
+    justificativa é obrigatória. Vale para a loja toda (uma resposta por venda)
+    e tira a venda do carrinho de quem a tinha — a resposta mais nova é esta.
+
+    O CN dono da venda passa a ter 24 h para dar o de acordo (ou discordar);
+    mudar a justificativa reabre o prazo, porque o CN concordou com outra."""
     if not _can_access_contestation_module(request.user):
         return JsonResponse({'success': False, 'error': 'Sem permissão.'}, status=403)
     venda, erro = _venda_do_ciclo_para_responder(request, exclusion_id)
@@ -2014,21 +2013,37 @@ def responder_nao(request, exclusion_id):
         tirados = list(ContestationCartDraft.objects.filter(exclusion=venda)
                        .values_list('user_id', flat=True))
         ContestationCartDraft.objects.filter(exclusion=venda).delete()
-        resposta, _criada = RespostaNaoContesta.objects.update_or_create(
-            exclusion=venda,
-            defaults={'justificativa': justificativa, 'cn_id': dono_id, 'preenchido_por': request.user})
+        situacao_cn, prazo_cn = equipe.situacao_cn_inicial(dono_id, request.user)
+        mesma = (anterior is not None and anterior.justificativa == justificativa
+                 and anterior.cn_id == dono_id)
+        if mesma:
+            # Clicou de novo com o mesmo texto: o de acordo do CN continua valendo.
+            resposta = anterior
+        else:
+            resposta, _criada = RespostaNaoContesta.objects.update_or_create(
+                exclusion=venda,
+                defaults={'justificativa': justificativa, 'cn_id': dono_id,
+                          'preenchido_por': request.user,
+                          'situacao_cn': situacao_cn, 'prazo_cn': prazo_cn,
+                          'cn_respondido_em': None, 'cn_respondido_por': None, 'cn_motivo': '',
+                          'gerente_resposta': '', 'mantido_em': None, 'mantido_por': None})
         ContestationHistory.objects.create(
             action='nao_contesta', user=request.user, notes=justificativa,
             extra_data=equipe.historico_extra(
                 venda, dono_id, request.user,
                 justificativa_anterior=anterior.justificativa if anterior else '',
-                tirada_do_carrinho_de=tirados))
+                tirada_do_carrinho_de=tirados,
+                prazo_cn=resposta.prazo_cn.isoformat() if resposta.prazo_cn else ''))
     return JsonResponse({
         'success': True,
         'exclusion_id': venda.pk,
         'justificativa': resposta.justificativa,
         'preenchido_por': request.user.get_full_name() or request.user.username,
         'em_nome_do_cn': dono_id != request.user.pk,
+        'situacao_cn': resposta.situacao_cn,
+        'situacao_cn_rotulo': resposta.get_situacao_cn_display(),
+        'prazo_cn': (timezone.localtime(resposta.prazo_cn).strftime('%d/%m %H:%M')
+                     if resposta.prazo_cn else ''),
     })
 
 
@@ -2052,99 +2067,111 @@ def desfazer_nao(request, exclusion_id):
     return JsonResponse({'success': True, 'exclusion_id': venda.pk, 'desfeito': True})
 
 
-def _parte_pedida(request):
-    """(lote, filial, vendedor, dono_id) do POST, conferindo que existe na base
-    e que a pessoa pode agir por aquele vendedor — ou (None, mensagem)."""
-    lote = _get_latest_sync_batch()
-    filial = (request.POST.get('filial') or '').strip()
-    vendedor = (request.POST.get('vendedor') or '').strip()
-    if lote is None or not filial or not vendedor:
-        return None, 'Escolha o vendedor.'
-    vendas = _exclusoes().filter(sync_batch=lote, filial=filial, vendedor=vendedor)
-    venda = vendas.first()
-    if venda is None:
-        return None, 'Este vendedor não tem venda na base do ciclo.'
-    dono_id = equipe.dono_da_venda(venda)
-    if not equipe.pode_responder(request.user, venda, dono_id):
-        return None, 'Só o próprio CN ou o gerente da loja marca esta parte.'
-    return (lote, filial, vendedor, dono_id), None
-
-
 def _voltar_para_lista(request):
     destino = request.POST.get('next') or ''
-    if destino.startswith('/contestacao/'):
+    if destino.startswith('/contestacao/') and not destino.startswith('//'):
         return redirect(destino)
     return redirect('contestacao:exclusion_list')
 
 
 @login_required
 @require_POST
-def marcar_pronto(request):
-    """O CN (ou o gerente por ele) diz que terminou: todas as vendas dele estão
-    respondidas. O servidor confere — sem isto, "pronto" seria só um botão."""
-    if not _can_access_contestation_module(request.user):
-        messages.error(request, 'Sem permissão.')
-        return redirect('home')
-    if _get_sync_window_state(request.user)['is_blocked']:
-        messages.error(request, 'A janela de contestação está fechada.')
-        return _voltar_para_lista(request)
-    pedido, erro = _parte_pedida(request)
-    if erro:
-        messages.error(request, erro)
-        return _voltar_para_lista(request)
-    lote, filial, vendedor, dono_id = pedido
+def cn_de_acordo_nao(request, exclusion_id):
+    """O CN responde ao Não que o gerente deu numa venda dele: de acordo, ou
+    discordo (com o motivo — a venda volta para o gerente decidir).
 
-    loja = equipe.estado_das_lojas(lote, [filial]).get(filial, {})
-    parte = next((p for p in loja.get('participantes', []) if p['vendedor'] == vendedor), None)
-    if parte is None:
-        messages.error(request, 'Este vendedor não tem venda na base do ciclo.')
+    Só o CN dono da venda e só dentro das 24 h; depois disso o de acordo já
+    foi automático ("De acordo automático por prazo expirado")."""
+    equipe.expirar_prazos(ids=[exclusion_id])
+    resposta = (RespostaNaoContesta.objects.select_related('exclusion')
+                .filter(exclusion_id=exclusion_id).first())
+    if resposta is None:
+        messages.error(request, 'Esta venda não tem mais o Não do gerente.')
         return _voltar_para_lista(request)
-    if parte['faltam']:
-        partes_texto = []
-        if parte['pendente']:
-            partes_texto.append(f"{parte['pendente']} sem resposta")
-        if parte['sim_incompleto']:
-            partes_texto.append(f"{parte['sim_incompleto']} com Sim sem motivo ou sem evidência")
-        messages.error(request, f'Ainda falta responder vendas de {vendedor}: '
-                                f'{" e ".join(partes_texto)}. Cada venda precisa de Sim (motivo e '
-                                f'evidência) ou Não (com justificativa).')
+    if resposta.cn_id != request.user.pk:
+        messages.error(request, 'Só o CN dono da venda dá o de acordo no Não.')
+        return _voltar_para_lista(request)
+    if resposta.situacao_cn == RespostaNaoContesta.AUTOMATICO:
+        messages.warning(request, f'O prazo passou: {equipe.ROTULO_AUTOMATICO.lower()}.')
+        return _voltar_para_lista(request)
+    if not equipe.pode_dar_de_acordo_no_nao(request.user, resposta):
+        messages.info(request, 'Você já respondeu este Não.')
         return _voltar_para_lista(request)
 
-    ParteDoCN.objects.update_or_create(
-        lote=lote, filial=filial, vendedor=vendedor,
-        defaults={'cn_id': dono_id, 'marcado_por': request.user})
-    venda = _exclusoes().filter(sync_batch=lote, filial=filial, vendedor=vendedor).first()
-    ContestationHistory.objects.create(
-        action='cn_pronto', user=request.user,
-        notes=f"{parte['sim']} Sim, {parte['nao']} Não, {parte['contestada']} já enviada(s).",
-        extra_data=equipe.historico_extra(venda, dono_id, request.user,
-                                          sim=parte['sim'], nao=parte['nao'], total=parte['total']))
-    if dono_id == request.user.pk:
-        messages.success(request, 'Sua parte está pronta. O gerente envia quando todos da loja terminarem.')
+    acao = request.POST.get('acao')
+    motivo = ' '.join((request.POST.get('motivo') or '').split())
+    if acao not in ('de_acordo', 'discorda'):
+        messages.error(request, 'Escolha "De acordo" ou "Discordo".')
+        return _voltar_para_lista(request)
+    if acao == 'discorda' and len(motivo) < equipe.MIN_JUSTIFICATIVA:
+        messages.error(request, f'Diga por que discorda do Não (pelo menos {equipe.MIN_JUSTIFICATIVA} letras).')
+        return _voltar_para_lista(request)
+
+    venda = resposta.exclusion
+    with transaction.atomic():
+        r = (RespostaNaoContesta.objects.select_for_update()
+             .filter(pk=resposta.pk, situacao_cn=RespostaNaoContesta.AGUARDANDO).first())
+        if r is None:
+            messages.info(request, 'Este Não já foi respondido.')
+            return _voltar_para_lista(request)
+        r.situacao_cn = RespostaNaoContesta.DE_ACORDO if acao == 'de_acordo' else RespostaNaoContesta.DISCORDA
+        r.cn_respondido_em = timezone.now()
+        r.cn_respondido_por = request.user
+        r.cn_motivo = motivo if acao == 'discorda' else ''
+        r.save(update_fields=['situacao_cn', 'cn_respondido_em', 'cn_respondido_por', 'cn_motivo',
+                              'atualizado_em'])
+        ContestationHistory.objects.create(
+            action='cn_de_acordo' if acao == 'de_acordo' else 'cn_discorda',
+            user=request.user, notes=motivo,
+            extra_data=equipe.historico_extra(venda, r.cn_id, request.user,
+                                              justificativa_do_gerente=r.justificativa,
+                                              gerente_id=r.preenchido_por_id))
+    if acao == 'de_acordo':
+        messages.success(request, f'De acordo registrado na venda de {venda.nome_cliente or venda.pk}.')
     else:
-        messages.success(request, f'Parte de {vendedor} marcada como pronta (registrado que foi você).')
+        messages.success(request, 'Discordância registrada. A venda voltou para o gerente decidir.')
     return _voltar_para_lista(request)
 
 
 @login_required
 @require_POST
-def reabrir_parte(request):
-    """Desfaz o "pronto" para mexer nas respostas (o envio da loja volta a esperar)."""
+def manter_nao(request, exclusion_id):
+    """O gerente responde à discordância do CN mantendo o Não (com a resposta
+    dele). Para contestar, ele clica em Sim na venda: o Não sai e vai para o
+    carrinho, como qualquer Sim."""
     if not _can_access_contestation_module(request.user):
         messages.error(request, 'Sem permissão.')
         return redirect('home')
-    pedido, erro = _parte_pedida(request)
-    if erro:
-        messages.error(request, erro)
+    resposta = (RespostaNaoContesta.objects.select_related('exclusion')
+                .filter(exclusion_id=exclusion_id).first())
+    if resposta is None or not equipe.pode_responder(request.user, resposta.exclusion):
+        messages.error(request, 'Só o gerente da loja decide a discordância do CN.')
         return _voltar_para_lista(request)
-    lote, filial, vendedor, dono_id = pedido
-    apagadas, _ = ParteDoCN.objects.filter(lote=lote, filial=filial, vendedor=vendedor).delete()
-    if apagadas:
-        venda = _exclusoes().filter(sync_batch=lote, filial=filial, vendedor=vendedor).first()
+    if resposta.situacao_cn != RespostaNaoContesta.DISCORDA:
+        messages.info(request, 'Esta venda não está com discordância do CN.')
+        return _voltar_para_lista(request)
+    texto = ' '.join((request.POST.get('resposta') or '').split())
+    if len(texto) < equipe.MIN_JUSTIFICATIVA:
+        messages.error(request, f'Responda ao CN por que o Não fica (pelo menos {equipe.MIN_JUSTIFICATIVA} letras).')
+        return _voltar_para_lista(request)
+    venda = resposta.exclusion
+    with transaction.atomic():
+        r = (RespostaNaoContesta.objects.select_for_update()
+             .filter(pk=resposta.pk, situacao_cn=RespostaNaoContesta.DISCORDA).first())
+        if r is None:
+            messages.info(request, 'Esta discordância já foi decidida.')
+            return _voltar_para_lista(request)
+        r.situacao_cn = RespostaNaoContesta.MANTIDO
+        r.gerente_resposta = texto
+        r.mantido_em = timezone.now()
+        r.mantido_por = request.user
+        r.save(update_fields=['situacao_cn', 'gerente_resposta', 'mantido_em', 'mantido_por',
+                              'atualizado_em'])
         ContestationHistory.objects.create(
-            action='cn_reaberto', user=request.user, notes='',
-            extra_data=equipe.historico_extra(venda, dono_id, request.user))
-        messages.info(request, f'Parte de {vendedor} reaberta.')
+            action='nao_mantido', user=request.user, notes=texto,
+            extra_data=equipe.historico_extra(venda, r.cn_id, request.user,
+                                              motivo_do_cn=r.cn_motivo))
+    messages.success(request, 'Não mantido. O CN vê a sua resposta.')
     return _voltar_para_lista(request)
 
 
@@ -2187,20 +2214,49 @@ def my_contestations(request):
         qs = qs.filter(status=status_filter)
 
     contestations = list(qs.select_related('preenchido_por', 'enviado_por')[:100])
-    for c in contestations:
-        c.de_acordo_meu = _pode_dar_de_acordo(c, request.user)
+    marcar_de_acordo(contestations, request.user)
     context = {
         'contestations': contestations,
+        'so_cn': so_cn,
         'status_filter': status_filter,
         'can_manage': _can_manage_contestations(request.user),
     }
     return render(request, 'contestacao/my_contestations.html', context)
 
 
-def _pode_dar_de_acordo(contestacao, user):
-    """O de acordo é de quem pediu — e, no fluxo por equipe, a contestação é do
-    CN mas quem a enviou foi o gerente: os dois podem responder."""
-    return user.pk in (contestacao.requester_id, contestacao.enviado_por_id)
+def _pode_dar_de_acordo(contestacao, user, no_escopo=None):
+    """Depois do parecer do gestor, o de acordo (ou o "Negar", que questiona o
+    time de conferência de vendas) é só do gerente — pedido de 23/11/2026. O
+    CN dono da venda vê o parecer, mas não responde.
+
+    Vale o gerente que enviou e qualquer gerente da loja da venda (quem enviou
+    pode ter saído). ``no_escopo``: conjunto de exclusion_id já conferidos, para
+    a lista não consultar o escopo uma vez por contestação."""
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False
+    if not _can_create_contestations(user):
+        return False
+    if user.pk == contestacao.enviado_por_id:
+        return True
+    if contestacao.enviado_por_id is None and user.pk == contestacao.requester_id:
+        return True             # contestação de antes do fluxo por equipe: o gerente pedia
+    if no_escopo is not None:
+        return contestacao.exclusion_id in no_escopo
+    return _apply_exclusion_scope_for_user(
+        ExclusionRecord.objects.filter(pk=contestacao.exclusion_id), user).exists()
+
+
+def marcar_de_acordo(contestacoes, user):
+    """Põe ``de_acordo_meu`` em cada contestação da lista (uma consulta de escopo só)."""
+    pendentes = [c for c in contestacoes if c.status in ('accepted', 'rejected')]
+    no_escopo = set()
+    if pendentes and _can_create_contestations(user):
+        no_escopo = set(_apply_exclusion_scope_for_user(
+            ExclusionRecord.objects.filter(pk__in={c.exclusion_id for c in pendentes}), user)
+            .values_list('pk', flat=True))
+    for c in contestacoes:
+        c.de_acordo_meu = (c.status in ('accepted', 'rejected')
+                           and _pode_dar_de_acordo(c, user, no_escopo))
 
 
 @login_required
@@ -2768,6 +2824,8 @@ def contestation_detail(request, pk):
         'c': contestation,
         'can_manage': _can_manage_contestations(request.user),
         'de_acordo_meu': _pode_dar_de_acordo(contestation, request.user),
+        'sou_o_cn': request.user.pk == contestation.requester_id
+                    and not _can_create_contestations(request.user),
     }
     return render(request, 'contestacao/contestation_detail.html', context)
 
@@ -2853,7 +2911,7 @@ def confirm_contestation(request, pk):
     """Gerente dá de acordo para fluxos legados (accepted) e rejeições (rejected)."""
     c = get_object_or_404(Contestation, pk=pk, status__in=['accepted', 'rejected'])
     if not _pode_dar_de_acordo(c, request.user):
-        messages.error(request, 'Apenas o solicitante pode dar de acordo nesta contestação.')
+        messages.error(request, 'Só o gerente da loja dá o de acordo no parecer do gestor.')
         return redirect('contestacao:my_contestations')
     was_accepted = c.status == 'accepted'
     notes = request.POST.get('confirmation_notes', '')
@@ -2873,7 +2931,7 @@ def deny_contestation(request, pk):
     """Gerente discorda da decisão do gestor."""
     c = get_object_or_404(Contestation, pk=pk, status__in=['accepted', 'rejected'])
     if not _pode_dar_de_acordo(c, request.user):
-        messages.error(request, 'Apenas o solicitante pode contestar esta decisão.')
+        messages.error(request, 'Só o gerente da loja questiona o parecer junto à conferência de vendas.')
         return redirect('contestacao:my_contestations')
     notes = request.POST.get('confirmation_notes', '')
     c.deny_confirmation(request.user, notes)

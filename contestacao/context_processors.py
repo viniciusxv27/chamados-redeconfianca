@@ -26,9 +26,9 @@ def contestacao_menu_context(request):
     can_access = False
 
     if user.hierarchy == 'PADRAO':
-        # O CN (vendedor com venda na base do ciclo) responde as próprias
-        # vendas; e_cn fica guardado 5 min por pessoa, então o menu não paga
-        # a conta em toda página.
+        # O CN (vendedor com venda na base do ciclo) vê as próprias vendas e dá o
+        # de acordo nos Não do gerente; e_cn fica guardado 5 min por pessoa,
+        # então o menu não paga a conta em toda página.
         can_access = user.can_create_contestations()
         if not can_access:
             from .equipe import e_cn

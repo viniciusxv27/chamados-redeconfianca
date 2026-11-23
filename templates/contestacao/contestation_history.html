@@ -94,6 +94,14 @@
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800"><i class="fas fa-sync mr-1"></i> Sincronização</span>
                             {% elif h.action == 'nao_contesta' %}
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"><i class="fas fa-hand mr-1"></i> Respondida Não</span>
+                            {% elif h.action == 'cn_de_acordo' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800"><i class="fas fa-circle-check mr-1"></i> CN de acordo</span>
+                            {% elif h.action == 'cn_de_acordo_auto' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700"><i class="fas fa-clock-rotate-left mr-1"></i> De acordo automático por prazo expirado</span>
+                            {% elif h.action == 'cn_discorda' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"><i class="fas fa-comment-slash mr-1"></i> CN discordou</span>
+                            {% elif h.action == 'nao_mantido' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"><i class="fas fa-reply mr-1"></i> Não mantido</span>
                             {% elif h.action == 'cn_pronto' %}
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800"><i class="fas fa-flag-checkered mr-1"></i> CN pronto</span>
                             {% else %}

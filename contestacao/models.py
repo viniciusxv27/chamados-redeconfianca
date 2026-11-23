@@ -301,6 +301,12 @@ class ContestationHistory(models.Model):
         ('nao_desfeito', 'Resposta Não desfeita'),
         ('cn_pronto', 'Parte do CN marcada como pronta'),
         ('cn_reaberto', 'Parte do CN reaberta'),
+        # Fluxo invertido (23/11/2026): o gerente responde, o CN dá o de acordo
+        # só nas vendas que o gerente marcou Não (24 h, depois é automático).
+        ('cn_de_acordo', 'CN de acordo com o Não do gerente'),
+        ('cn_de_acordo_auto', 'De acordo automático por prazo expirado'),
+        ('cn_discorda', 'CN discordou do Não do gerente'),
+        ('nao_mantido', 'Gerente manteve o Não depois da discordância do CN'),
     ]
 
     contestation = models.ForeignKey(
@@ -540,7 +546,13 @@ class EnvioResumoDestinatario(models.Model):
 
 
 class RespostaNaoContesta(models.Model):
-    """O "Não" de uma venda: quem responde diz que ela não vai ser contestada.
+    """O "Não" de uma venda: o gerente diz que ela não vai ser contestada.
+
+    Desde 23/11/2026 quem responde é o gerente; o CN dono da venda só dá o de
+    acordo nas vendas marcadas Não, em até 24 h (``prazo_cn``). Passou o prazo,
+    o de acordo é automático ("De acordo automático por prazo expirado"). Se o
+    CN discorda, a venda volta para o gerente, que contesta (vira Sim) ou
+    mantém o Não com uma resposta.
 
     Antes o botão "Não" só escondia a linha no navegador de quem clicou — não
     ficava registro nenhum e ninguém precisava explicar. Agora a resposta é da
@@ -562,6 +574,49 @@ class RespostaNaoContesta(models.Model):
         related_name='respostas_nao_preenchidas', verbose_name='Respondido por')
     criado_em = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
     atualizado_em = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
+
+    # O de acordo do CN (fluxo de 23/11/2026).
+    AGUARDANDO = 'aguardando'
+    DE_ACORDO = 'de_acordo'
+    AUTOMATICO = 'automatico'
+    DISCORDA = 'discorda'
+    MANTIDO = 'mantido'
+    SEM_CN = 'sem_cn'
+    SITUACOES_CN = [
+        (AGUARDANDO, 'Aguardando o de acordo do CN'),
+        (DE_ACORDO, 'CN de acordo'),
+        (AUTOMATICO, 'De acordo automático por prazo expirado'),
+        (DISCORDA, 'CN discordou — com o gerente'),
+        (MANTIDO, 'Gerente manteve o Não'),
+        (SEM_CN, 'Venda sem CN no portal'),
+    ]
+    situacao_cn = models.CharField(
+        max_length=12, choices=SITUACOES_CN, default=AGUARDANDO, db_index=True,
+        verbose_name='De acordo do CN')
+    prazo_cn = models.DateTimeField(null=True, blank=True, verbose_name='Prazo do CN')
+    cn_respondido_em = models.DateTimeField(null=True, blank=True, verbose_name='CN respondeu em')
+    cn_respondido_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='respostas_nao_de_acordo', verbose_name='De acordo dado por')
+    cn_motivo = models.TextField(blank=True, default='', verbose_name='Por que o CN discorda')
+    gerente_resposta = models.TextField(blank=True, default='',
+                                        verbose_name='Resposta do gerente à discordância')
+    mantido_em = models.DateTimeField(null=True, blank=True, verbose_name='Não mantido em')
+    mantido_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='respostas_nao_mantidas', verbose_name='Não mantido por')
+
+    @property
+    def aguardando_cn(self):
+        return self.situacao_cn == self.AGUARDANDO
+
+    @property
+    def de_acordo_automatico(self):
+        return self.situacao_cn == self.AUTOMATICO
+
+    @property
+    def com_o_gerente(self):
+        return self.situacao_cn == self.DISCORDA
 
     class Meta:
         verbose_name = 'Venda respondida como Não'

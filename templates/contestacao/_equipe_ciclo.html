@@ -1,71 +1,47 @@
 {% comment %}
-Contestação por equipe (17/11/2026): cada CN responde as próprias vendas
-(Sim com motivo e evidência, ou Não com justificativa) e marca a parte dele
-como pronta; o gerente vê quem já terminou e só envia quando todos os CNs
-ativos da loja estão prontos. A regra mora em contestacao/equipe.py.
+Fluxo de 23/11/2026: o gerente responde cada venda da loja (Sim com motivo e
+evidência, ou Não com justificativa) e envia as Sim quando quiser. O CN dono
+da venda só dá o de acordo nos Não, em até 24 h — passou o prazo, "De acordo
+automático por prazo expirado". Se o CN discorda, a venda volta para o gerente.
+A regra mora em contestacao/equipe.py.
 {% endcomment %}
-{% if equipe.papel == 'cn' and equipe.minhas %}
+{% if equipe.papel == 'cn' %}
 <div id="painelEquipe" class="mb-4 rounded-lg border border-orange-200 bg-white p-4 shadow-sm">
-    <div class="text-xs font-semibold uppercase tracking-wide text-orange-700">
-        <i class="fas fa-user-check mr-1"></i> Sua parte neste ciclo
+    <div class="flex flex-wrap items-start justify-between gap-2">
+        <div class="min-w-0">
+            <div class="text-xs font-semibold uppercase tracking-wide text-orange-700">
+                <i class="fas fa-user-check mr-1"></i> Seu de acordo neste ciclo
+            </div>
+            <p class="mt-1 text-sm text-gray-700">
+                Quem responde as vendas é o gerente da loja. Você dá o de acordo só nas que ele marcou
+                <strong>Não</strong>, em até {{ equipe.prazo_horas }} h — sem resposta, fica
+                <strong>de acordo automático por prazo expirado</strong>. Se discordar, a venda volta para o gerente.
+            </p>
+        </div>
+        {% if equipe.aguardando %}
+        <span class="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900"><i class="fas fa-hourglass-half"></i>{{ equipe.aguardando }} esperando você</span>
+        {% endif %}
     </div>
-    <p class="mt-1 text-sm text-gray-700">
-        Responda cada venda sua: <strong>Sim</strong> (motivo e evidência) ou <strong>Não</strong>
-        (com justificativa). Quando terminar, marque a sua parte como pronta.
-        Quem envia para a análise é o gerente da loja, depois que todos os CNs terminarem.
-    </p>
+    <div class="mt-2 text-xs text-gray-600">
+        {{ equipe.total_do_cn }} venda{{ equipe.total_do_cn|pluralize }} sua{{ equipe.total_do_cn|pluralize }} na base ·
+        {{ equipe.sim_do_cn }} em contestação pelo gerente ·
+        {{ equipe.naos|length }} marcada{{ equipe.naos|length|pluralize }} como Não{% if equipe.pendentes_do_gerente %} ·
+        {{ equipe.pendentes_do_gerente }} o gerente ainda não respondeu{% endif %}.
+        <a href="{% url 'contestacao:my_contestations' %}" class="ml-1 font-semibold text-orange-700 hover:underline">Ver as contestações e o parecer do gestor</a>
+    </div>
+    {% if equipe.naos %}
     <div class="mt-3 space-y-2">
-        {% for p in equipe.minhas %}
-        <div class="rounded-lg border p-3 flex flex-wrap items-center justify-between gap-3 {% if p.pronto %}border-emerald-200 bg-emerald-50{% elif p.mudou_depois %}border-amber-200 bg-amber-50{% else %}border-gray-200 bg-gray-50{% endif %}">
-            <div class="min-w-0 text-sm">
-                <div class="font-semibold text-gray-900">{{ p.filial }}</div>
-                <div class="text-gray-700">
-                    {{ p.total }} venda{{ p.total|pluralize }} ·
-                    {{ p.sim }} Sim · {{ p.nao }} Não{% if p.contestada %} · {{ p.contestada }} já enviada{{ p.contestada|pluralize }}{% endif %}
-                    {% if p.faltam %}· <span class="font-semibold text-red-700">{{ p.faltam }} sem resposta completa</span>{% endif %}
-                </div>
-                <div class="text-xs text-gray-500 mt-0.5">
-                    Loja: {{ p.loja_cns_prontos }} de {{ p.loja_cns }} CN{{ p.loja_cns|pluralize }} pronto{{ p.loja_cns|pluralize }}{% if p.loja_liberada %} — o gerente já pode enviar{% endif %}.
-                </div>
-                {% if p.pronto and p.parte %}
-                <div class="text-xs text-emerald-800 mt-0.5">
-                    <i class="fas fa-circle-check mr-1"></i>Pronta em {{ p.parte.marcado_em|date:"d/m H:i" }}{% if p.parte.marcado_por and p.parte.marcado_por.pk != user.pk %} — marcada por {{ p.parte.marcado_por.full_name }}{% endif %}
-                </div>
-                {% elif p.mudou_depois %}
-                <div class="text-xs text-amber-800 mt-0.5">
-                    <i class="fas fa-triangle-exclamation mr-1"></i>Você marcou pronta, mas alguma venda ficou sem resposta depois. Complete e marque de novo.
-                </div>
-                {% endif %}
+        {% for resp in equipe.naos %}
+        <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs">
+            <div class="mb-1 flex flex-wrap items-baseline justify-between gap-2 text-sm">
+                <span class="font-semibold text-gray-900">{{ resp.exclusion.nome_cliente|default:"Cliente" }}</span>
+                <span class="text-xs text-gray-600">{{ resp.exclusion.filial }} · {{ resp.exclusion.pilar }} · R$ {{ resp.exclusion.receita|floatformat:2 }}{% if resp.exclusion.numero_acesso %} · Nº {{ resp.exclusion.numero_acesso }}{% endif %}</span>
             </div>
-            {% if not contestation_blocked %}
-            <div class="flex items-center gap-2">
-                {% if p.parte %}
-                <form method="post" action="{% url 'contestacao:reabrir_parte' %}">
-                    {% csrf_token %}
-                    <input type="hidden" name="filial" value="{{ p.filial }}">
-                    <input type="hidden" name="vendedor" value="{{ p.vendedor }}">
-                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                    <button type="submit" class="px-3 py-1.5 text-xs font-semibold rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">
-                        <i class="fas fa-rotate-left mr-1"></i> Reabrir
-                    </button>
-                </form>
-                {% endif %}
-                {% if not p.pronto %}
-                <form method="post" action="{% url 'contestacao:marcar_pronto' %}" class="form-pronto">
-                    {% csrf_token %}
-                    <input type="hidden" name="filial" value="{{ p.filial }}">
-                    <input type="hidden" name="vendedor" value="{{ p.vendedor }}">
-                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                    <button type="submit" class="px-3 py-1.5 text-xs font-semibold rounded-md text-white bg-emerald-600 hover:bg-emerald-700">
-                        <i class="fas fa-flag-checkered mr-1"></i> Marcar minha parte como pronta
-                    </button>
-                </form>
-                {% endif %}
-            </div>
-            {% endif %}
+            {% include 'contestacao/_nao_info.html' %}
         </div>
         {% endfor %}
     </div>
+    {% endif %}
 </div>
 {% elif equipe.papel == 'gerente' or equipe.papel == 'central' %}
 {% if equipe.lojas %}
@@ -73,38 +49,57 @@ ativos da loja estão prontos. A regra mora em contestacao/equipe.py.
     <div class="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
         <div class="min-w-0">
             <div class="text-xs font-semibold uppercase tracking-wide text-gray-600">
-                <i class="fas fa-users mr-1"></i> Equipe neste ciclo
+                <i class="fas fa-users mr-1"></i> Loja neste ciclo
             </div>
             <p class="text-sm text-gray-700 mt-0.5">
-                Cada CN responde as próprias vendas e marca pronto.
-                {% if equipe.papel == 'central' %}
-                Gestão central envia sem esperar a equipe.
-                {% else %}
-                O envio da loja libera quando todos os CNs ativos estiverem prontos. Você pode fazer por qualquer CN — fica registrado que foi você.
-                {% endif %}
+                Responda cada venda: <strong>Sim</strong> (motivo e evidência) vai para a contestação;
+                <strong>Não</strong> (com justificativa) vai para o de acordo do CN, que tem {{ equipe.prazo_horas }} h —
+                depois disso fica de acordo automático. O envio das Sim não espera os de acordo.
             </p>
         </div>
         {% if not contestation_blocked %}
         <button type="button" id="btnEnviarLoja" onclick="enviarDaLoja()"
                 class="inline-flex items-center px-4 py-2 text-sm font-semibold text-white rounded-lg transition {% if equipe.para_enviar %}hover:opacity-90{% else %}opacity-50 cursor-not-allowed{% endif %}"
-                style="background-color: #9a3412" {% if not equipe.para_enviar %}disabled title="{% if equipe.alguma_travada and equipe.papel != 'central' %}Esperando os CNs marcarem pronto{% else %}Nenhuma venda com Sim pronta para enviar{% endif %}"{% endif %}>
+                style="background-color: #9a3412" {% if not equipe.para_enviar %}disabled title="Nenhuma venda com Sim pronta para enviar"{% endif %}>
             <i class="fas fa-paper-plane mr-2"></i> Enviar contestações da loja ({{ equipe.para_enviar }})
         </button>
         {% endif %}
     </div>
+
+    {% if equipe.discordancias %}
+    <div class="px-4 py-3 border-b border-red-100 bg-red-50/60">
+        <div class="text-xs font-semibold uppercase tracking-wide text-red-700">
+            <i class="fas fa-comment-slash mr-1"></i> {{ equipe.discordancias|length }} discordância{{ equipe.discordancias|length|pluralize }} do CN para você decidir
+        </div>
+        <ul class="mt-2 space-y-2">
+            {% for d in equipe.discordancias %}
+            <li class="rounded-md border border-red-200 bg-white px-3 py-2 text-xs text-gray-800">
+                <div class="flex flex-wrap items-baseline justify-between gap-2">
+                    <span><strong>{{ d.cn.full_name|default:d.exclusion.vendedor }}</strong> discorda do Não em <strong>{{ d.exclusion.nome_cliente|default:"venda" }}</strong> ({{ d.exclusion.filial }}, R$ {{ d.exclusion.receita|floatformat:2 }})</span>
+                    <a href="?venda={{ d.exclusion_id }}" class="font-semibold text-orange-700 hover:underline">Abrir a venda para decidir</a>
+                </div>
+                <div class="mt-1 text-gray-600">Seu Não: {{ d.justificativa }}</div>
+                <div class="text-red-800">CN: {{ d.cn_motivo }}</div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
     <div class="divide-y divide-gray-100">
         {% for loja in equipe.lojas %}
-        <details class="px-4 py-3" {% if equipe.lojas|length == 1 or not loja.liberada and equipe.papel == 'gerente' %}open{% endif %}>
+        <details class="px-4 py-3" {% if equipe.lojas|length == 1 or loja.cn_discorda %}open{% endif %}>
             <summary class="cursor-pointer flex flex-wrap items-center gap-2 text-sm">
                 <span class="font-semibold text-gray-900">{{ loja.filial }}</span>
-                {% if loja.liberada %}
-                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold"><i class="fas fa-lock-open"></i>Pode enviar</span>
+                {% if loja.faltam %}
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold"><i class="fas fa-pen"></i>{{ loja.faltam }} sem resposta</span>
                 {% else %}
-                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold"><i class="fas fa-hourglass-half"></i>Esperando {{ loja.cns_faltando|length }} CN{{ loja.cns_faltando|length|pluralize }}</span>
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold"><i class="fas fa-circle-check"></i>Tudo respondido</span>
                 {% endif %}
-                <span class="text-xs text-gray-600">{{ loja.cns_prontos }} de {{ loja.cns }} CN{{ loja.cns|pluralize }} pronto{{ loja.cns|pluralize }} · {{ loja.para_enviar }} Sim pronta{{ loja.para_enviar|pluralize }} para enviar</span>
+                {% if loja.cn_discorda %}<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 border border-red-200 text-red-800 text-xs font-semibold"><i class="fas fa-comment-slash"></i>{{ loja.cn_discorda }} discordância{{ loja.cn_discorda|pluralize }}</span>{% endif %}
+                <span class="text-xs text-gray-600">{{ loja.para_enviar }} Sim pronta{{ loja.para_enviar|pluralize }} para enviar{% if loja.cn_aguardando %} · {{ loja.cn_aguardando }} Não esperando o CN{% endif %}</span>
             </summary>
-            <div class="mt-3">
+            <div class="mt-3 overflow-x-auto">
                 <table class="w-full text-xs">
                     <thead class="text-left text-gray-500 uppercase text-[10px]">
                         <tr>
@@ -113,7 +108,7 @@ ativos da loja estão prontos. A regra mora em contestacao/equipe.py.
                             <th class="py-1.5 pr-2 text-right">Sim</th>
                             <th class="py-1.5 pr-2 text-right">Não</th>
                             <th class="py-1.5 pr-2 text-right">Faltam</th>
-                            <th class="py-1.5 pr-2">Situação</th>
+                            <th class="py-1.5 pr-2">De acordo do CN nos Não</th>
                             <th class="py-1.5"></th>
                         </tr>
                     </thead>
@@ -122,43 +117,25 @@ ativos da loja estão prontos. A regra mora em contestacao/equipe.py.
                         <tr>
                             <td class="py-1.5 pr-2">
                                 <div class="font-medium text-gray-900">{{ p.vendedor }}</div>
-                                {% if not p.cn %}<div class="text-[11px] text-gray-500">sem cadastro ativo no portal — não trava o envio</div>{% endif %}
+                                {% if not p.cn %}<div class="text-[11px] text-gray-500">sem cadastro ativo no portal — o Não não espera de acordo</div>{% endif %}
                             </td>
                             <td class="py-1.5 pr-2 text-right">{{ p.total }}</td>
                             <td class="py-1.5 pr-2 text-right">{{ p.sim }}{% if p.contestada %} <span class="text-gray-400">+{{ p.contestada }} enviada{{ p.contestada|pluralize }}</span>{% endif %}</td>
                             <td class="py-1.5 pr-2 text-right">{{ p.nao }}</td>
                             <td class="py-1.5 pr-2 text-right {% if p.faltam %}font-semibold text-red-700{% endif %}">{{ p.faltam }}</td>
                             <td class="py-1.5 pr-2">
-                                {% if p.pronto %}
-                                <span class="text-emerald-700 font-semibold"><i class="fas fa-circle-check mr-1"></i>Pronto</span>
-                                {% if p.parte %}<div class="text-[11px] text-gray-500">{{ p.parte.marcado_em|date:"d/m H:i" }}{% if p.parte.marcado_por %} por {{ p.parte.marcado_por.full_name }}{% endif %}</div>{% endif %}
-                                {% elif p.mudou_depois %}
-                                <span class="text-amber-700 font-semibold"><i class="fas fa-triangle-exclamation mr-1"></i>Mexeu depois de marcar</span>
-                                {% else %}
-                                <span class="text-gray-600"><i class="fas fa-clock mr-1"></i>Pendente</span>
-                                {% endif %}
+                                {% if p.nao %}
+                                <span class="inline-flex flex-wrap gap-x-2 gap-y-0.5">
+                                    {% if p.cn_aguardando %}<span class="text-amber-800"><i class="fas fa-hourglass-half mr-0.5"></i>{{ p.cn_aguardando }} aguardando</span>{% endif %}
+                                    {% if p.cn_de_acordo %}<span class="text-emerald-700"><i class="fas fa-circle-check mr-0.5"></i>{{ p.cn_de_acordo }} de acordo</span>{% endif %}
+                                    {% if p.cn_automatico %}<span class="text-slate-600" title="De acordo automático por prazo expirado"><i class="fas fa-clock-rotate-left mr-0.5"></i>{{ p.cn_automatico }} automático{{ p.cn_automatico|pluralize }}</span>{% endif %}
+                                    {% if p.cn_discorda %}<span class="font-semibold text-red-700"><i class="fas fa-comment-slash mr-0.5"></i>{{ p.cn_discorda }} discorda{{ p.cn_discorda|pluralize:"m" }}</span>{% endif %}
+                                    {% if p.cn_mantido %}<span class="text-gray-600"><i class="fas fa-reply mr-0.5"></i>{{ p.cn_mantido }} mantido{{ p.cn_mantido|pluralize }}</span>{% endif %}
+                                </span>
+                                {% else %}<span class="text-gray-400">—</span>{% endif %}
                             </td>
                             <td class="py-1.5 text-right whitespace-nowrap">
                                 <a href="?vendedor={{ p.vendedor|urlencode }}&filial={{ p.filial|urlencode }}" class="text-orange-700 hover:underline font-semibold">Ver vendas</a>
-                                {% if not contestation_blocked %}
-                                {% if not p.pronto and not p.faltam %}
-                                <form method="post" action="{% url 'contestacao:marcar_pronto' %}" class="form-pronto inline">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="filial" value="{{ p.filial }}">
-                                    <input type="hidden" name="vendedor" value="{{ p.vendedor }}">
-                                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                    <button type="submit" class="ml-2 text-emerald-700 hover:underline font-semibold">Marcar pronto</button>
-                                </form>
-                                {% elif p.parte %}
-                                <form method="post" action="{% url 'contestacao:reabrir_parte' %}" class="inline">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="filial" value="{{ p.filial }}">
-                                    <input type="hidden" name="vendedor" value="{{ p.vendedor }}">
-                                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                    <button type="submit" class="ml-2 text-gray-600 hover:underline">Reabrir</button>
-                                </form>
-                                {% endif %}
-                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}

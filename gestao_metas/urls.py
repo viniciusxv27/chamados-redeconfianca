@@ -18,4 +18,5 @@ urlpatterns = [
     path('<str:codigo>/fechar/', views.fechar, name='fechar'),
     path('<str:codigo>/excel/', views.baixar_excel, name='excel'),
     path('<str:codigo>/historico/', views.historico, name='historico'),
+    path('<str:codigo>/realizado-agora/', views.realizado_agora, name='realizado_agora'),
 ]

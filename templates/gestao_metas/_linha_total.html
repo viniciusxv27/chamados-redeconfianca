@@ -17,6 +17,7 @@
     {% else %}
     <td data-rot="Meta" class="sep meta-col" data-s="meta">{{ t.meta|num }}</td>
     {% endif %}
+    <td data-rot="Realizado até o momento" class="sep agora-col" data-agora-total></td>
     <td data-rot="M × M" class="sep"><span class="gm-chip {{ t.mxm|tom }}" data-c="mxm">{{ t.mxm|pct }}</span></td>
     <td data-rot="Y × Y"><span class="gm-chip {{ t.yxy|tom }}" data-c="yxy">{{ t.yxy|pct }}</span></td>
     <td data-rot="Meta × Quad"><span class="gm-chip {{ t.mxquad|tom }}" data-c="mxquad">{{ t.mxquad|pct }}</span></td>

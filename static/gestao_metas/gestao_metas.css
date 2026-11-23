@@ -157,3 +157,18 @@ select.gm-entrada { width: 78px; text-align: left; }
 .gm-divisao-lista { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 4px 14px; }
 .gm-divisao-lista li { font-variant-numeric: tabular-nums; }
 .gm-aviso[hidden] { display: none; }
+
+/* Realizado até o momento (23/11/2026) */
+.gm-tabela .agora-col { min-width: 120px; background: var(--gm-cor-claro); }
+.gm-agora-valor { display: block; font-variant-numeric: tabular-nums; }
+.gm-agora-vazio { color: var(--gm-texto-3); }
+.gm-agora-barra { display: block; height: 4px; border-radius: 9px; background: var(--gm-cinza-claro); overflow: hidden; margin: 3px 0 2px; }
+.gm-agora-barra > span { display: block; height: 100%; border-radius: 9px; background: var(--gm-texto-3); }
+.gm-agora-barra.bateu > span { background: var(--gm-verde); }
+.gm-agora-barra.perto > span { background: var(--gm-ambar); }
+.gm-agora-barra.longe > span { background: var(--gm-vermelho); }
+.gm-agora-pct { font-size: 11px; font-weight: 600; color: var(--gm-texto-2); white-space: nowrap; }
+.gm-agora-pct.bateu { color: var(--gm-verde); }
+.gm-agora-pct.perto { color: var(--gm-ambar); }
+.gm-agora-pct.longe { color: var(--gm-vermelho); }
+.gm-agora-status { font-size: 12.5px; color: var(--gm-texto-2); margin: 0 0 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

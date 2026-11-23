@@ -31,7 +31,7 @@
 <div class="gm-aviso"><i class="fas fa-triangle-exclamation" style="margin-top:2px"></i><span>Sem realizado de {% for m in meses_faltando %}{{ m|date:"M/y" }}{% if not forloop.last %}, {% endif %}{% endfor %}. <a href="{% url 'gestao_metas:importar' %}?competencia={{ comp.codigo }}">Importe a base ou busque no banco de vendas</a>.</span></div>
 {% endif %}
 
-<div id="gmTela" data-url-salvar="{% url 'gestao_metas:salvar' comp.codigo %}" data-url-dividir="{% url 'gestao_metas:dividir' comp.codigo %}" data-editavel="{% if pode_editar %}1{% endif %}">{% csrf_token %}
+<div id="gmTela" data-url-agora="{% url 'gestao_metas:realizado_agora' comp.codigo %}" data-mes-agora="{{ rotulo_comp }}" data-url-salvar="{% url 'gestao_metas:salvar' comp.codigo %}" data-url-dividir="{% url 'gestao_metas:dividir' comp.codigo %}" data-editavel="{% if pode_editar %}1{% endif %}">{% csrf_token %}
 <nav class="gm-pilares" role="tablist">
     {% for p in pilares %}<button type="button" role="tab" data-pilar="{{ p.chave }}" class="{% if forloop.first %}ativo{% endif %}">{{ p.nome }}</button>{% endfor %}
 </nav>
@@ -59,6 +59,7 @@
         <span class="gm-salvo" data-salvo>{% if pode_editar %}As metas se salvam sozinhas ao digitar. O botão Salvar da loja divide a meta entre os consultores do Quadro de HC.{% endif %}</span>
     </div>
     <div class="gm-aviso ok" data-divisao-retorno role="status" aria-live="polite" hidden></div>
+    <p class="gm-agora-status" data-agora-status role="status" aria-live="polite"><i class="fas fa-circle-notch fa-spin"></i> Buscando o realizado de {{ rotulo_comp }} no banco de vendas…</p>
 
     <div class="gm-rolagem cartoes">
     <table class="gm-tabela" data-rc-wrapped="1">
@@ -70,6 +71,7 @@
                 {% if p.fixa %}<th colspan="2" class="sep">R$ da Fixa</th>{% endif %}
                 <th colspan="2" class="sep">Referências</th>
                 <th colspan="{% if p.fixa %}7{% else %}1{% endif %}" class="sep meta-col">Meta</th>
+                <th class="sep agora-col">Até agora</th>
                 <th colspan="4" class="sep">Meta comparada com…</th>
             </tr>
             <tr>
@@ -87,6 +89,7 @@
                 {% else %}
                 <th class="sep meta-col">Meta {{ rotulo_comp }}</th>
                 {% endif %}
+                <th class="sep agora-col" title="O que a loja já vendeu em {{ rotulo_comp }} (banco de vendas) e quanto isso é da meta{% if p.fixa %} (quantidade TV + Fixa × nova meta){% endif %}">Realizado até o momento</th>
                 <th class="sep" title="Meta ÷ realizado de {{ rotulo_ant }} − 1">M × M</th>
                 <th title="Meta ÷ realizado de {{ rotulo_ano }} − 1">Y × Y</th>
                 <th title="Meta ÷ média do quadrimestre − 1">Meta × Quad</th>
@@ -117,6 +120,7 @@
                 {% else %}
                 <td data-rot="Meta {{ rotulo_comp }}" class="sep meta-col">{% if pode_editar %}<input class="gm-entrada" data-campo="meta" inputmode="decimal" value="{{ l.meta|campo }}" placeholder="—" aria-label="Meta {{ l.loja.nome }}">{% else %}<strong>{{ l.meta|num }}</strong>{% endif %}</td>
                 {% endif %}
+                <td data-rot="Realizado até o momento" class="sep agora-col" data-agora><span class="gm-agora-vazio">…</span></td>
                 <td data-rot="M × M" class="sep"><span class="gm-chip {{ l.mxm|tom }}" data-c="mxm">{{ l.mxm|pct }}</span></td>
                 <td data-rot="Y × Y"><span class="gm-chip {{ l.yxy|tom }}" data-c="yxy">{{ l.yxy|pct }}</span></td>
                 <td data-rot="Meta × Quad"><span class="gm-chip {{ l.mxquad|tom }}" data-c="mxquad">{{ l.mxquad|pct }}</span></td>
@@ -137,4 +141,5 @@
 {% endfor %}
 </div>
 <script src="{% static 'gestao_metas/gestao_metas.js' %}?v=2"></script>
+<script src="{% static 'gestao_metas/realizado_agora.js' %}?v=1"></script>
 {% endblock %}

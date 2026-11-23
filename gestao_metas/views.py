@@ -95,6 +95,15 @@ def competencia(request, codigo):
         rotulo_ano=servicos.rotulo_mes(ctx['mes_ano']), rotulo_comp=servicos.rotulo_mes(comp.mes), rotulo_ant=servicos.rotulo_mes(ctx['mes_anterior'])))
 
 
+@login_required
+@exige()
+def realizado_agora(request, codigo):
+    """O realizado do mês da competência até agora (a coluna "Realizado até o momento")."""
+    comp = _competencia(codigo)
+    dados = servicos.realizado_ate_agora(comp, forcar=request.GET.get('atualizar') == '1')
+    return JsonResponse(dados, headers={'Cache-Control': 'no-store'})
+
+
 def _json_linha(linha):
     if linha is None:
         return None

@@ -27,11 +27,11 @@ urlpatterns = [
     path('carrinho/resumo-itens/', views.contestation_cart_items_summary, name='contestation_cart_items_summary'),
     # Dupla conferência do carrinho antes de enviar.
     path('carrinho/conferir/', views.cart_check, name='cart_check'),
-    # Contestação por equipe: cada CN responde as suas vendas, o gerente envia.
+    # O gerente responde cada venda; o CN dá o de acordo nos Não (24 h).
     path('venda/<int:exclusion_id>/nao/', views.responder_nao, name='responder_nao'),
     path('venda/<int:exclusion_id>/nao/desfazer/', views.desfazer_nao, name='desfazer_nao'),
-    path('ciclo/pronto/', views.marcar_pronto, name='marcar_pronto'),
-    path('ciclo/reabrir/', views.reabrir_parte, name='reabrir_parte'),
+    path('venda/<int:exclusion_id>/nao/de-acordo/', views.cn_de_acordo_nao, name='cn_de_acordo_nao'),
+    path('venda/<int:exclusion_id>/nao/manter/', views.manter_nao, name='manter_nao'),
     path('minhas/', views.my_contestations, name='my_contestations'),
     path('gerenciar/', views.manage_contestations, name='manage_contestations'),
     path('liberar-setor/', views.liberar_setor, name='liberar_setor'),

@@ -133,6 +133,8 @@
         to { transform: translateX(400px); opacity: 0; }
     }
 
+    .nao-info:empty { display: none; }
+    tr.linha-nao:has(.nao-info:empty) { display: none; }
 </style>
 {% endblock %}
 
@@ -212,9 +214,15 @@
     <div id="balancoDoCiclo">{% include 'contestacao/_balanco.html' %}</div>
 
     {% if not showing_old_records %}{% include 'contestacao/_equipe_ciclo.html' %}{% endif %}
+    {% if venda_filter %}
+    <div class="mb-4 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900 flex flex-wrap items-center justify-between gap-2">
+        <span><i class="fas fa-magnifying-glass mr-1"></i> Mostrando só a venda que você abriu. Clique em <strong>Sim</strong> para contestar ou em <strong>Manter o Não</strong> para responder ao CN.</span>
+        <a href="{% url 'contestacao:exclusion_list' %}" class="font-semibold hover:underline">Ver todas</a>
+    </div>
+    {% endif %}
     {% if vendedor_filter %}
     <div class="mb-4 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900 flex flex-wrap items-center justify-between gap-2">
-        <span><i class="fas fa-user mr-1"></i> Mostrando só as vendas de <strong>{{ vendedor_filter }}</strong>{% if papel != 'cn' %} — o que você responder aqui fica registrado como feito por você, em nome dele{% endif %}.</span>
+        <span><i class="fas fa-user mr-1"></i> Mostrando só as vendas de <strong>{{ vendedor_filter }}</strong>{% if papel != 'cn' %} — o que você responder aqui fica registrado como feito por você{% endif %}.</span>
         <a href="{% url 'contestacao:exclusion_list' %}" class="font-semibold hover:underline">Ver todas</a>
     </div>
     {% endif %}
@@ -365,7 +373,9 @@
                                 <span class="text-xs font-medium" style="color: #f59e0b"><i class="fas fa-clock mr-1"></i>Em andamento</span>
                                 {% endif %}
                             {% else %}
-                            {% if contestation_blocked %}
+                            {% if papel == 'cn' %}
+                            {% include 'contestacao/_resposta_para_cn.html' with compacto=True %}
+                            {% elif contestation_blocked %}
                             <span class="text-xs font-medium text-red-600" title="Sincronize novamente a planilha para liberar novas contestações.">
                                 <i class="fas fa-lock mr-1"></i>Contestação bloqueada
                             </span>
@@ -378,9 +388,6 @@
                                     <i class="fas fa-times mr-1"></i> Não
                                 </button>
                             </div>
-                            {% with resp=respostas_nao|get_item:r.pk %}
-                            <div class="nao-info mt-1 text-left text-[11px]" data-id="{{ r.pk }}">{% if resp %}{% include 'contestacao/_nao_info.html' %}{% endif %}</div>
-                            {% endwith %}
                             {% with outro=sim_de_outros|get_item:r.pk %}{% if outro %}
                             <div class="mt-1 text-left text-[11px] rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-orange-900">
                                 <span class="font-semibold"><i class="fas fa-check mr-1"></i>Sim</span> no carrinho de {{ outro.user.full_name }}{% if not outro.attachment %} <span class="text-red-700">(sem evidência)</span>{% endif %}
@@ -391,8 +398,12 @@
                             {% endwith %}
                         </td>
                     </tr>
+                    {% comment %}O Não do gerente e o de acordo do CN, na largura toda (a coluna Ação é estreita para os botões).{% endcomment %}
+                    {% with resp=respostas_nao|get_item:r.pk %}
+                    <tr class="{{ zebra_class }} linha-nao"><td colspan="6" class="px-3 py-0"><div class="nao-info text-left text-[11px] pb-2" data-id="{{ r.pk }}">{% if resp %}{% include 'contestacao/_nao_info.html' %}{% endif %}</div></td></tr>
+                    {% endwith %}
                     {% with info=contestations_map|get_item:r.pk %}
-                    {% if not info and not contestation_blocked %}
+                    {% if not info and not contestation_blocked and papel != 'cn' %}
                     <tr id="nao-row-{{ r.pk }}" style="display:none" class="{{ zebra_class }}">
                         <td colspan="6" class="px-4 py-4">
                             {% include 'contestacao/_nao_caixa.html' %}
@@ -490,7 +501,9 @@
                 <span class="text-xs font-medium" style="color: #f59e0b"><i class="fas fa-clock mr-1"></i>Em andamento</span>
                 {% endif %}
             {% else %}
-                {% if contestation_blocked %}
+                {% if papel == 'cn' %}
+                <div class="mt-2">{% include 'contestacao/_resposta_para_cn.html' %}</div>
+                {% elif contestation_blocked %}
                 <span class="text-xs font-medium text-red-600"><i class="fas fa-lock mr-1"></i>Contestação bloqueada</span>
                 {% else %}
                 <div class="grid grid-cols-2 gap-2 mt-3">
@@ -595,7 +608,7 @@
                 <div class="flex items-center gap-3">
                     <span class="inline-flex items-center justify-center w-9 h-9 rounded-full text-white text-sm font-bold" style="background-color: #c2410c" id="bulkCount">0</span>
                     <div class="text-sm text-white">
-                        <span class="font-semibold">{% if papel == 'cn' %}com Sim no seu carrinho (salvas — o gerente envia){% else %}pedido de contestação pronto para envio{% endif %}</span>
+                        <span class="font-semibold">pedido de contestação pronto para envio</span>
                         <div id="bulkResumo" class="text-xs text-white/90 mt-0.5"></div>
                     </div>
                 </div>
@@ -610,7 +623,7 @@
                         <i class="fas fa-trash-alt mr-1"></i> Limpar
                     </button>
                     {% if papel == 'cn' %}
-                    <span class="px-3 py-1.5 text-xs text-white/90 rounded-md" style="background-color: #9a3412" title="Quem envia é o gerente da loja, depois que todos os CNs marcarem pronto.">
+                    <span class="px-3 py-1.5 text-xs text-white/90 rounded-md" style="background-color: #9a3412" title="Quem responde e envia é o gerente da loja.">
                         <i class="fas fa-user-tie mr-1"></i> O gerente envia
                     </span>
                     {% else %}
@@ -698,7 +711,6 @@ window.MOTIVOS_CONFERENCIA = {
     ja_contestada: 'Já contestada neste ciclo',
     fora_do_escopo: 'Fora da sua loja/base',
     nao_encontrada: 'Não está mais na base sincronizada',
-    aguardando_cns: 'Esperando os CNs da loja marcarem pronto',
     respondida_nao: 'Respondida como Não',
     falhou: 'Não deu para enviar agora (tente de novo)'
 };
@@ -1663,8 +1675,12 @@ window.confirmarNao = async function(id) {
             + window.escaparHtml(corpo.justificativa)
             + '<span class="block text-gray-500">por ' + window.escaparHtml(corpo.preenchido_por) + ' agora · '
             + '<button type="button" class="underline hover:text-gray-800" onclick="desfazerNao(' + Number(id) + ')">desfazer</button></span>'
+            + (corpo.situacao_cn === 'aguardando'
+                ? '<div class="mt-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-900"><i class="fas fa-hourglass-half mr-1"></i>De acordo do CN até <strong>'
+                  + window.escaparHtml(corpo.prazo_cn) + '</strong> — depois disso fica de acordo automático.</div>'
+                : '')
             + '</div>');
-        window.showToast(corpo.em_nome_do_cn ? 'Não registrado (em nome do CN, com o seu nome no histórico).' : 'Não registrado.', 'success');
+        window.showToast(corpo.situacao_cn === 'aguardando' ? 'Não registrado. O CN tem até ' + corpo.prazo_cn + ' para dar o de acordo.' : 'Não registrado.', 'success');
     } catch (_) {
         mostrarErro('Sem conexão agora. Tente de novo.');
     }
@@ -2227,9 +2243,10 @@ window.enviarDaLoja = async function() {
             naoProntas: (resp.itens || []).filter((i) => i.situacao !== 'pronta')
         };
         let resumo = prontas.length + ' de ' + resp.total + ' vendas com Sim prontas para enviar.';
-        const travadas = (resp.lojas || []).filter((l) => !l.liberada);
-        if (travadas.length) {
-            resumo += ' Esperando: ' + travadas.map((l) => l.filial + ' (' + l.faltando.join(', ') + ')').join('; ') + '.';
+        // O envio não espera nada: só avisa o que ainda está sem resposta.
+        const semResposta = (resp.lojas || []).filter((l) => l.faltam > 0);
+        if (semResposta.length) {
+            resumo += ' Ainda sem resposta: ' + semResposta.map((l) => l.filial + ' (' + l.faltam + ')').join('; ') + '.';
         }
         if (subida.falhas.length > 0) {
             resumo += ' (' + subida.falhas.length + ' evidência(s) do seu carrinho não subiram; tente de novo)';

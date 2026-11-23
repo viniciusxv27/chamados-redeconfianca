@@ -89,7 +89,7 @@
             </a>
             {% if c.status == 'accepted' and c.de_acordo_meu %}
             <div class="px-4 py-3 border-t bg-blue-50 flex flex-wrap gap-2 items-center">
-                <p class="text-xs text-blue-700 font-semibold mr-2"><i class="fas fa-info-circle mr-1"></i> Gestor aprovou. Dê o de acordo ou negue:</p>
+                <p class="text-xs text-blue-700 font-semibold mr-2"><i class="fas fa-info-circle mr-1"></i> Gestor aprovou. Dê o de acordo ou negue (questiona a conferência de vendas):</p>
                 <input type="text" id="conf-notes-{{ c.pk }}" placeholder="Observação (opcional)"
                        class="flex-1 min-w-[150px] border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500">
                 <form method="post" action="{% url 'contestacao:confirm_contestation' c.pk %}" class="inline" onsubmit="this.querySelector('[name=confirmation_notes]').value=document.getElementById('conf-notes-{{ c.pk }}').value;">
@@ -109,7 +109,7 @@
             </div>
             {% elif c.status == 'rejected' and not c.confirmed_by and c.de_acordo_meu %}
             <div class="px-4 py-3 border-t bg-red-50 flex flex-wrap gap-2 items-center">
-                <p class="text-xs text-red-700 font-semibold mr-2"><i class="fas fa-exclamation-circle mr-1"></i> Gestor rejeitou. Dê o de acordo ou negue:</p>
+                <p class="text-xs text-red-700 font-semibold mr-2"><i class="fas fa-exclamation-circle mr-1"></i> Gestor rejeitou. Dê o de acordo ou negue (questiona a conferência de vendas):</p>
                 <input type="text" id="conf-notes-{{ c.pk }}" placeholder="Observação (opcional)"
                        class="flex-1 min-w-[150px] border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-red-500 focus:border-red-500">
                 <form method="post" action="{% url 'contestacao:confirm_contestation' c.pk %}" class="inline" onsubmit="this.querySelector('[name=confirmation_notes]').value=document.getElementById('conf-notes-{{ c.pk }}').value;">
@@ -126,6 +126,11 @@
                         <i class="fas fa-times mr-1"></i> Negar
                     </button>
                 </form>
+            </div>
+            {% elif c.status == 'accepted' or c.status == 'rejected' and not c.confirmed_by %}
+            <div class="px-4 py-2.5 border-t bg-gray-50 text-xs text-gray-700">
+                <i class="fas fa-eye mr-1"></i> Parecer do gestor: <strong>{% if c.status == 'accepted' %}aprovada{% else %}rejeitada{% endif %}</strong>.
+                {% if so_cn %}Você acompanha por aqui; quem dá o de acordo ou questiona o time de conferência de vendas é o gerente da loja.{% else %}Aguardando o de acordo do gerente que enviou.{% endif %}
             </div>
             {% endif %}
         </div>

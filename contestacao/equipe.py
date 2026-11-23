@@ -1,44 +1,49 @@
-"""Contestação feita pela equipe da loja: cada CN responde as próprias vendas e
-só o gerente envia — e só quando todos terminaram.
+"""Contestação da loja: o gerente responde cada venda e o CN só dá o de acordo
+nas que o gerente marcou Não.
 
-Pedido do dono (17/11/2026): "Cada CN (Vendedor) faz a sua, mas só o gerente
-envia e ele só envia quando todos fizerem, além disso se o cara marcar em não
-ele tem que dar uma justificativa. Porém o Gerente pode fazer pelo CN (deixando
-sempre o histórico de forma correta com quem fez)."
+Pedido do dono (23/11/2026), invertendo o fluxo de 17/11 (em que cada CN
+respondia as próprias vendas e o gerente só enviava quando todos terminassem):
+"O gerente faz a contestação e o CN dá o de acordo dele apenas nos que o
+Gerente marcar como NÃO. O resto deve seguir a contestação." E mais: "prazo de
+24hrs para o CN (Consultor) dar o de acordo, caso passe o prazo colocar o de
+acordo automático e sinalizar 'De acordo automático por prazo expirado'" e
+"quando tiver o parecer do Gestor, o CN ter visão, mas quem pode questionar ao
+time de conferência de venda é apenas o gerente".
 
 **Quem é quem**
 
 - *CN*: o vendedor da venda. A base da Vivo traz só o NOME
   (``ExclusionRecord.vendedor``); o CN é o usuário ATIVO do portal com esse nome
-  (sem acento, sem caixa — a mesma comparação que o app já usava para o gerente
-  da planilha). Nome que bate com mais de um usuário fica com o da mesma loja;
-  se ainda empatar, a venda fica sem CN.
-- *Gerente*: quem já podia contestar (``User.can_create_contestations``: PADRÃO
-  do grupo GERENTES, ou SUPERVISOR para cima). Vê a loja toda, responde por
-  qualquer CN e é quem envia.
-- *Gestão central* (``_can_manage_contestations``: ADMIN, SUPERADMIN,
-  superusuário, liberação global da contestação): continua como antes, envia sem
-  esperar os CNs.
+  (sem acento, sem caixa). Nome que bate com mais de um usuário fica com o da
+  mesma loja; se ainda empatar, a venda fica sem CN.
+- *Gerente*: quem pode contestar (``User.can_create_contestations``). Responde
+  toda venda da loja: Sim (motivo e evidência) ou Não (com justificativa), e
+  envia as Sim quando quiser — o envio não espera os de acordo dos Não.
+- *Gestão central* (``_can_manage_contestations``): como o gerente, no escopo dela.
 
-**A resposta de cada venda** (``situacao_das_vendas``)
+**O de acordo do CN no Não** (``RespostaNaoContesta.situacao_cn``)
 
-- ``contestada``: já virou contestação (qualquer status);
-- ``sim``: está num carrinho com motivo e evidência (de quem for);
-- ``nao``: respondida como Não, com justificativa;
-- ``sim_incompleto``: está num carrinho, mas falta motivo ou evidência;
-- ``pendente``: ninguém respondeu.
+- ``aguardando``: o CN tem até ``prazo_cn`` (24 h da resposta do gerente);
+- ``de_acordo``: o CN concordou;
+- ``automatico``: o prazo passou sem resposta — "De acordo automático por
+  prazo expirado" (``expirar_prazos``, chamado por quem lê);
+- ``discorda``: o CN discordou, com o motivo; a venda volta para o gerente, que
+  contesta (Sim — o Não sai) ou mantém o Não com uma resposta (``mantido``);
+- ``sem_cn``: venda de vendedor sem cadastro ativo no portal (ou do próprio
+  gerente): não há de quem esperar.
 
-**Quando a loja libera o envio**: todo CN ativo com venda na base marcou
-"pronto" e continua sem venda pendente. Venda de vendedor sem cadastro ativo no
-portal (quem saiu, nome escrito diferente) não trava — o gerente responde por
-ela se quiser, como já fazia.
+**A resposta de cada venda** (``situacao_das_vendas``): ``contestada``, ``sim``,
+``nao``, ``sim_incompleto`` ou ``pendente``.
 """
 from collections import defaultdict
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.db import transaction
+from django.utils import timezone
 
-from .models import (Contestation, ContestationCartDraft, ExclusionRecord, ParteDoCN,
+from .models import (Contestation, ContestationCartDraft, ContestationHistory, ExclusionRecord,
                      RespostaNaoContesta)
 
 CACHE_DONOS = 'contestacao:donos:v1:{}'
@@ -46,6 +51,8 @@ CACHE_E_CN = 'contestacao:e_cn:v1:{}'
 TEMPO_CACHE = 300            # 5 min: venda nova no lote ou usuário novo aparece logo
 MIN_JUSTIFICATIVA = 5        # "." ou "não" não explicam nada
 RESPONDIDAS = ('contestada', 'sim', 'nao')
+PRAZO_CN = timedelta(hours=24)
+ROTULO_AUTOMATICO = 'De acordo automático por prazo expirado'
 
 ROTULO_RESPOSTA = {
     'contestada': 'Já enviada',
@@ -162,18 +169,68 @@ def papel(user):
 
 
 def pode_responder(user, venda, dono_id=None):
-    """Quem responde por uma venda: o próprio CN ou quem pode contestar na loja dela."""
-    if venda is None:
+    """Quem responde Sim/Não por uma venda: quem pode contestar na loja dela (o
+    gerente). O CN não responde — ele só dá o de acordo nos Não."""
+    if venda is None or not user or not getattr(user, 'is_authenticated', False):
         return False
-    if dono_id is None:
-        dono_id = dono_da_venda(venda)
-    if dono_id and dono_id == user.pk:
-        return True
     v = _views()
     if not v._can_create_contestations(user):
         return False
     return v._apply_exclusion_scope_for_user(
         ExclusionRecord.objects.filter(pk=venda.pk), user).exists()
+
+
+def pode_dar_de_acordo_no_nao(user, resposta):
+    """O de acordo (ou a discordância) do Não é do CN dono da venda, dentro do prazo."""
+    return bool(resposta is not None and user and resposta.cn_id
+                and resposta.cn_id == user.pk
+                and resposta.situacao_cn == RespostaNaoContesta.AGUARDANDO
+                and (resposta.prazo_cn is None or resposta.prazo_cn > timezone.now()))
+
+
+def situacao_cn_inicial(dono_id, quem_respondeu, agora=None):
+    """``(situacao_cn, prazo_cn)`` de um Não que acabou de ser dado."""
+    agora = agora or timezone.now()
+    if not dono_id or dono_id == quem_respondeu.pk:
+        # Sem CN no portal, ou o gerente respondendo a própria venda.
+        return RespostaNaoContesta.SEM_CN, None
+    return RespostaNaoContesta.AGUARDANDO, agora + PRAZO_CN
+
+
+def expirar_prazos(agora=None, ids=None):
+    """De acordo automático nos Não cujo prazo do CN passou. Devolve quantos.
+
+    Chamado por quem lê (a lista, o painel, o de acordo): o estado fica certo
+    sem depender de rotina agendada. O histórico registra cada um, com a hora
+    do prazo — não a da tela que percebeu.
+    """
+    agora = agora or timezone.now()
+    qs = RespostaNaoContesta.objects.filter(
+        situacao_cn=RespostaNaoContesta.AGUARDANDO, prazo_cn__isnull=False, prazo_cn__lte=agora)
+    if ids is not None:
+        qs = qs.filter(exclusion_id__in=ids)
+    feitos = 0
+    for pk in list(qs.values_list('pk', flat=True)[:2000]):
+        with transaction.atomic():
+            r = (RespostaNaoContesta.objects.select_for_update(of=('self',)).select_related('exclusion')
+                 .filter(pk=pk, situacao_cn=RespostaNaoContesta.AGUARDANDO).first())
+            if r is None:
+                continue
+            r.situacao_cn = RespostaNaoContesta.AUTOMATICO
+            r.cn_respondido_em = r.prazo_cn
+            r.cn_respondido_por = None
+            r.save(update_fields=['situacao_cn', 'cn_respondido_em', 'cn_respondido_por', 'atualizado_em'])
+            venda = r.exclusion
+            ContestationHistory.objects.create(
+                action='cn_de_acordo_auto', user=None, notes=ROTULO_AUTOMATICO,
+                extra_data={
+                    'exclusion_id': venda.pk, 'lote_id': venda.sync_batch_id,
+                    'filial': venda.filial, 'vendedor': venda.vendedor,
+                    'para_cn_id': r.cn_id, 'prazo': r.prazo_cn.isoformat() if r.prazo_cn else '',
+                    'automatico': True,
+                })
+            feitos += 1
+    return feitos
 
 
 # ---------------------------------------------------------------------------
@@ -216,11 +273,12 @@ def situacao_das_vendas(ids):
 
 
 def estado_das_lojas(lote, filiais=None):
-    """``{filial: loja}`` com cada vendedor da base e se a loja já pode enviar.
+    """``{filial: loja}``: o que o gerente já respondeu e como andam os de acordo.
 
-    ``loja['liberada']`` é a trava do envio: todo CN ativo com venda está
-    pronto. ``loja['participantes']`` traz, por vendedor, quantas vendas tem em
-    cada situação, o CN do portal (ou None) e quem marcou "pronto".
+    ``loja['participantes']`` traz, por vendedor, quantas vendas tem em cada
+    situação (Sim, Não, pendente...) e, dos Não, quantos estão esperando o CN,
+    de acordo, automáticos, com discordância ou mantidos. ``loja['ids_para_enviar']``
+    são as vendas com Sim pronto — o envio não espera os de acordo.
     """
     if lote is None:
         return {}
@@ -234,12 +292,21 @@ def estado_das_lojas(lote, filiais=None):
     vendas = list(qs.values_list('id', 'filial', 'vendedor'))
     if not vendas:
         return {}
+    ids = [i for i, _, _ in vendas]
+    expirar_prazos(ids=ids)
     donos = donos_para(lote, {(f, vd) for _, f, vd in vendas})
-    situacoes = situacao_das_vendas([i for i, _, _ in vendas])
-    partes = {(p.filial, p.vendedor): p for p in ParteDoCN.objects.filter(
-        lote=lote, filial__in={f for _, f, _ in vendas}).select_related('marcado_por', 'cn')}
+    situacoes = situacao_das_vendas(ids)
+    acordos = dict(RespostaNaoContesta.objects.filter(exclusion_id__in=ids)
+                   .exclude(justificativa='').values_list('exclusion_id', 'situacao_cn'))
     usuarios = {u.pk: u for u in get_user_model().objects.filter(
         pk__in={d for d in donos.values() if d})}
+    chave_do_acordo = {
+        RespostaNaoContesta.AGUARDANDO: 'cn_aguardando',
+        RespostaNaoContesta.DE_ACORDO: 'cn_de_acordo',
+        RespostaNaoContesta.AUTOMATICO: 'cn_automatico',
+        RespostaNaoContesta.DISCORDA: 'cn_discorda',
+        RespostaNaoContesta.MANTIDO: 'cn_mantido',
+    }
 
     lojas = {}
     for eid, filial, vendedor in vendas:
@@ -248,6 +315,8 @@ def estado_das_lojas(lote, filiais=None):
             'filial': filial, 'vendedor': vendedor,
             'cn': usuarios.get(donos.get((filial, vendedor))),
             'total': 0, 'contestada': 0, 'sim': 0, 'nao': 0, 'sim_incompleto': 0, 'pendente': 0,
+            'cn_aguardando': 0, 'cn_de_acordo': 0, 'cn_automatico': 0, 'cn_discorda': 0,
+            'cn_mantido': 0,
             'ids': [], 'ids_sim': [],
         })
         situacao = situacoes[eid]
@@ -256,54 +325,54 @@ def estado_das_lojas(lote, filiais=None):
         p['ids'].append(eid)
         if situacao == 'sim':
             p['ids_sim'].append(eid)
+        if situacao == 'nao':
+            chave = chave_do_acordo.get(acordos.get(eid))
+            if chave:
+                p[chave] += 1
 
     for filial, loja in lojas.items():
-        participantes = []
-        for vendedor, p in loja.pop('por_vendedor').items():
-            parte = partes.get((filial, vendedor))
+        participantes = list(loja.pop('por_vendedor').values())
+        for p in participantes:
             p['faltam'] = p['pendente'] + p['sim_incompleto']
-            p['parte'] = parte
             p['tudo_enviado'] = p['contestada'] == p['total']
-            p['pronto'] = p['faltam'] == 0 and (parte is not None or p['tudo_enviado'])
-            # Marcou pronto e depois mexeu (tirou um Não, deixou um Sim sem
-            # evidência): volta a pendente, mas a tela diz o porquê.
-            p['mudou_depois'] = parte is not None and p['faltam'] > 0
-            p['conta_para_envio'] = p['cn'] is not None
-            participantes.append(p)
-        participantes.sort(key=lambda p: (not p['conta_para_envio'], p['pronto'],
+            p['respondido'] = p['faltam'] == 0
+        participantes.sort(key=lambda p: (-p['cn_discorda'], p['respondido'],
                                           v._normalize_person_name(p['vendedor'])))
-        cns = [p for p in participantes if p['conta_para_envio']]
         loja['participantes'] = participantes
-        loja['cns'] = len(cns)
-        loja['cns_prontos'] = sum(1 for p in cns if p['pronto'])
-        loja['cns_faltando'] = [p for p in cns if not p['pronto']]
-        loja['sem_cadastro'] = len(participantes) - len(cns)
-        loja['liberada'] = loja['cns_prontos'] == loja['cns']
+        loja['faltam'] = sum(p['faltam'] for p in participantes)
+        loja['cn_aguardando'] = sum(p['cn_aguardando'] for p in participantes)
+        loja['cn_discorda'] = sum(p['cn_discorda'] for p in participantes)
+        loja['cn_automatico'] = sum(p['cn_automatico'] for p in participantes)
         loja['ids_para_enviar'] = [eid for p in participantes for eid in p['ids_sim']]
         loja['para_enviar'] = len(loja['ids_para_enviar'])
     return lojas
 
 
-def filiais_liberadas(vendas):
-    """Das vendas dadas, as chaves ``(lote_id, filial)`` cuja loja pode enviar."""
-    from .models import ExclusionSyncBatch
-    por_lote = defaultdict(set)
-    for venda in vendas:
-        if venda.sync_batch_id:
-            por_lote[venda.sync_batch_id].add(venda.filial)
-    liberadas = set()
-    for lote in ExclusionSyncBatch.objects.filter(pk__in=list(por_lote)):
-        for filial, loja in estado_das_lojas(lote, por_lote[lote.pk]).items():
-            if loja['liberada']:
-                liberadas.add((lote.pk, filial))
-    return liberadas
+def naos_do_cn(user, lote):
+    """Os Não que o gerente deu nas vendas deste CN, no lote — o painel dele."""
+    if lote is None or not user or not getattr(user, 'is_authenticated', False):
+        return []
+    qs = (RespostaNaoContesta.objects.filter(cn=user, exclusion__sync_batch=lote)
+          .exclude(justificativa=''))
+    expirar_prazos(ids=list(qs.values_list('exclusion_id', flat=True)))
+    ordem = {RespostaNaoContesta.AGUARDANDO: 0, RespostaNaoContesta.DISCORDA: 1}
+    respostas = list(qs.select_related('exclusion', 'preenchido_por', 'mantido_por'))
+    respostas.sort(key=lambda r: (ordem.get(r.situacao_cn, 2), r.prazo_cn or r.atualizado_em))
+    return respostas
 
 
-def venda_liberada(venda, liberadas):
-    """A venda pode ser enviada? Venda sem lote não tem equipe a esperar."""
-    if not venda.sync_batch_id:
-        return True
-    return (venda.sync_batch_id, venda.filial) in liberadas
+def discordancias(lote, filiais):
+    """Os Não em que o CN discordou e que esperam o gerente decidir."""
+    if lote is None:
+        return []
+    filiais = [f for f in (filiais or []) if f]
+    if not filiais:
+        return []
+    return list(RespostaNaoContesta.objects.filter(
+        exclusion__sync_batch=lote, exclusion__filial__in=filiais,
+        situacao_cn=RespostaNaoContesta.DISCORDA)
+        .select_related('exclusion', 'cn', 'preenchido_por', 'cn_respondido_por')
+        .order_by('cn_respondido_em'))
 
 
 def rascunho_para_envio(eid, rascunhos, quem_envia_id, dono_id):

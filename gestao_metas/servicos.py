@@ -681,3 +681,61 @@ def divisoes_da_competencia(competencia):
     except DatabaseError:
         return {}
     return mapa
+
+
+# ---------------------------------------------------------------------------
+# Realizado até o momento (o mês da competência, ao vivo do banco de vendas)
+# ---------------------------------------------------------------------------
+AGORA_CACHE_SEGUNDOS = 600
+
+
+def realizado_ate_agora(competencia, forcar=False, hoje=None):
+    """O que cada loja já vendeu no mês da competência, pilar a pilar.
+
+    Vem do banco de vendas (Vivo GO), com as mesmas regras do realizado importado, guardado
+    por 10 minutos. Sem banco, usa o realizado já gravado do mês (se houver).
+    Devolve {'situacao': 'banco'|'gravado'|'futuro'|'sem_dados', 'lojas': {pilar: {loja_id: {...}}},
+    'atualizado_em': iso, 'erro': ''}.
+    """
+    from django.core.cache import cache
+
+    from . import importacao
+
+    hoje = hoje or timezone.localdate()
+    mes = primeiro_dia(competencia.mes)
+    if mes > hoje:
+        return {'situacao': 'futuro', 'lojas': {}, 'atualizado_em': None, 'erro': ''}
+    chave = f'gestao_metas:ate_agora:{mes:%Y-%m}'
+    guardado = None if forcar else cache.get(chave)
+    if guardado is not None:
+        return guardado
+    lojas = {p: {} for p, _ in PILARES}
+    erro = ''
+    try:
+        agregado = importacao.buscar_mes_no_banco(mes)
+        mapa = MapaLojas()
+        for (pdv, _mes, pilar), (valor, tv, fx) in agregado.items():
+            loja = mapa.achar(pdv)
+            if loja is None or pilar not in lojas:
+                continue
+            atual = lojas[pilar].setdefault(loja.id, {'valor': 0.0, 'tv': 0, 'fixa': 0})
+            atual['valor'] += float(valor or 0)
+            atual['tv'] += int(tv or 0)
+            atual['fixa'] += int(fx or 0)
+        situacao = 'banco'
+    except Exception as exc:  # noqa: BLE001 — banco fora do ar: mostra o que já foi gravado
+        erro = str(exc)[:200]
+        for r in Realizado.objects.filter(mes=mes):
+            if r.pilar in lojas:
+                lojas[r.pilar][r.loja_id] = {'valor': _f(r.valor) or 0.0, 'tv': r.qtd_tv or 0, 'fixa': r.qtd_fixa or 0,
+                                             'qtd': r.quantidade}
+        situacao = 'gravado' if any(lojas.values()) else 'sem_dados'
+    for por_loja in lojas.values():
+        for dados in por_loja.values():
+            dados['valor'] = round(dados['valor'], 2)
+            dados.setdefault('qtd', dados['tv'] + dados['fixa'])
+    resultado = {'situacao': situacao, 'lojas': lojas, 'atualizado_em': timezone.localtime().isoformat(), 'erro': erro,
+                 'mes': f'{mes:%Y-%m}'}
+    if situacao == 'banco':
+        cache.set(chave, resultado, AGORA_CACHE_SEGUNDOS)
+    return resultado

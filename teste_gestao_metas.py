@@ -476,6 +476,38 @@ t('banco fora do ar: avisa e não cria prévia', ImportacaoMetas.objects.filter(
   and 'não respondeu' in r.content.decode())
 
 # ---------------------------------------------------------------------------
+print('realizado até o momento')
+from django.core.cache import cache as _cache  # noqa: E402
+from django.utils import timezone  # noqa: E402
+
+_cache.clear()
+mes_atual = servicos.primeiro_dia(timezone.localdate())
+comp_atual, _ = Competencia.objects.get_or_create(mes=mes_atual)
+URL_AGORA = '/gestao-metas/{}/realizado-agora/'.format(comp_atual.codigo)
+conexao = ConexaoFalsa()
+with mock.patch('pymysql.connect', return_value=conexao):
+    j = cl.get(URL_AGORA).json()
+t('vem do banco de vendas, do mês da competência', j['situacao'] == 'banco' and j['mes'] == mes_atual.strftime('%Y-%m')
+  and all(p[0] == mes_atual for _s, p in conexao.c.consultas), j.get('situacao'))
+loja_txt = str(loja.id)
+t('por loja e pilar (produto e serviço)', j['lojas']['smartphone'][loja_txt]['valor'] == 5000 and j['lojas']['movel'][loja_txt]['valor'] == 700, j['lojas'])
+t('Fixa em quantidade (TV + Fixa) e R$', j['lojas']['fixa'][loja_txt] == {'valor': 1140.0, 'tv': 2, 'fixa': 9, 'qtd': 11}, j['lojas']['fixa'])
+t('"SEDE ADMINISTRATIVA" e PDV desconhecido ficam de fora', all(set(v) <= {str(l.id) for l in LojaMeta.objects.all()} for v in j['lojas'].values()))
+with mock.patch('pymysql.connect', side_effect=AssertionError('não devia ir ao banco')):
+    t('guardado por 10 minutos (não vai ao banco toda hora)', cl.get(URL_AGORA).json()['situacao'] == 'banco')
+with mock.patch('pymysql.connect', side_effect=OSError('sem rota')):
+    Realizado.objects.update_or_create(loja=loja, mes=mes_atual, pilar='movel', defaults={'valor': 333, 'fonte': 'MANUAL'})
+    j = cl.get(URL_AGORA + '?atualizar=1').json()
+t('banco fora: usa o realizado já gravado do mês e avisa', j['situacao'] == 'gravado' and j['lojas']['movel'][loja_txt]['valor'] == 333 and 'sem rota' in j['erro'], j)
+futura, _ = Competencia.objects.get_or_create(mes=servicos.somar_meses(mes_atual, 2))
+with mock.patch('pymysql.connect', side_effect=AssertionError('não devia ir ao banco')):
+    t('mês que ainda não começou: nem vai ao banco', cl.get('/gestao-metas/{}/realizado-agora/'.format(futura.codigo)).json()['situacao'] == 'futuro')
+t('quem não tem acesso não vê', cf.get(URL_AGORA).status_code == 404)
+h = cl.get('/gestao-metas/{}/'.format(comp_atual.codigo)).content.decode()
+t('a tela tem a coluna em todos os pilares e nos totais', h.count('Realizado até o momento</th>') == 7 and h.count('data-agora-total') >= 7
+  and 'realizado_agora.js' in h and 'data-url-agora="{}"'.format(URL_AGORA) in h)
+
+# ---------------------------------------------------------------------------
 print('arquivo de metas da Vivo')
 wb = openpyxl.Workbook()
 w1 = wb.active

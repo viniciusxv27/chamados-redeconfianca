@@ -1,0 +1,22 @@
+{% load dict_extras %}{% comment %}
+O que o CN vê numa venda dele que ainda não virou contestação: a resposta do
+gerente. ``compacto``: só o selo (a tabela do computador mostra o Não inteiro
+na linha de baixo, em largura toda).
+{% endcomment %}
+{% with resp=respostas_nao|get_item:r.pk outro=sim_de_outros|get_item:r.pk %}
+{% if resp %}
+{% if compacto %}
+<span class="inline-block text-[11px] font-semibold {% if resp.situacao_cn == 'aguardando' %}text-amber-800{% elif resp.situacao_cn == 'discorda' %}text-red-700{% else %}text-gray-600{% endif %}">
+    <i class="fas fa-hand mr-1"></i>Não{% if resp.situacao_cn == 'aguardando' %} — seu de acordo{% elif resp.situacao_cn == 'automatico' %} — automático{% elif resp.situacao_cn == 'discorda' %} — você discordou{% endif %}
+</span>
+{% else %}
+<div class="nao-info text-left text-[11px]" data-id="{{ r.pk }}">{% include 'contestacao/_nao_info.html' %}</div>
+{% endif %}
+{% elif outro %}
+<div class="text-left text-[11px] rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-orange-900">
+    <span class="font-semibold"><i class="fas fa-check mr-1"></i>Sim</span> — o gerente vai contestar{% if not outro.attachment %} (falta a evidência){% endif %}
+</div>
+{% else %}
+<span class="text-[11px] text-gray-500"><i class="fas fa-user-tie mr-1"></i>Aguardando o gerente responder</span>
+{% endif %}
+{% endwith %}

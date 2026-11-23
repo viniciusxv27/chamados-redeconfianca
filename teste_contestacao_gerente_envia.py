@@ -1,24 +1,24 @@
-"""Contestação por equipe (17/11/2026): cada CN faz a sua, só o gerente envia.
+"""Contestação da loja, fluxo invertido (23/11/2026): o gerente responde, o CN
+dá o de acordo só nos Não.
 
-Pedido: "Cada CN (Vendedor) faz a sua, mas só o gerente envia e ele só envia
-quando todos fizerem, além disso se o cara marcar em não ele tem que dar uma
-justificativa. Porém o Gerente pode fazer pelo CN (Deixando sempre o histórico
-de forma correta com quem fez)."
+Pedido: "O gerente faz a contestação e o CN dá o de acordo dele apenas nos que
+o Gerente marcar como NÃO. O resto deve seguir a contestação." + prazo de 24 h
+para o CN (passou: "De acordo automático por prazo expirado") + "quando tiver o
+parecer do Gestor, o CN ter visão, mas quem pode questionar ao time de
+conferência de venda é apenas o gerente". Respostas do dono: o CN pode
+discordar (volta ao gerente) e o envio das Sim não espera os de acordo.
 
 Cobre:
 
-- o CN entra em /contestacao/ só com as vendas dele e não envia (403);
-- o "Não" exige justificativa (servidor) e fica registrado com quem respondeu;
-- "pronto" só passa com toda venda respondida, e cai se a pessoa mexer depois;
-- o gerente fica travado (aguardando_cns) até todo CN ativo marcar pronto —
-  vendedor sem cadastro ativo no portal não trava;
-- o gerente faz pelo CN: o histórico guarda quem fez e para quem;
-- o envio cria cada contestação uma vez só, no nome do CN, com quem preencheu
-  e quem enviou; reenviar não duplica;
-- a gestão central (SUPERADMIN) envia sem trava, como antes;
-- carrinho antigo não ressuscita um Não; o Sim clicado troca o Não;
-- de acordo: quem enviou (gerente) continua podendo responder;
-- a tela: painel do CN x painel do gerente, botão Enviar some para o CN, JS válido.
+- o CN entra em /contestacao/ só com as vendas dele, sem Sim/Não (403 no servidor);
+- o gerente responde: Não com justificativa abre 24 h para o CN; venda sem CN
+  no portal não espera; mudar a justificativa reabre o prazo;
+- o envio das Sim sai sem esperar os de acordo, no nome do CN;
+- de acordo só do CN dono, uma vez; discordância com motivo volta ao gerente,
+  que mantém o Não (com resposta) ou contesta (Sim troca o Não);
+- prazo vencido: de acordo automático, uma vez, registrado pelo sistema;
+- parecer do gestor: o CN vê, mas confirmar/negar é só do gerente da loja;
+- a migração 0016 ajusta os Não do fluxo antigo; tela, JS e histórico.
 
 Banco descartável (sqlite, schema direto dos models): as tabelas novas só
 existem no Postgres compartilhado depois do migrate, e o migrate é dele.
@@ -82,14 +82,19 @@ from django.test.utils import setup_test_environment
 setup_test_environment()
 call_command('migrate', run_syncdb=True, verbosity=0)
 
+import importlib
+from datetime import timedelta
+
 import requests
+from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.utils import timezone
 
 from communications.models import CommunicationGroup
 from contestacao import equipe
 from contestacao.models import (Contestation, ContestationCartDraft, ContestationHistory, ExclusionRecord,
-                                ExclusionSyncBatch, ParteDoCN, RespostaNaoContesta, TipoBase)
+                                ExclusionSyncBatch, RespostaNaoContesta, TipoBase)
 from users.models import Sector
 
 User = get_user_model()
@@ -131,12 +136,16 @@ chefe = novo('chefe', 'Chefe', 'Central', hierarchy='SUPERADMIN', is_superuser=T
 gerentes, _ = CommunicationGroup.objects.get_or_create(name='GERENTES', defaults={'created_by': chefe})
 gerente = novo('gerente', 'Gerson', 'Gerente', sector=loja)
 gerente.communication_groups.add(gerentes)
+gerente2 = novo('gerente2', 'Gilda', 'Subgerente', sector=loja)     # outro gerente da mesma loja
+gerente2.communication_groups.add(gerentes)
+gerente_fora = novo('gerentefora', 'Otto', 'Gerente', sector=outra_loja)
+gerente_fora.communication_groups.add(gerentes)
 ana = novo('ana', 'Ana', 'Vendedora', sector=loja)
 bruno = novo('bruno', 'Bruno', 'Vendedor', sector=loja)
-carlos = novo('carlos', 'Carlos', 'Saiu', sector=loja, is_active=False)   # saiu: não trava
+carlos = novo('carlos', 'Carlos', 'Saiu', sector=loja, is_active=False)
 dora = novo('dora', 'Dora', 'Outra', sector=outra_loja)
 
-lote = ExclusionSyncBatch.objects.create(record_type=TipoBase.EXCLUSAO, record_count=9, created_by=chefe)
+lote = ExclusionSyncBatch.objects.create(record_type=TipoBase.EXCLUSAO, record_count=10, created_by=chefe)
 ContestationHistory.objects.create(action='synced', user=chefe, notes='ZZ sync do teste')
 
 
@@ -147,7 +156,8 @@ def venda(numero, vendedor, filial='ZZ EQUIPE'):
         record_type=TipoBase.EXCLUSAO)
 
 
-a1, a2, a3 = venda(1, 'ANA VENDEDORA'), venda(2, 'ANA VENDEDORA'), venda(3, 'ANA VENDEDORA')
+a1, a2, a3, a4 = (venda(1, 'ANA VENDEDORA'), venda(2, 'ANA VENDEDORA'), venda(3, 'ANA VENDEDORA'),
+                  venda(9, 'ANA VENDEDORA'))
 b1, b2 = venda(4, 'BRUNO VENDÊDOR'), venda(5, 'BRUNO VENDÊDOR')      # acento: o nome é normalizado
 c1 = venda(6, 'CARLOS SAIU')
 f1 = venda(7, 'FULANO SEM CADASTRO')
@@ -155,6 +165,8 @@ d1 = venda(8, 'DORA OUTRA', filial='ZZ OUTRA')
 
 cc = Client(); cc.force_login(chefe)
 cg = Client(); cg.force_login(gerente)
+cg2 = Client(); cg2.force_login(gerente2)
+cgf = Client(); cgf.force_login(gerente_fora)
 ca = Client(); ca.force_login(ana)
 cb = Client(); cb.force_login(bruno)
 
@@ -163,8 +175,6 @@ CONFERIR = '/contestacao/carrinho/conferir/'
 ENVIAR = '/contestacao/contestar-lote/'
 SALVAR = '/contestacao/carrinho/rascunho/salvar/'
 SINCRONIZAR = '/contestacao/carrinho/rascunho/sincronizar/'
-PRONTO = '/contestacao/ciclo/pronto/'
-REABRIR = '/contestacao/ciclo/reabrir/'
 
 
 def nao(cliente, venda_, justificativa):
@@ -180,8 +190,13 @@ def sim(cliente, venda_, motivo='ZZ motivo do teste', com_anexo=True, substituir
     return cliente.post(SALVAR, dados)
 
 
-def pronto(cliente, vendedor, filial='ZZ EQUIPE'):
-    return cliente.post(PRONTO, {'filial': filial, 'vendedor': vendedor})
+def acordo(cliente, venda_, acao, motivo=''):
+    return cliente.post(f'/contestacao/venda/{venda_.pk}/nao/de-acordo/',
+                        {'acao': acao, 'motivo': motivo, 'next': '/contestacao/'})
+
+
+def manter(cliente, venda_, resposta):
+    return cliente.post(f'/contestacao/venda/{venda_.pk}/nao/manter/', {'resposta': resposta, 'next': '/contestacao/'})
 
 
 def enviar(cliente, ids):
@@ -196,6 +211,36 @@ def loja_estado():
     return equipe.estado_das_lojas(lote, ['ZZ EQUIPE'])['ZZ EQUIPE']
 
 
+def resp(venda_):
+    return RespostaNaoContesta.objects.filter(exclusion=venda_).first()
+
+
+def ultimo(acao):
+    return ContestationHistory.objects.filter(action=acao).order_by('-pk').first()
+
+
+# --- A migração 0016 (antes de existir qualquer Não do fluxo novo) ----------
+print('Ajuste dos Não antigos (migração 0016)')
+mig = importlib.import_module('contestacao.migrations.0016_de_acordo_do_cn')
+x1, x2, x3 = venda(21, 'ANA VENDEDORA'), venda(22, 'ANA VENDEDORA'), venda(23, 'FULANO SEM CADASTRO')
+x_ids = [x1.pk, x2.pk, x3.pk]
+velho1 = RespostaNaoContesta.objects.create(exclusion=x1, justificativa='Ana respondeu no fluxo antigo', cn=ana,
+                                            preenchido_por=ana)
+velho2 = RespostaNaoContesta.objects.create(exclusion=x2, justificativa='Gerente por ela no fluxo antigo', cn=ana,
+                                            preenchido_por=gerente)
+velho3 = RespostaNaoContesta.objects.create(exclusion=x3, justificativa='Sem CN no fluxo antigo', cn=None,
+                                            preenchido_por=gerente)
+mig.ajustar_respostas_antigas(django_apps, None)
+for v in (velho1, velho2, velho3):
+    v.refresh_from_db()
+t('o Não que o próprio CN deu já conta como de acordo', velho1.situacao_cn == 'de_acordo'
+  and velho1.cn_respondido_por_id == ana.pk)
+t('o que o gerente deu por ele ganha 24 h da resposta', velho2.situacao_cn == 'aguardando'
+  and abs(velho2.prazo_cn - velho2.atualizado_em - timedelta(hours=24)) < timedelta(seconds=2))
+t('sem CN fica "sem CN"', velho3.situacao_cn == 'sem_cn')
+RespostaNaoContesta.objects.all().delete()   # a migração roda uma vez; o resto do teste começa limpo
+ExclusionRecord.objects.filter(pk__in=x_ids).delete()
+
 # --- Quem é quem ------------------------------------------------------------
 print('Quem é CN')
 donos = equipe.donos_do_lote(lote)
@@ -205,179 +250,222 @@ t('quem saiu (inativo) e quem não tem cadastro ficam sem CN',
   donos[('ZZ EQUIPE', 'CARLOS SAIU')] is None and donos[('ZZ EQUIPE', 'FULANO SEM CADASTRO')] is None)
 t('papéis', [equipe.papel(u) for u in (chefe, gerente, ana)] == ['central', 'gerente', 'cn'])
 
-# --- O CN entra e vê só as dele ---------------------------------------------
-print('CN na tela')
+# --- O CN entra, vê só as dele e não responde --------------------------------
+print('CN na tela: só vê')
 r = ca.get(LISTA)
-t('CN abre /contestacao/ (antes só gerente)', r.status_code == 200, r.status_code)
+t('CN abre /contestacao/', r.status_code == 200, r.status_code)
 ids_na_tela = {rec.pk for rec in r.context['records']} if r.status_code == 200 else set()
-t('CN vê só as vendas dele', ids_na_tela == {a1.pk, a2.pk, a3.pk}, ids_na_tela)
+t('CN vê só as vendas dele', ids_na_tela == {a1.pk, a2.pk, a3.pk, a4.pk}, ids_na_tela)
 html_ana = r.content.decode() if r.status_code == 200 else ''
-t('painel "Sua parte" e sem botão Enviar do carrinho',
-  'Sua parte neste ciclo' in html_ana and 'id="btnSubmitAll"' not in html_ana and 'O gerente envia' in html_ana)
+t('painel do CN é o do de acordo', 'Seu de acordo neste ciclo' in html_ana
+  and 'Quem responde as vendas é o gerente da loja' in html_ana)
+t('CN não tem botões Sim/Não nas vendas', f'onclick="openReason({a1.pk})"' not in html_ana
+  and f'onclick="markNotContestable({a1.pk})"' not in html_ana)
+t('CN vê "Aguardando o gerente responder"', 'Aguardando o gerente responder' in html_ana)
 t('menu mostra Contestação para o CN', r.context.get('can_access_contestacao_menu') is True)
-t('CN não entra na contestação de valores', ca.get('/contestacao/valores/').status_code == 302)
 
-print('CN não envia')
-sim(ca, a1)
-r = enviar(ca, [a1])
-t('envio do CN: 403', r.status_code == 403, r.status_code)
-t('conferência do CN: 403', ca.post(CONFERIR, data=json.dumps({'ids': [a1.pk]}),
-                                    content_type='application/json').status_code == 403)
-t('nenhuma contestação criada', not Contestation.objects.exists())
-t('CN não mexe em venda de outro CN (Sim)', sim(ca, b1).status_code == 404)
-t('CN não responde Não por outro CN', nao(ca, b2, 'nao vou contestar essa').status_code == 404)
+print('CN não responde nem envia')
+r = sim(ca, a1)
+t('Sim do CN: 403', r.status_code == 403, r.status_code)
+t('nenhum carrinho do CN', not ContestationCartDraft.objects.filter(user=ana).exists())
+r = nao(ca, a2, 'nao vou contestar essa')
+t('Não do CN: 403', r.status_code == 403, r.status_code)
+t('envio do CN: 403', enviar(ca, [a1]).status_code == 403)
+r = ca.post(SINCRONIZAR, data=json.dumps({'items': [{'exclusion_id': a1.pk, 'reason': 'carrinho velho'}]}),
+            content_type='application/json')
+t('carrinho antigo do CN não entra', not ContestationCartDraft.objects.filter(user=ana).exists(), r.content[:200])
 
-print('Não exige justificativa')
-r = nao(ca, a2, '')
+# --- O gerente responde -------------------------------------------------------
+print('Gerente responde o Não (justificativa obrigatória)')
+r = nao(cg, a2, '')
 t('Não sem justificativa: 400', r.status_code == 400 and r.json().get('campo') == 'justificativa', r.status_code)
-r = nao(ca, a2, ' ok ')
-t('Não com justificativa curta demais: 400', r.status_code == 400)
-t('nada gravado', not RespostaNaoContesta.objects.exists())
-r = nao(ca, a2, 'Cliente cancelou de verdade')
-resp_a2 = RespostaNaoContesta.objects.filter(exclusion=a2).first()
-t('Não com justificativa: grava (CN e quem respondeu)', r.status_code == 200 and resp_a2
-  and resp_a2.cn_id == ana.pk and resp_a2.preenchido_por_id == ana.pk, r.content[:200])
-h = ContestationHistory.objects.filter(action='nao_contesta').order_by('-pk').first()
-t('histórico do Não: Ana fez por ela mesma', h and h.user_id == ana.pk and h.extra_data['para_cn_id'] == ana.pk
-  and h.extra_data['em_nome_do_cn'] is False)
-
-print('Pronto só com tudo respondido')
-r = pronto(ca, 'ANA VENDEDORA')
-t('pronto com a3 sem resposta: recusado', not ParteDoCN.objects.exists())
-nao(ca, a3, 'Venda duplicada na base')
-r = pronto(ca, 'ANA VENDEDORA')
-parte_ana = ParteDoCN.objects.filter(lote=lote, vendedor='ANA VENDEDORA').first()
-t('pronto da Ana gravado por ela', parte_ana and parte_ana.cn_id == ana.pk and parte_ana.marcado_por_id == ana.pk)
-t('CN não marca pronto por outro CN', pronto(ca, 'BRUNO VENDÊDOR') and
-  not ParteDoCN.objects.filter(vendedor='BRUNO VENDÊDOR').exists())
-
-print('Gerente travado até todos fazerem')
-t('loja ainda travada (Bruno pendente)', loja_estado()['liberada'] is False)
-r = conferir_loja(cg)
+t('Não curto demais: 400', nao(cg, a2, ' ok ').status_code == 400)
+antes = timezone.now()
+r = nao(cg, a2, 'Cliente cancelou de verdade')
+ra2 = resp(a2)
+t('Não grava: CN = Ana, respondido pelo gerente', r.status_code == 200 and ra2
+  and ra2.cn_id == ana.pk and ra2.preenchido_por_id == gerente.pk, r.content[:200])
+t('Não abre o prazo de 24 h do CN', ra2 and ra2.situacao_cn == 'aguardando'
+  and abs((ra2.prazo_cn - antes) - timedelta(hours=24)) < timedelta(minutes=1), ra2 and ra2.prazo_cn)
 j = r.json()
-sit = {i['id']: i['situacao'] for i in j.get('itens', [])}
-t('conferência da loja: Sim da Ana aparece esperando os CNs', r.status_code == 200
-  and sit.get(a1.pk) == 'aguardando_cns' and j['prontas'] == [], j)
-t('conferência diz quem falta', any('Bruno' in ' '.join(l['faltando']) for l in j['lojas']), j.get('lojas'))
-r = enviar(cg, [a1])
-j = r.json()
-t('envio barrado no servidor (não só no botão)', j['criadas'] == []
-  and j['ignoradas'] == [{'id': a1.pk, 'motivo': 'aguardando_cns'}], j)
-t('nada criado', not Contestation.objects.exists())
-html_ger = cg.get(LISTA).content.decode()
-t('painel do gerente mostra a equipe e o envio da loja',
-  'Equipe neste ciclo' in html_ger and 'Enviar contestações da loja' in html_ger and 'BRUNO VEND' in html_ger)
-t('gerente vê, na linha, o Sim que está no carrinho da Ana', 'no carrinho de Ana Vendedora' in html_ger)
+t('resposta JSON traz o prazo', j.get('situacao_cn') == 'aguardando' and j.get('prazo_cn'))
+h = ultimo('nao_contesta')
+t('histórico do Não: gerente fez, para a Ana', h.user_id == gerente.pk and h.extra_data['para_cn_id'] == ana.pk
+  and h.extra_data['em_nome_do_cn'] is True and h.extra_data['prazo_cn'])
+nao(cg, f1, 'Venda do Fulano não tem o que contestar')
+nao(cg, c1, 'Carlos saiu, venda cancelada pelo cliente')
+t('Não de venda sem CN no portal não espera de acordo',
+  resp(f1).situacao_cn == 'sem_cn' and resp(c1).situacao_cn == 'sem_cn' and resp(f1).prazo_cn is None)
+t('gerente não responde venda de outra loja', nao(cg, d1, 'Fora da loja dele').status_code == 404)
 
-print('Gerente faz pelo CN')
-r = sim(cg, b1, motivo='Gerente contestando pelo Bruno')
-t('gerente põe Sim na venda do Bruno', r.status_code == 200, r.content[:200])
-r = nao(cg, b2, 'Bruno confirmou que cliente desistiu')
-resp_b2 = RespostaNaoContesta.objects.get(exclusion=b2)
-t('Não do gerente: CN = Bruno, respondido por = gerente',
-  resp_b2.cn_id == bruno.pk and resp_b2.preenchido_por_id == gerente.pk)
-h = ContestationHistory.objects.filter(action='nao_contesta').order_by('-pk').first()
-t('histórico: quem fez (gerente) e para quem (Bruno)', h.user_id == gerente.pk
-  and h.extra_data['para_cn_id'] == bruno.pk and h.extra_data['em_nome_do_cn'] is True)
-sim(cg, f1, motivo='Venda do Fulano, que não tem cadastro')
-pronto(cg, 'BRUNO VENDÊDOR')
-parte_b = ParteDoCN.objects.filter(vendedor='BRUNO VENDÊDOR').first()
-t('pronto do Bruno feito pelo gerente', parte_b and parte_b.cn_id == bruno.pk and parte_b.marcado_por_id == gerente.pk)
-h = ContestationHistory.objects.filter(action='cn_pronto').order_by('-pk').first()
-t('histórico do pronto: gerente em nome do Bruno', h.user_id == gerente.pk and h.extra_data['para_cn_id'] == bruno.pk)
+print('Envio das Sim não espera os de acordo')
+sim(cg, a1, motivo='Gerente contestando a venda da Ana')
+sim(cg, b1, motivo='Gerente contestando a venda do Bruno')
 est = loja_estado()
-t('loja liberada (Carlos inativo e Fulano sem cadastro não travam)', est['liberada'] is True
-  and est['cns'] == 2 and est['sem_cadastro'] == 2, (est['cns'], est['sem_cadastro']))
-
-print('Envio do gerente')
+t('loja: 2 Sim prontas, 1 Não esperando o CN', est['para_enviar'] == 2 and est['cn_aguardando'] == 1, est)
 r = conferir_loja(cg)
 j = r.json()
-t('conferência da loja: a1 (carrinho da Ana), b1 e f1 (do gerente) prontas',
-  sorted(j['prontas']) == sorted([a1.pk, b1.pk, f1.pk]), j)
-r = enviar(cg, [a1, b1, f1])
+t('conferência da loja: a1 e b1 prontas, sem trava', r.status_code == 200
+  and sorted(j['prontas']) == sorted([a1.pk, b1.pk]), j)
+t('conferência avisa o que falta responder (sem travar)', j['lojas'] and j['lojas'][0]['faltam'] > 0, j.get('lojas'))
+r = enviar(cg, [a1, b1])
 j = r.json()
-t('envio cria as 3', sorted(j['criadas']) == sorted([a1.pk, b1.pk, f1.pk]), j)
+t('envio cria as 2 com o Não da a2 ainda esperando a Ana', sorted(j['criadas']) == sorted([a1.pk, b1.pk])
+  and resp(a2).situacao_cn == 'aguardando', j)
 ca1 = Contestation.objects.get(exclusion=a1)
 cb1 = Contestation.objects.get(exclusion=b1)
-cf1 = Contestation.objects.get(exclusion=f1)
-t('a1: do CN (Ana), preenchida pela Ana, enviada pelo gerente',
-  (ca1.requester_id, ca1.preenchido_por_id, ca1.enviado_por_id) == (ana.pk, ana.pk, gerente.pk))
-t('b1: do CN (Bruno), preenchida pelo gerente, enviada pelo gerente',
-  (cb1.requester_id, cb1.preenchido_por_id, cb1.enviado_por_id) == (bruno.pk, gerente.pk, gerente.pk))
-t('f1 (sem cadastro): fica com quem preencheu, como antes', cf1.requester_id == gerente.pk)
-hc = ContestationHistory.objects.get(contestation=cb1, action='created')
-t('histórico da criação: quem enviou, quem preencheu, para quem', hc.user_id == gerente.pk
-  and hc.extra_data['enviado_por_id'] == gerente.pk and hc.extra_data['feito_por_id'] == gerente.pk
-  and hc.extra_data['para_cn_id'] == bruno.pk)
-t('carrinhos esvaziados (o da Ana também)', not ContestationCartDraft.objects.filter(
-  exclusion_id__in=[a1.pk, b1.pk, f1.pk]).exists())
-r = enviar(cg, [a1, b1, f1])
-j = r.json()
-t('reenviar não duplica', j['criadas'] == [] and Contestation.objects.filter(
-  exclusion_id__in=[a1.pk, b1.pk, f1.pk]).count() == 3, j)
+t('contestação no nome do CN, preenchida e enviada pelo gerente',
+  (ca1.requester_id, ca1.preenchido_por_id, ca1.enviado_por_id) == (ana.pk, gerente.pk, gerente.pk))
+t('reenviar não duplica', enviar(cg, [a1, b1]).json()['criadas'] == [])
 
-print('Telas depois do envio')
-t('Ana vê a contestação dela em "Minhas"', [c.pk for c in ca.get('/contestacao/minhas/').context['contestations']] == [ca1.pk])
-t('Ana não abre a do Bruno', ca.get(f'/contestacao/{cb1.pk}/').status_code == 302)
-r = cg.get(f'/contestacao/{cb1.pk}/')
-t('gerente abre a que enviou e vê quem preencheu', r.status_code == 200 and 'enviada por' in r.content.decode())
-cb1.reject(chefe, 'ZZ rejeitada')
-r = cg.post(f'/contestacao/{cb1.pk}/confirmar/', {'confirmation_notes': 'ok'})
-cb1.refresh_from_db()
-t('de acordo: o gerente que enviou ainda responde', cb1.confirmed_by_id == gerente.pk)
-t('histórico mostra os novos registros', 'Respondida Não' in cc.get('/contestacao/historico/').content.decode())
+print('CN dá o de acordo no Não')
+html_ana = ca.get(LISTA).content.decode()
+t('Ana vê o Não do gerente com o prazo e os botões', 'Cliente cancelou de verdade' in html_ana
+  and f'/contestacao/venda/{a2.pk}/nao/de-acordo/' in html_ana and 'esperando você' in html_ana)
+r = acordo(cb, a2, 'de_acordo')
+t('Bruno não dá de acordo na venda da Ana', resp(a2).situacao_cn == 'aguardando')
+r = acordo(cg, a2, 'de_acordo')
+t('o gerente também não (é do CN)', resp(a2).situacao_cn == 'aguardando')
+r = acordo(ca, a2, 'de_acordo')
+ra2 = resp(a2)
+t('de acordo da Ana registrado', r.status_code == 302 and ra2.situacao_cn == 'de_acordo'
+  and ra2.cn_respondido_por_id == ana.pk and ra2.cn_respondido_em)
+h = ultimo('cn_de_acordo')
+t('histórico: de acordo da Ana, com a justificativa do gerente', h and h.user_id == ana.pk
+  and h.extra_data['justificativa_do_gerente'] == 'Cliente cancelou de verdade')
+acordo(ca, a2, 'discorda', 'mudei de ideia depois')
+t('responder de novo não muda nada', resp(a2).situacao_cn == 'de_acordo')
 
-print('Não x Sim e carrinho antigo')
-r = sim(ca, a3, motivo='Mudei de ideia', com_anexo=False)
-t('Sim automático não desfaz o Não (409)', r.status_code == 409 and r.json().get('respondida_nao'))
-t('Não segue lá', RespostaNaoContesta.objects.filter(exclusion=a3).exists())
-r = sim(ca, a3, motivo='Mudei de ideia', com_anexo=False, substituir=True)
-t('clique em Sim troca o Não (com histórico)', r.status_code == 200
-  and not RespostaNaoContesta.objects.filter(exclusion=a3).exists()
-  and ContestationHistory.objects.filter(action='nao_desfeito', user=ana).exists())
+print('Mesmo texto mantém o de acordo; texto novo reabre o prazo')
+nao(cg, a2, 'Cliente cancelou de verdade')
+t('mesma justificativa: de acordo continua', resp(a2).situacao_cn == 'de_acordo')
+nao(cg, a2, 'Cliente cancelou e pediu estorno')
+t('justificativa nova: volta a esperar a Ana', resp(a2).situacao_cn == 'aguardando'
+  and resp(a2).cn_respondido_em is None)
+acordo(ca, a2, 'de_acordo')
+
+print('CN discorda: volta para o gerente')
+nao(cg, a3, 'Venda duplicada na base')
+acordo(ca, a3, 'discorda', 'ruim')
+t('discordância sem motivo de verdade: recusada', resp(a3).situacao_cn == 'aguardando')
+acordo(ca, a3, 'discorda', 'Não é duplicada, são duas linhas diferentes')
+ra3 = resp(a3)
+t('discordância registrada com o motivo', ra3.situacao_cn == 'discorda'
+  and ra3.cn_motivo == 'Não é duplicada, são duas linhas diferentes')
+t('histórico da discordância', ultimo('cn_discorda').user_id == ana.pk)
+html_ger = cg.get(LISTA).content.decode()
+t('painel do gerente mostra a discordância para decidir', 'discordância do CN para você decidir' in html_ger
+  and 'Não é duplicada, são duas linhas diferentes' in html_ger and f'?venda={a3.pk}' in html_ger)
+t('estado da loja conta a discordância', loja_estado()['cn_discorda'] == 1)
+r = cg.get(LISTA + f'?venda={a3.pk}')
+t('"Abrir a venda" filtra só ela, com Contestar e Manter', [rec.pk for rec in r.context['records']] == [a3.pk]
+  and f'/contestacao/venda/{a3.pk}/nao/manter/' in r.content.decode())
+manter(ca, a3, 'Eu mesma mantenho')
+t('CN não decide a discordância', resp(a3).situacao_cn == 'discorda')
+manter(cgf, a3, 'Gerente de outra loja')
+t('gerente de outra loja também não', resp(a3).situacao_cn == 'discorda')
+manter(cg, a3, 'ok')
+t('manter sem resposta de verdade: recusado', resp(a3).situacao_cn == 'discorda')
+manter(cg, a3, 'Conferi no sistema: é duplicada sim')
+ra3 = resp(a3)
+t('gerente manteve o Não, com a resposta', ra3.situacao_cn == 'mantido' and ra3.mantido_por_id == gerente.pk
+  and ra3.gerente_resposta == 'Conferi no sistema: é duplicada sim')
+t('histórico do manter', ultimo('nao_mantido').user_id == gerente.pk)
+t('Ana vê a resposta do gerente', 'Conferi no sistema: é duplicada sim' in ca.get(LISTA).content.decode())
+
+print('Discordância vira contestação')
+nao(cg, b2, 'Bruno disse que o cliente desistiu')
+acordo(cb, b2, 'discorda', 'Cliente não desistiu, tenho o print da conversa')
+r = sim(cg, b2, motivo='CN mostrou o print: contestar', substituir=True)
+t('Sim do gerente troca o Não (com histórico)', r.status_code == 200 and resp(b2) is None
+  and ultimo('nao_desfeito').user_id == gerente.pk)
+j = enviar(cg, [b2]).json()
+t('e a venda vai na contestação', j['criadas'] == [b2.pk], j)
+
+print('24 h sem resposta: de acordo automático')
+nao(cg, a4, 'Venda trocada por outra linha')
+ra4 = resp(a4)
+prazo = timezone.now() - timedelta(minutes=5)
+RespostaNaoContesta.objects.filter(pk=ra4.pk).update(prazo_cn=prazo)
+html_ana = ca.get(LISTA).content.decode()
+ra4 = resp(a4)
+t('passou o prazo: de acordo automático', ra4.situacao_cn == 'automatico'
+  and abs(ra4.cn_respondido_em - prazo) < timedelta(seconds=1) and ra4.cn_respondido_por_id is None)
+h = ultimo('cn_de_acordo_auto')
+t('histórico: "De acordo automático por prazo expirado", pelo sistema', h and h.user_id is None
+  and h.notes == 'De acordo automático por prazo expirado' and h.extra_data['exclusion_id'] == a4.pk)
+t('a tela sinaliza "De acordo automático por prazo expirado"', 'De acordo automático por prazo expirado' in html_ana)
+acordo(ca, a4, 'discorda', 'Agora quero discordar')
+t('depois do prazo o CN não muda mais', resp(a4).situacao_cn == 'automatico')
+t('expira uma vez só', ContestationHistory.objects.filter(action='cn_de_acordo_auto').count() == 1)
+cg.get(LISTA)
+t('outra tela não duplica o automático', ContestationHistory.objects.filter(action='cn_de_acordo_auto').count() == 1)
 est = loja_estado()
 ana_p = next(p for p in est['participantes'] if p['vendedor'] == 'ANA VENDEDORA')
-t('pronto cai quando a venda fica incompleta (Sim sem evidência)', ana_p['pronto'] is False
-  and ana_p['mudou_depois'] is True and est['liberada'] is False)
-nao(ca, a3, 'Voltei atrás, não contesto')
-t('Não tira a venda do carrinho', not ContestationCartDraft.objects.filter(exclusion=a3).exists())
-r = ca.post(SINCRONIZAR, data=json.dumps({'items': [{'exclusion_id': a3.pk, 'reason': 'carrinho velho'}]}),
-            content_type='application/json')
-t('carrinho antigo não ressuscita o Não', r.json()['unresolved'] == [{'local_id': a3.pk, 'motivo': 'respondida_nao'}]
-  and not ContestationCartDraft.objects.filter(exclusion=a3).exists(), r.json())
-t('loja volta a liberar', loja_estado()['liberada'] is True)
-r = ca.post(REABRIR, {'filial': 'ZZ EQUIPE', 'vendedor': 'ANA VENDEDORA'})
-t('reabrir trava de novo', loja_estado()['liberada'] is False
-  and ContestationHistory.objects.filter(action='cn_reaberto', user=ana).exists())
-pronto(ca, 'ANA VENDEDORA')
+t('estado da Ana: 1 de acordo, 1 automático, 1 mantido', (ana_p['cn_de_acordo'], ana_p['cn_automatico'],
+  ana_p['cn_mantido']) == (1, 1, 1), ana_p)
 
-print('Gestão central sem trava')
+print('Parecer do gestor: CN vê, só o gerente responde')
+ca1.reject(chefe, 'ZZ rejeitada pelo gestor')
+r = ca.get('/contestacao/minhas/')
+t('Ana vê a contestação dela e o parecer', [c.pk for c in r.context['contestations']] == [ca1.pk]
+  and 'quem dá o de acordo ou questiona o time de conferência de vendas é o gerente da loja' in r.content.decode())
+t('Ana não ganha os botões de de acordo', f'/contestacao/{ca1.pk}/confirmar/' not in r.content.decode())
+r = ca.get(f'/contestacao/{ca1.pk}/')
+t('detalhe: Ana vê o parecer sem poder responder', r.status_code == 200
+  and 'questiona o time de conferência de vendas' in r.content.decode()
+  and f'/contestacao/{ca1.pk}/negar/' not in r.content.decode())
+ca.post(f'/contestacao/{ca1.pk}/negar/', {'confirmation_notes': 'Discordo do gestor'})
+ca1.refresh_from_db()
+t('Ana não questiona (servidor)', ca1.status == 'rejected' and ca1.confirmed_by_id is None)
+ca.post(f'/contestacao/{ca1.pk}/confirmar/', {'confirmation_notes': 'ok'})
+ca1.refresh_from_db()
+t('Ana não dá de acordo (servidor)', ca1.confirmed_by_id is None)
+cgf.post(f'/contestacao/{ca1.pk}/negar/', {'confirmation_notes': 'outra loja'})
+ca1.refresh_from_db()
+t('gerente de outra loja também não', ca1.confirmed_by_id is None)
+r = cg.get('/contestacao/minhas/')
+t('o gerente que enviou vê os botões', f'/contestacao/{ca1.pk}/negar/' in r.content.decode())
+cg.post(f'/contestacao/{ca1.pk}/negar/', {'confirmation_notes': 'Questionando a conferência'})
+ca1.refresh_from_db()
+t('gerente questiona (Negar) o parecer', ca1.status == 'denied' and ca1.confirmed_by_id == gerente.pk)
+cb1.reject(chefe, 'ZZ rejeitada')
+cg2.post(f'/contestacao/{cb1.pk}/confirmar/', {'confirmation_notes': 'ok'})
+cb1.refresh_from_db()
+t('outro gerente da mesma loja também pode (quem enviou pode ter saído)', cb1.confirmed_by_id == gerente2.pk)
+
+print('Gestão central')
 ContestationCartDraft.objects.create(user=chefe, exclusion=d1, reason='ZZ central').attachment.save(
     'd1.jpg', foto(), save=True)
-t('loja da Dora travada (Dora não fez)', equipe.estado_das_lojas(lote, ['ZZ OUTRA'])['ZZ OUTRA']['liberada'] is False)
 r = enviar(cc, [d1])
 cd1 = Contestation.objects.filter(exclusion=d1).first()
-t('SUPERADMIN envia mesmo assim, no nome da Dora', r.json()['criadas'] == [d1.pk] and cd1
+t('SUPERADMIN envia, no nome da Dora', r.json()['criadas'] == [d1.pk] and cd1
   and cd1.requester_id == dora.pk and cd1.enviado_por_id == chefe.pk, r.json())
 
 print('Tela e JS')
 r = cg.get(LISTA)
 html = r.content.decode()
-t('gerente: tela abre com as vendas da loja', r.status_code == 200 and len(r.context['records']) == 7)
+t('gerente: tela abre com as vendas da loja', r.status_code == 200 and len(r.context['records']) == 8, len(r.context['records']))
+t('painel do gerente: loja e de acordo dos CNs', 'Loja neste ciclo' in html and 'De acordo do CN nos Não' in html
+  and 'Enviar contestações da loja' in html)
 scripts = re.findall(r'<script>(.*?)</script>', html, re.S)
 js = next((sc for sc in scripts if 'window.pendingReasons' in sc), '')
 arq = PASTA / 'tela.js'
-arq.write_text(js)
+arq.write_text(js, encoding='utf-8')
 try:
     chk = subprocess.run(['node', '--check', str(arq)], capture_output=True, text=True, timeout=30)
     t('JS da tela passa no node --check', chk.returncode == 0, chk.stderr[:400])
 except FileNotFoundError:
     print('  (node não encontrado: pulei o --check)')
-t('JS tem o Não com justificativa e o envio da loja',
-  'window.confirmarNao' in js and 'window.enviarDaLoja' in js and "formData.append('substituir_nao', '1')" in js)
+t('JS tem o Não com prazo e o envio da loja sem trava',
+  'window.confirmarNao' in js and 'window.enviarDaLoja' in js and 'aguardando_cns' not in js
+  and "corpo.situacao_cn === 'aguardando'" in js)
 r = cg.get(LISTA + '?vendedor=BRUNO%20VEND%C3%8ADOR')
 t('"Ver vendas" do gerente filtra pelo CN', {rec.pk for rec in r.context['records']} == {b1.pk, b2.pk})
-t('a justificativa do Não aparece na linha', 'Bruno confirmou que cliente desistiu' in r.content.decode())
+hist = cc.get('/contestacao/historico/').content.decode()
+t('histórico mostra os registros novos', 'CN de acordo' in hist and 'CN discordou' in hist
+  and 'Não mantido' in hist and 'De acordo automático por prazo expirado' in hist)
+t('rotas do "pronto" saíram', cg.post('/contestacao/ciclo/pronto/', {}).status_code == 404)
 
 print(f'\n{ok} OK, {fail} falha(s)')
 sys.exit(1 if fail else 0)
