@@ -593,6 +593,53 @@ def arquivar(c, versao, usuario=None, request=None, motivo='', exige_agendamento
     return c
 
 
+ETAPAS_PENDENTES = (1, 2, 3, 4)
+
+
+@transaction.atomic
+def excluir_dos_pendentes(c, versao, usuario=None, request=None, motivo=''):
+    """O "Excluir" da tela Acessos pendentes (só de lá): tira a pessoa da esteira arquivando a ficha.
+
+    Não apaga: a ficha vira DESLIGADO (como o "Arquivar ficha"), com XML do GEFAC, chamados e histórico.
+    Só vale para quem ainda está pendente (Etapas 1–4); quem já foi liberado ou arquivado é recusado.
+    O que ficaria pendurado na fila de Desligamentos é encerrado junto: aviso de inativação pendente
+    (descartado) e pedido de desligamento em aberto (recusado, com aviso a quem pediu).
+    """
+    from .models import PedidoDesligamento as Pedido
+    c = _travar(c)
+    etapa = c.etapa_calculada
+    if c.status != Colaborador.ATIVO or etapa not in ETAPAS_PENDENTES:
+        raise RegraAcess(f'{c.nome} não está mais em Acessos pendentes: atualize a página.')
+    conferir_versao(c, versao)
+    if c.chamados.filter(status=Chamado.ANDAMENTO).exists():
+        raise RegraAcess(f'Há chamado ativo para {c.nome}: conclua o chamado antes de excluir.')
+    motivo = ' '.join(str(motivo or '').split())[:300]
+    agora = timezone.now()
+    c.status, c.desligado_em = Colaborador.DESLIGADO, agora
+    _salvar(c, ['status', 'desligado_em'])
+    texto = 'Ficha excluída em Acessos pendentes' + (f': {motivo}' if motivo else '')
+    avisos = AvisoInativacao.objects.filter(colaborador=c, status=AvisoInativacao.PENDENTE).update(
+        status=AvisoInativacao.DESCARTADO, observacao=texto[:300], decidido_por=usuario, decidido_em=agora)
+    # of=('self',): solicitante é null=True (LEFT JOIN) e o Postgres recusa FOR UPDATE no lado anulável.
+    pedidos = list(Pedido.objects.select_for_update(of=('self',)).select_related('solicitante')
+                   .filter(colaborador=c, status=Pedido.ABERTO))
+    for pedido in pedidos:
+        pedido.status, pedido.resposta = Pedido.RECUSADO, texto[:500]
+        pedido.tratado_por, pedido.tratado_em = usuario, agora
+        pedido.save(update_fields=['status', 'resposta', 'tratado_por', 'tratado_em'])
+    registrar(request, 'EXCLUIDO_PENDENTES', 'DESLIGAMENTO',
+              f'Excluiu {c.nome} de Acessos pendentes (Etapa {etapa})' + (f' — {motivo}' if motivo else '')
+              + ' (ficha arquivada; não revoga os acessos externos)', colaborador=c, usuario=usuario,
+              antes={'status': Colaborador.ATIVO, 'etapa': etapa},
+              depois={'status': c.status, 'motivo': motivo, 'avisos_descartados': avisos,
+                      'pedidos_recusados': [p.pk for p in pedidos]})
+    for pedido in pedidos:
+        if pedido.solicitante_id:
+            _notificar([pedido.solicitante], f'Pedido de desligamento: {c.nome}', f'Recusado: {texto}.',
+                       '/acess/pedir-desligamento/')
+    return c
+
+
 # ── mensagens ───────────────────────────────────────────────────────────────
 VARIAVEIS = ('nome', 'login', 'cpf3', 'loja', 'senha')
 MODELOS_PADRAO = [

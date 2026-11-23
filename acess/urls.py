@@ -19,6 +19,7 @@ urlpatterns = [
     path('colaborador/<int:pk>/xml-gefac/<int:xml_id>/', views.xml_gefac_baixar, name='xml_gefac_baixar'),
     path('colaborador/<int:pk>/xml-gefac/<int:xml_id>/remover/', views.xml_gefac_remover, name='xml_gefac_remover'),
     path('pendentes/', views.pendentes, name='pendentes'),
+    path('colaborador/<int:pk>/excluir-pendente/', views.pendente_excluir, name='pendente_excluir'),
     path('liberados/', views.liberados, name='liberados'),
     path('chamados/', views.chamados, name='chamados'),
     path('chamados/novo/', views.chamado_novo, name='chamado_novo'),

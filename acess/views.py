@@ -348,6 +348,11 @@ def pendentes(request):
     for grupo in por_etapa.values():
         grupo.sort(key=lambda c: c.pendente_desde)
     linhas = por_etapa.get(etapa, [])
+    # "Excluir" (só nesta tela): quem tem chamado ativo vem com o botão travado, numa consulta só.
+    com_chamado_ativo = set()
+    if linhas and pode(request.user, 'colaboradores.excluir'):
+        com_chamado_ativo = set(Chamado.objects.filter(colaborador_id__in=[c.id for c in linhas],
+                                                       status=Chamado.ANDAMENTO).values_list('colaborador_id', flat=True))
     # Admissão no futuro (cadastro do portal): a data em que é para criar no GEFAC aparece embaixo do nome.
     hoje = timezone.localdate()
     xmls = {}
@@ -377,7 +382,32 @@ def pendentes(request):
             ]
     return render(request, 'acess/pendentes.html', _ctx(
         request, 'pendentes', etapa=etapa, etapas=[(n, r, len(por_etapa[n])) for n, r in ETAPAS], linhas=linhas,
-        filtro=filtro, modelos=ModeloMensagem.objects.all(), **_opcoes_filtro()))
+        filtro=filtro, modelos=ModeloMensagem.objects.all(), com_chamado_ativo=com_chamado_ativo, **_opcoes_filtro()))
+
+
+@login_required
+@exige('colaboradores.excluir')
+@require_POST
+def pendente_excluir(request, pk):
+    """O "Excluir" de Acessos pendentes (só existe nesta tela): arquiva a ficha de quem ainda está na esteira.
+
+    Mesma permissão do "Excluir (arquivar)" da ficha. Quem já saiu de pendente é recusado (servicos.excluir_dos_pendentes).
+    """
+    c = get_object_or_404(Colaborador, pk=pk)
+    por_fetch = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    try:
+        sv.excluir_dos_pendentes(c, request.POST.get('versao'), request.user, request, motivo=request.POST.get('motivo'))
+    except sv.RegraAcess as exc:
+        if por_fetch:
+            return JsonResponse({'ok': False, 'erro': str(exc), 'conflito': isinstance(exc, sv.Conflito)}, status=400)
+        _erro(request, exc)
+        return _voltar(request, reverse('acess:pendentes'))
+    msg = (f'{c.nome} excluído de Acessos pendentes: a ficha foi arquivada (o histórico fica; '
+           'os acessos externos não são revogados).')
+    if por_fetch:
+        return JsonResponse({'ok': True, 'msg': msg})
+    messages.success(request, msg)
+    return _voltar(request, reverse('acess:pendentes'))
 
 
 @login_required

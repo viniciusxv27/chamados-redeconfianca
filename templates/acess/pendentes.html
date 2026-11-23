@@ -80,6 +80,14 @@
                     {% csrf_token %}<input type="hidden" name="acao" value="voltar"><input type="hidden" name="versao" value="{{ c.versao }}"><input type="hidden" name="voltar" value="{{ request.get_full_path }}">
                     <button class="ac-btn ac-btn-claro ac-btn-mini text-gray-500" title="Voltar uma etapa"><i class="fas fa-rotate-left"></i></button></form>
                 {% endif %}
+
+                {% if p.colaboradores_excluir %}
+                {% if c.id in com_chamado_ativo %}
+                <span class="ac-btn ac-btn-claro ac-btn-mini text-gray-400 cursor-not-allowed" title="Há chamado ativo: conclua o chamado antes de excluir."><i class="fas fa-trash-can"></i>Excluir</span>
+                {% else %}
+                <button type="button" class="ac-btn ac-btn-claro ac-btn-mini text-red-600" data-abrir="#acExcluirPendente" data-excluir-pendente="{% url 'acess:pendente_excluir' c.id %}" data-versao="{{ c.versao }}" data-nome="{{ c.nome }}" title="Excluir de Acessos pendentes"><i class="fas fa-trash-can"></i>Excluir</button>
+                {% endif %}
+                {% endif %}
             </div>
         </div>
 
@@ -146,6 +154,38 @@
     </div>
 </div>
 <script>window.acAoAbrir = function (m, b) { if (m.id === 'acChamadoLib') document.getElementById('acChamadoLibColab').value = b.dataset.colab; };</script>
+{% endif %}
+{% if p.colaboradores_excluir %}
+<div class="ac-modal" id="acExcluirPendente" role="dialog" aria-modal="true" aria-labelledby="acExcluirPendenteTitulo">
+    <div class="sm:max-w-md">
+        <form method="post" id="acExcluirPendenteForm" action="">
+            {% csrf_token %}<input type="hidden" name="versao" id="acExcluirPendenteVersao"><input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+            <div class="px-5 py-4 border-b border-gray-100">
+                <h3 class="font-bold text-red-700" id="acExcluirPendenteTitulo"><i class="fas fa-trash-can mr-1.5"></i>Excluir de Acessos pendentes</h3>
+                <p class="text-sm text-gray-600 mt-1">Excluir <strong id="acExcluirPendenteNome"></strong> da esteira?</p>
+            </div>
+            <div class="p-5 space-y-3 text-sm">
+                <p class="text-[11px] text-gray-500">A ficha é arquivada e sai das listas (fica entre os arquivados em Desligamentos): histórico, XML do GEFAC e chamados continuam guardados. Não revoga acessos externos. Aviso de inativação ou pedido de desligamento em aberto desta pessoa é encerrado junto.</p>
+                <div><label class="ac-label" for="acExcluirPendenteMotivo">Motivo (opcional)</label><input name="motivo" id="acExcluirPendenteMotivo" maxlength="300" class="ac-input" placeholder="Ex.: desistiu da vaga"></div>
+            </div>
+            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2"><button type="button" data-fechar class="ac-btn ac-btn-claro">Cancelar</button><button type="submit" class="ac-btn ac-btn-pri !bg-red-600 hover:!bg-red-700"><i class="fas fa-trash-can"></i>Excluir</button></div>
+        </form>
+    </div>
+</div>
+<script>
+(function () {
+    var anterior = window.acAoAbrir;
+    window.acAoAbrir = function (m, b) {
+        if (m.id !== 'acExcluirPendente') { if (anterior) anterior(m, b); return; }
+        document.getElementById('acExcluirPendenteForm').action = b.dataset.excluirPendente;
+        document.getElementById('acExcluirPendenteVersao').value = b.dataset.versao;
+        document.getElementById('acExcluirPendenteNome').textContent = b.dataset.nome;
+        var motivo = document.getElementById('acExcluirPendenteMotivo');
+        motivo.value = '';
+        setTimeout(function () { motivo.focus(); }, 50);
+    };
+})();
+</script>
 {% endif %}
 {% include 'acess/_whatsapp.html' %}
 {% endblock %}
