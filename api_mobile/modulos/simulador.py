@@ -5,9 +5,16 @@ dentro do ``realized_prefetch``, que guarda o realizado do mês por 15 min); aqu
 só se resolve quem é calculado — com a mesma regra do ``simulator_dashboard``
 (simulator/views.py:94-222) — e se monta o JSON que o app desenha.
 
-Fica de fora: o modo "Simulador" com valores digitados, o "copiar valores" e as
-telas de administração (/simulator/admin/...), que continuam no portal.
+Também como na web: os níveis Hunter por pilar (``hunter_<pilar>``) e o Acelerador B2B; a visão
+"Simulador" com valores digitados (campos ``sim__<pilar>__<campo>``, pré-preenchidos com o realizado
+na 1ª entrada, como o fragmento do dashboard) e o "Copiar Projeção / Copiar Realizado" de cada coluna
+(``_simulador_valores_json`` do portal); e a Tabela da rede (/simulator/tabela/: realizado × projeção
+e o motivo da diferença, para quem vê o comissionamento — dataset do dia do portal).
+
+Fica de fora: as telas de administração (/simulator/admin/: fatores, lojas, snipers), que continuam
+no portal.
 """
+import json
 import logging
 
 from django.http import Http404
@@ -39,7 +46,8 @@ PAPEIS = {
     sv.ROLE_SUPERADMIN: 'Superadmin', sv.ROLE_COORDENADOR: 'Coordenador', sv.ROLE_GERENTE: 'Gerente',
     sv.ROLE_CONSULTOR: 'Consultor', sv.ROLE_APART: 'A parte',
 }
-VISOES = {sv.VIEW_PROJECAO: 'Projeção', sv.VIEW_REALIZADO: 'Realizado'}
+VISOES = {sv.VIEW_PROJECAO: 'Projeção', sv.VIEW_REALIZADO: 'Realizado', sv.VIEW_SIMULADOR: 'Simulador'}
+PAPEIS_PADRAO = (sv.ROLE_CONSULTOR, sv.ROLE_GERENTE, sv.ROLE_COORDENADOR)
 
 
 def _rotulo_papel(u):
@@ -121,21 +129,59 @@ def resolver_alvo(user, papel, usuario_id):
 
 # ── Cálculo (o fragmento de resultados do dashboard, views.py:262-300) ───────
 
-def calcular(alvo, papel_alvo, visao, hunter, acelerador):
+def calcular(alvo, papel_alvo, visao, hunter, acelerador, entradas=None):
+    entradas = entradas or {}
     with realized_prefetch():
         if papel_alvo == sv.ROLE_APART:
             from users.models import AParteCommissionConfig
             config = AParteCommissionConfig.objects.filter(user=alvo).first()
-            return sv.compute_aparte_simulation(alvo, config, hunter, view_mode=visao, simulator_inputs={})
+            return sv.compute_aparte_simulation(alvo, config, hunter, view_mode=visao, simulator_inputs=entradas)
         fatores = sv.get_factor_set(papel_alvo).data
         if papel_alvo == sv.ROLE_CONSULTOR:
-            return sv.compute_consultor_simulation(alvo, fatores, hunter, view_mode=visao, simulator_inputs={},
+            return sv.compute_consultor_simulation(alvo, fatores, hunter, view_mode=visao, simulator_inputs=entradas,
                                                    acelerador_microindicadores=acelerador)
         if papel_alvo == sv.ROLE_GERENTE:
-            return sv.compute_gerente_simulation(alvo, fatores, hunter, view_mode=visao, simulator_inputs={})
+            return sv.compute_gerente_simulation(alvo, fatores, hunter, view_mode=visao, simulator_inputs=entradas)
         if papel_alvo == sv.ROLE_COORDENADOR:
-            return sv.compute_coordenador_simulation(alvo, fatores, hunter, view_mode=visao, simulator_inputs={})
+            return sv.compute_coordenador_simulation(alvo, fatores, hunter, view_mode=visao, simulator_inputs=entradas)
     return None
+
+
+# ── Visão "Simulador": a tabela de valores digitados (templates/simulator/dashboard.html) ──
+
+def _campo(chave, rotulo, dinheiro=True):
+    return {'chave': chave, 'rotulo': rotulo, 'dinheiro': dinheiro}
+
+
+def formulario_do_simulador(papel_alvo):
+    """Colunas e campos da tabela de inputs do Simulador, como a web monta para cada papel:
+    Meta (opcional), Real Individual e — fora coordenador — Real Coordenação (gerente) ou Real PDV."""
+    colunas = [{'chave': 'meta', 'rotulo': 'Meta (opcional)'}, {'chave': 'real', 'rotulo': 'Real Individual'}]
+    if papel_alvo != sv.ROLE_COORDENADOR:
+        colunas.append({'chave': 'realpdv',
+                        'rotulo': 'Real Coordenação' if papel_alvo == sv.ROLE_GERENTE else 'Real PDV'})
+    terceira = papel_alvo != sv.ROLE_COORDENADOR
+    pilares = []
+    for chave, rotulo in sv.SIMULATOR_INPUT_PILLARS_DISPLAY:
+        if chave == 'fixa':
+            campos = {'meta': [_campo('fixa__meta', 'Meta (qtd)', False)],
+                      'real': [_campo('fixa__qty', 'Qtd (atingimento)', False),
+                               _campo('fixa__receita', 'Receita (base do %)')]}
+            if terceira:
+                campos['realpdv'] = [_campo('fixa__qtypdv', 'Qtd', False)]
+        else:
+            campos = {'meta': [_campo(f'{chave}__meta', 'Meta')], 'real': [_campo(f'{chave}__real', 'Real')]}
+            if terceira:
+                campos['realpdv'] = [_campo(f'{chave}__realpdv', 'Real')]
+        # O campo que a meta-diária usa (meta − real) ÷ dias úteis restantes: o mesmo data-daily-real da web.
+        pilares.append({'chave': chave, 'rotulo': rotulo, 'quantidade': chave == 'fixa', 'campos': campos,
+                        'campo_diario': 'fixa__qty' if chave == 'fixa' else f'{chave}__real'})
+    return {'colunas': colunas, 'pilares': pilares}
+
+
+def _entradas_do_pedido(params):
+    """Os ``sim__<pilar>__<campo>`` do pedido (o que a pessoa digitou), como o dashboard lê."""
+    return {k[len('sim__'):]: params.get(k) for k in params if k.startswith('sim__')}
 
 
 def _n(valor, casas=2):
@@ -233,15 +279,25 @@ def resumo(request):
         'precisa_escolher': alvo is None,
         'alvo': _item(alvo, PAPEIS.get(papel_alvo, '')) if alvo else None,
         'vendo_outro': bool(alvo and alvo.id != user.id),
-        'simulacao': None, 'erro': None,
+        'simulacao': None, 'erro': None, 'simulador': None,
+        'pilares_hunter': [{'chave': k, 'rotulo': r} for k, r in sv.HUNTER_PILLARS],
+        'hunter': {k: 0 for k, _ in sv.HUNTER_PILLARS},
+        'pode_ver_tabela': _pode_ver_tabela(user),
     }
     if alvo is None:
         return Response(saida)
     # Níveis de Hunter e o Acelerador B2B: opções da tela, como na web (?hunter_<pilar>=2&acelerador=1).
     hunter = sv.get_hunter_levels_from_request(request._request)
     acelerador = sv.get_acelerador_from_request(request._request)
+    saida['hunter'] = hunter
+    # Visão Simulador (simulator/views.py:262-330): sem nada digitado, calcula o REALIZADO, que serve
+    # para mostrar e para pré-preencher os campos (papéis padrão); com valores, calcula com eles.
+    entradas = _entradas_do_pedido(request.query_params) if visao == sv.VIEW_SIMULADOR else {}
+    padrao = papel_alvo in PAPEIS_PADRAO
+    primeira = visao == sv.VIEW_SIMULADOR and not entradas and padrao
+    visao_calculo = sv.VIEW_REALIZADO if primeira else visao
     try:
-        sim = calcular(alvo, papel_alvo, visao, hunter, acelerador)
+        sim = calcular(alvo, papel_alvo, visao_calculo, hunter, acelerador, entradas)
     except Exception:                                   # noqa: BLE001 — MySQL/planilha fora do ar
         logger.exception('Simulador (app): falha ao calcular %s (%s)', alvo.pk, papel_alvo)
         saida['erro'] = 'Não foi possível calcular agora. Tente de novo em instantes.'
@@ -252,6 +308,15 @@ def resumo(request):
         saida['erro'] = sim['error']
     else:
         saida['simulacao'] = serializar(sim, papel_alvo, restantes)
+        if visao == sv.VIEW_SIMULADOR:
+            saida['simulador'] = {
+                **formulario_do_simulador(papel_alvo),
+                'primeira': primeira,
+                # O que vai nos campos: o realizado na 1ª entrada; depois, o que a pessoa mandou.
+                'valores': (sv.build_simulador_prefill(sim, papel_alvo) if primeira else entradas),
+                'metas': sv.build_simulador_metas(sim) if padrao else {},
+                'pode_copiar': papel_alvo in PAPEIS_PADRAO + (sv.ROLE_APART,),
+            }
     return Response(saida)
 
 
@@ -263,7 +328,89 @@ def pessoas(request):
     return Response({'resultados': alvos_disponiveis(user, sv.get_user_role(user))})
 
 
+@api_view(['GET'])
+@authentication_classes([TokenMobileAuthentication])
+@permission_classes([permissao('simulador')])
+def valores(request):
+    """"Copiar Projeção" / "Copiar Realizado" da tabela do Simulador: a própria resposta da web
+    (``_simulador_valores_json``, simulator/views.py:344) para a pessoa resolvida pelas mesmas regras."""
+    from simulator.views import _simulador_valores_json
+
+    user = request.user
+    alvo, papel_alvo = resolver_alvo(user, sv.get_user_role(user), (request.query_params.get('usuario') or '').strip())
+    resposta = _simulador_valores_json(request._request, alvo, papel_alvo, bool(alvo and papel_alvo))
+    try:
+        conteudo = json.loads(resposta.content or b'{}')
+    except ValueError:
+        conteudo = {}
+    if not conteudo.get('ok'):
+        return Response({'erro': conteudo.get('erro') or 'Não foi possível buscar os valores.'},
+                        status=resposta.status_code if resposta.status_code >= 400 else 400)
+    return Response({'visao': conteudo.get('visao'), 'valores': conteudo.get('valores') or {},
+                     'metas': conteudo.get('metas') or {}})
+
+
+# ── Tabela da rede (/simulator/tabela/) ──────────────────────────────────────
+
+def _pode_ver_tabela(user):
+    # A porta de simulator/views.py simulator_tabela: a mesma do comissionamento.
+    try:
+        from users.commission_views import pode_ver_comissionamento
+        return bool(pode_ver_comissionamento(user))
+    except Exception:                                   # noqa: BLE001 — falha fecha
+        return False
+
+
+@api_view(['GET'])
+@authentication_classes([TokenMobileAuthentication])
+@permission_classes([permissao('simulador')])
+def tabela(request):
+    """Realizado, projeção, diferença e o motivo, por colaborador (simulator/views.py simulator_tabela):
+    o dataset do dia do portal (recalcula em segundo plano; esta chamada nunca roda o motor da rede)
+    recortado por ``_scope_rows`` — o mesmo recorte da web."""
+    from rest_framework.exceptions import PermissionDenied
+
+    from simulator.averages import ROLE_LABELS, ROLE_ORDER
+    from simulator.tabela import get_tabela_dataset, resumir
+    from users.commission_projection_views import _scope_rows
+    from users.commission_views import MONTH_NAMES_PT
+    from users.commission_views import get_user_role as papel_comissao
+
+    user = request.user
+    if not _pode_ver_tabela(user):
+        raise PermissionDenied('A tabela da rede fica disponível para gerentes e coordenadores.')
+    dataset = get_tabela_dataset(force_refresh=False)
+    linhas, _referencia = _scope_rows(user, papel_comissao(user), dataset['rows'])
+    gerado = dataset['generated_at']
+    contagem = {}
+    for lin in linhas:
+        contagem[lin['role_key']] = contagem.get(lin['role_key'], 0) + 1
+    r = resumir(linhas)
+    return Response({
+        'status': 'calculando' if dataset['status'] == 'building' else 'pronto',
+        'desatualizado': bool(dataset['is_stale']),
+        'gerado_em': gerado.isoformat() if gerado else None,
+        'referencia': (f"{MONTH_NAMES_PT.get(gerado.month, gerado.month)}/{gerado.year}" if gerado else ''),
+        'resumo': {'pessoas': r['pessoas'], 'com_dados': r['com_dados'], 'realizado': _n(r['realizado']),
+                   'projecao': _n(r['projecao']), 'diferenca': _n(r['diferenca']),
+                   'media_projecao': _n(r['media_projecao'])},
+        'papeis': [{'chave': k, 'rotulo': ROLE_LABELS[k], 'quantos': contagem[k]}
+                   for k in ROLE_ORDER if contagem.get(k)],
+        'linhas': [{
+            'id': lin['id'], 'nome': lin['name'], 'papel': lin['role_key'], 'papel_rotulo': lin['role_label'],
+            'setor': lin['sector'] or None, 'coordenador': lin['coordinator'] or None,
+            'realizado': _n(lin['realizado']), 'projecao': _n(lin['projecao']), 'diferenca': _n(lin['diferenca']),
+            'motivo': lin['motivo'], 'tem_dado': bool(lin['has_data']), 'erro': lin['erro'] or None,
+            'fatores': [{'tipo': f['tipo'], 'rotulo': f['label'], 'delta': _n(f['delta']),
+                         'realizado': _n(f['realizado']), 'projecao': _n(f['projecao']),
+                         'atingimento': _n(f.get('atingimento'), 4)} for f in lin['fatores']],
+        } for lin in linhas],
+    })
+
+
 urlpatterns = [
     path('', resumo, name='simulador_resumo'),
     path('pessoas/', pessoas, name='simulador_pessoas'),
+    path('valores/', valores, name='simulador_valores'),
+    path('tabela/', tabela, name='simulador_tabela'),
 ]

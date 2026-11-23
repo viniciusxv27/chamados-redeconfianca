@@ -178,6 +178,36 @@ try:
     r = ca.post(f'{BASE}/comunicados/{todos.pk}/curtir/')
     t('descurtir', r.json() == {'curti': False, 'curtidas': 0})
 
+    print('\n== STATUS DOS DESTINATÁRIOS (SUPERADMIN e quem enviou) ==')
+    url = f'{BASE}/comunicados/{so_beto.pk}/destinatarios/'
+    j = cc.get(f'{BASE}/comunicados/{so_beto.pk}/').json()
+    t('SUPERADMIN que enviou abre e pode ver os destinatários (sem marcar ciente)', j.get('pode_ver_destinatarios') is True
+      and j.get('sou_destinatario') is False, {k: j.get(k) for k in ('pode_ver_destinatarios', 'sou_destinatario')})
+    j = cb.get(f'{BASE}/comunicados/{so_beto.pk}/').json()
+    t('destinatário comum não vê o status dos outros', j['pode_ver_destinatarios'] is False and j['sou_destinatario'] is True)
+    t('destinatário comum: 404 na lista', cb.get(url).status_code == 404)
+    t('quem não recebeu nem enviou: 404', ca.get(url).status_code == 404)
+    r = cc.get(url)
+    j = r.json()
+    t('Beto abriu (pelo app): "Abriu, sem marcar"', r.status_code == 200 and j['contagem'] == {
+        'ciente': 0, 'duvida': 0, 'abriu': 1, 'nao_abriu': 0, 'total': 1}
+      and j['resultados'][0]['pessoa']['id'] == beto.pk and j['resultados'][0]['situacao'] == 'ABRIU', j.get('contagem'))
+    so_beto.recipients.add(ana)
+    cb.post(f'{BASE}/comunicados/{so_beto.pk}/situacao/', {'situacao': 'ESTOU_CIENTE'}, content_type='application/json')
+    j = cc.get(url).json()
+    t('ciente primeiro; quem não abriu por último', [x['situacao'] for x in j['resultados']] == ['ESTOU_CIENTE', 'NAO_ABRIU']
+      and j['contagem']['ciente'] == 1 and j['contagem']['nao_abriu'] == 1 and j['resultados'][0]['respondido_em'], j['resultados'])
+    t('filtro por situação', [x['pessoa']['id'] for x in cc.get(url, {'situacao': 'NAO_ABRIU'}).json()['resultados']] == [ana.pk])
+    t('busca sem acento e por setor', [x['pessoa']['id'] for x in cc.get(url, {'busca': 'zzana'}).json()['resultados']] == [ana.pk]
+      and [x['pessoa']['id'] for x in cc.get(url, {'busca': 'outro setor'}).json()['resultados']] == [beto.pk])
+    t('a contagem continua a do comunicado todo', cc.get(url, {'situacao': 'NAO_ABRIU'}).json()['contagem']['total'] == 2)
+    t('link do CSV do portal', j['url_csv'] == f'/communications/{so_beto.pk}/?exportar=status')
+    do_beto = Communication.objects.create(title='ZZ Do Beto', message='x', sender=beto)
+    do_beto.recipients.add(ana)
+    t('quem enviou (sem ser SUPERADMIN) vê', cb.get(f'{BASE}/comunicados/{do_beto.pk}/destinatarios/').json().get('contagem', {}).get('total') == 1
+      and cb.get(f'{BASE}/comunicados/{do_beto.pk}/').json()['pode_ver_destinatarios'] is True)
+    t('a destinatária não', ca.get(f'{BASE}/comunicados/{do_beto.pk}/destinatarios/').status_code == 404)
+
     print('\n== INÍCIO E NOTIFICAÇÕES ==')
     Notification.objects.create(user=ana, title='ZZ aviso', message='ZZ mensagem', notification_type='SYSTEM')
     r = ca.get(f'{BASE}/inicio/')

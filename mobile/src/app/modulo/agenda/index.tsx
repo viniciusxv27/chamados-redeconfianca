@@ -104,6 +104,24 @@ export default function Agenda() {
 
       <Entrada indice={9}>
         <Atalho
+          icone="people-outline"
+          cor={estado.info}
+          titulo="Agenda de alguém"
+          texto="Veja os horários livres de um colega e peça uma reunião."
+          onPress={() => router.push('/modulo/agenda/pessoas' as Href)}
+        />
+      </Entrada>
+      <Entrada indice={9}>
+        <Atalho
+          icone="swap-horizontal-outline"
+          cor={estado.alerta}
+          titulo="Solicitações de reunião"
+          texto="As que você recebeu e as que enviou (cancele as pendentes)."
+          onPress={() => router.push('/modulo/agenda/solicitacoes' as Href)}
+        />
+      </Entrada>
+      <Entrada indice={9}>
+        <Atalho
           icone="mic-outline"
           cor="#8B5CF6"
           titulo="Atas de reunião"

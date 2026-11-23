@@ -185,11 +185,17 @@ export function EscolhaDePessoas({
   grupos,
   escolhidos,
   aoMudar,
+  rotulo = 'Convidados',
+  acao = 'Convidar pessoas',
 }: {
   pessoas: PessoaAgenda[];
   grupos: { id: number; nome: string; membros: number[] }[];
   escolhidos: number[];
   aoMudar: (ids: number[]) => void;
+  /** Título do campo e da folha (padrão: "Convidados"). */
+  rotulo?: string;
+  /** Texto do botão quando ninguém foi escolhido (padrão: "Convidar pessoas"). */
+  acao?: string;
 }) {
   const cores = useCores();
   const insets = useSafeAreaInsets();
@@ -210,7 +216,7 @@ export function EscolhaDePessoas({
   return (
     <View className="gap-2">
       <Texto variante="legenda" tom="suave" style={{ fontFamily: fontes.seminegrito }}>
-        {escolhidos.length ? `Convidados (${escolhidos.length})` : 'Convidados'}
+        {escolhidos.length ? `${rotulo} (${escolhidos.length})` : rotulo}
       </Texto>
       {escolhidos.length ? (
         <View className="flex-row flex-wrap gap-2">
@@ -235,11 +241,11 @@ export function EscolhaDePessoas({
       <Pressionavel
         onPress={() => setAberta(true)}
         escala={0.98}
-        accessibilityLabel="Escolher convidados"
+        accessibilityLabel={`Escolher ${rotulo.toLowerCase()}`}
         style={{ minHeight: 48, borderRadius: raios.md, borderWidth: 1.5, borderStyle: 'dashed', borderColor: cores.borda, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }}>
         <Icone nome="person-add-outline" tamanho={18} cor={marca[500]} />
         <Texto variante="corpoForte" tom="marca">
-          {escolhidos.length ? 'Mudar convidados' : 'Convidar pessoas'}
+          {escolhidos.length ? `Mudar ${rotulo.toLowerCase()}` : acao}
         </Texto>
       </Pressionavel>
 
@@ -249,7 +255,7 @@ export function EscolhaDePessoas({
           <View style={{ height: '85%', backgroundColor: cores.fundo, borderTopLeftRadius: raios['2xl'], borderTopRightRadius: raios['2xl'], paddingBottom: insets.bottom + 8 }}>
             <View style={{ alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: cores.borda, marginTop: 10 }} />
             <View className="flex-row items-center justify-between px-5 pb-2 pt-4">
-              <Texto variante="titulo3">Convidados</Texto>
+              <Texto variante="titulo3">{rotulo}</Texto>
               <Pressionavel onPress={() => setAberta(false)} hitSlop={10} accessibilityLabel="Pronto">
                 <Texto variante="corpoForte" tom="marca">
                   Pronto

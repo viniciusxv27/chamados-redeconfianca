@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { useLocalSearchParams } from 'expo-router';
+import { type Href, router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { FlatList, Platform, ScrollView, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
@@ -103,10 +103,19 @@ export default function DetalheComunicado() {
                   ))}
                 </View>
               ) : null}
+              {data.pode_ver_destinatarios ? (
+                <Botao
+                  titulo="Status dos destinatários"
+                  variante="secundario"
+                  icone="people-outline"
+                  onPress={() => router.push({ pathname: '/destinatarios/[id]', params: { id: String(data.id) } } as unknown as Href)}
+                />
+              ) : null}
             </Animated.View>
           </ScrollView>
 
-          {/* Confirmação de leitura, como no portal */}
+          {/* Confirmação de leitura, como no portal (só para quem recebeu o comunicado) */}
+          {data.sou_destinatario === false ? null : (
           <View style={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: Math.max(insets.bottom, 16), borderTopWidth: 1, borderTopColor: cores.borda, backgroundColor: cores.superficie }}>
             {data.situacao === 'ESTOU_CIENTE' ? (
               <Animated.View entering={ZoomIn.springify()} className="flex-row items-center justify-center gap-2 py-2">
@@ -131,6 +140,7 @@ export default function DetalheComunicado() {
               </View>
             )}
           </View>
+          )}
         </>
       )}
     </Tela>

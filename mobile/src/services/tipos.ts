@@ -111,7 +111,29 @@ export type ComunicadoResumo = {
 
 export type AnexoComunicado = { id: number; tipo: 'video' | 'pdf'; nome: string; url: string };
 
-export type Comunicado = ComunicadoResumo & { texto: string };
+export type Comunicado = ComunicadoResumo & {
+  texto: string;
+  /** SUPERADMIN e quem enviou veem o status de cada destinatário. */
+  pode_ver_destinatarios?: boolean;
+  /** Quem só acompanha (enviou / SUPERADMIN fora da lista) não marca "Estou ciente". */
+  sou_destinatario?: boolean;
+};
+
+export type SituacaoDestinatario = 'ESTOU_CIENTE' | 'ESTOU_COM_DUVIDA' | 'ABRIU' | 'NAO_ABRIU';
+
+export type Destinatario = {
+  pessoa: Pessoa & { cargo: string | null };
+  situacao: SituacaoDestinatario;
+  situacao_nome: string;
+  aberto_em: string | null;
+  respondido_em: string | null;
+};
+
+export type PaginaDestinatarios = Pagina<Destinatario> & {
+  contagem: { ciente: number; duvida: number; abriu: number; nao_abriu: number; total: number };
+  situacoes: { valor: '' | SituacaoDestinatario; rotulo: string }[];
+  url_csv: string;
+};
 
 export type Notificacao = {
   id: string;
@@ -138,7 +160,13 @@ export type Inicio = {
   comunicados: ComunicadoResumo[];
   comunicados_obrigatorios: { id: number; titulo: string }[];
   notificacoes_nao_lidas: number;
+  /** Reconhecimento: os 12 mais recentes (a faixa da home do portal). */
   elogios: Elogio[];
+  total_reconhecimentos?: number;
+  /** "Bom dia" / "Boa tarde" / "Boa noite" pela hora do portal. */
+  saudacao?: string;
+  /** Só SUPERADMIN: popups e travas que deixaram de aparecer para ele. */
+  avisos_ocultos?: { titulo: string; texto: string; url: string | null; rotulo: string; bloqueante: boolean }[];
   /** Saldo C$ — só vem para quem vê no portal (fora PADRÃO/ADMINISTRATIVO/SUPERVISOR). */
   saldo_cs: string | null;
   pode_criar_comunicado: boolean;
@@ -154,6 +182,16 @@ export type Elogio = {
   criado_em: string;
   para_mim: boolean;
   url_web: string | null;
+};
+
+export type FiltroMural = '' | 'para_mim' | 'meu_setor' | 'que_fiz';
+
+export type PaginaReconhecimentos = Pagina<Elogio> & {
+  ver: FiltroMural;
+  busca: string;
+  /** Só na 1ª página. */
+  numeros?: { total: number; no_mes: number; para_mim: number };
+  filtros?: { valor: FiltroMural; rotulo: string }[];
 };
 
 export type Opcao = { id: number; nome: string };

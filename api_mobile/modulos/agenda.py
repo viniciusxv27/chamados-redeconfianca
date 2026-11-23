@@ -16,8 +16,15 @@ As regras são as do portal (agenda/views.py), chamadas daqui — nada reescrito
 - Transcrições: ``_visible_transcriptions_for_user`` (agenda/views.py:151); atribuir responsável e
   importar para o Impulso chamam ``api_transcription_assign_task`` / ``api_transcription_task_impulso``.
 
-Fica no portal: gravar/enviar áudio (o app não tem pacote de áudio), reprocessar (chama a IA paga),
-compartilhar transcrição, ver a agenda de outra pessoa, disponibilidade e pedir reunião.
+- Agenda de outra pessoa (``eventos?usuario=``): a regra de ``api_events`` com ``user_id`` (agenda/views.py:836)
+  — agenda completa se ``_can_view_full_calendar``, senão só os horários ocupados, sem detalhe.
+- Disponibilidade e pedir reunião: ``_get_available_slots`` (user_availability, :1186) e a própria view
+  ``request_meeting`` (:1221, avisa a pessoa). Solicitações enviadas e recebidas (meeting_requests_list,
+  :1285) e cancelar a enviada (meeting_request_cancel, :1342).
+- Compartilhar transcrição (só o dono): ``api_transcription_share`` (:2674, avisa quem entrou).
+
+Fica no portal: gravar/enviar áudio (o app não tem pacote de áudio nem o envio em pedaços do gravador)
+e reprocessar (chama a IA paga).
 """
 import json
 from datetime import date, datetime, time, timedelta
@@ -165,9 +172,26 @@ def _pendencias(user):
     }
 
 
+def _agenda_de_outra_pessoa(request, alvo, de, ate):
+    """``api_events`` com ``user_id`` (agenda/views.py:836): agenda completa de quem a pessoa pode ver
+    inteira (_can_view_full_calendar); dos outros, só os horários ocupados (_get_busy_slots), sem detalhe."""
+    from agenda.models import CalendarEvent
+    web = _web()
+    if web._can_view_full_calendar(request.user, alvo):
+        evs = (CalendarEvent.objects.filter(owner=alvo, start__lt=ate, end__gt=de)
+               .select_related('owner').order_by('start', 'end', 'pk'))
+        return True, [fmt.evento(request, ev, request.user) for ev in evs], []
+    ocupados = [{'inicio': fmt.hora_local(datetime.fromisoformat(o['start'])),
+                 'fim': fmt.hora_local(datetime.fromisoformat(o['end']))}
+                for o in web._get_busy_slots(alvo, de, ate)]
+    ocupados.sort(key=lambda o: o['inicio'] or '')
+    return False, [], ocupados
+
+
 @_api()
 def eventos(request):
-    """Eventos de ``inicio`` a ``fim`` (datas, inclusive). Sem datas: a semana de hoje (segunda a domingo)."""
+    """Eventos de ``inicio`` a ``fim`` (datas, inclusive). Sem datas: a semana de hoje (segunda a domingo).
+    Com ``usuario``: a agenda daquela pessoa, pela regra da web (completa ou só horários ocupados)."""
     hoje = timezone.localdate()
     inicio = _ler_data(request.query_params.get('inicio')) or (hoje - timedelta(days=hoje.weekday()))
     fim = _ler_data(request.query_params.get('fim')) or (inicio + timedelta(days=6))
@@ -178,11 +202,26 @@ def eventos(request):
     de = timezone.make_aware(datetime.combine(inicio, time.min))
     ate = timezone.make_aware(datetime.combine(fim + timedelta(days=1), time.min))
     user = request.user
+    usuario = (request.query_params.get('usuario') or '').strip()
+    if usuario and usuario != str(user.pk):
+        alvo = User.objects.select_related('sector').filter(pk=int(usuario) if usuario.isdigit() else 0,
+                                                            is_active=True).first()
+        if alvo is None:
+            raise Http404
+        completa, lista, ocupados = _agenda_de_outra_pessoa(request, alvo, de, ate)
+        return Response({
+            'inicio': inicio.isoformat(), 'fim': fim.isoformat(), 'hoje': hoje.isoformat(),
+            'eventos': lista, 'ocupados': ocupados, 'completa': completa,
+            'pessoa': fmt.pessoa_curta(alvo),
+            **_pendencias(user),
+            'url_web': f'/agenda/usuario/{alvo.pk}/' if completa else f'/agenda/disponibilidade/{alvo.pk}/',
+        })
     return Response({
         'inicio': inicio.isoformat(),
         'fim': fim.isoformat(),
         'hoje': hoje.isoformat(),
         'eventos': [fmt.evento(request, ev, user) for ev in _meus_eventos(user, de, ate)],
+        'ocupados': [], 'completa': True, 'pessoa': None,
         **_pendencias(user),
         'url_web': '/agenda/',
     })
@@ -452,6 +491,120 @@ def solicitacao_responder(request, pk):
                      'evento_id': sol.created_event_id})
 
 
+def _pessoa_alvo(request, user_id):
+    return get_object_or_404(User.objects.select_related('sector'), pk=user_id, is_active=True)
+
+
+@_api()
+def disponibilidade(request, user_id):
+    """Horários livres da pessoa num dia (user_availability, agenda/views.py:1186): blocos de 30 min
+    das 8h às 18h fora dos eventos dela, e a semana para navegar."""
+    web = _web()
+    alvo = _pessoa_alvo(request, user_id)
+    dia = _ler_data(request.query_params.get('data')) or timezone.localdate()
+    livres = web._get_available_slots(alvo, dia)
+    semana = dia - timedelta(days=dia.weekday())
+    return Response({
+        'pessoa': fmt.pessoa_curta(alvo),
+        'sou_eu': alvo.pk == request.user.pk,
+        'data': dia.isoformat(),
+        'semana': [(semana + timedelta(days=i)).isoformat() for i in range(7)],
+        'pode_ver_completa': bool(web._can_view_full_calendar(request.user, alvo)),
+        'livres': [{'inicio': fmt.hora_local(x['start']), 'fim': fmt.hora_local(x['end'])} for x in livres],
+        'tipos': [{'valor': v, 'rotulo': r} for v, r in _tipos_de_solicitacao()],
+        'url_web': f'/agenda/disponibilidade/{alvo.pk}/?date={dia.isoformat()}',
+    })
+
+
+def _tipos_de_solicitacao():
+    from agenda.models import MeetingRequest
+    return MeetingRequest.TYPE_CHOICES
+
+
+def _iso_local_sem_fuso(dt):
+    """O formato do <input type=datetime-local> da web (o que ``request_meeting`` lê)."""
+    return timezone.localtime(dt).replace(tzinfo=None).isoformat(timespec='minutes')
+
+
+@_api(('POST',))
+def solicitar(request, user_id):
+    """Pedir reunião/chamada/horário (request_meeting, agenda/views.py:1221) — a view do portal grava e
+    avisa a pessoa. A validação é a mesma da web, feita antes para responder com o campo certo."""
+    from agenda.models import MeetingRequest
+    web = _web()
+
+    alvo = _pessoa_alvo(request, user_id)
+    if alvo.pk == request.user.pk:
+        return _erro('Você não pode solicitar reunião consigo mesmo.')
+    d = request.data if isinstance(request.data, dict) else {}
+    titulo = _texto(d.get('titulo'), 255)
+    tipo = d.get('tipo') or 'meeting'
+    inicio = _ler_data_hora(d.get('inicio'))
+    fim = _ler_data_hora(d.get('fim'))
+    campos = {}
+    if not titulo:
+        campos['titulo'] = 'Título é obrigatório.'
+    if tipo not in dict(_tipos_de_solicitacao()):
+        campos['tipo'] = 'Tipo inválido.'
+    if not inicio or not fim:
+        campos['inicio'] = 'Datas/horários inválidos.'
+    elif fim <= inicio:
+        campos['fim'] = 'O horário de fim deve ser após o de início.'
+    if campos:
+        return _erro('Confira os campos destacados.', campos=campos)
+    antes = set(MeetingRequest.objects.filter(requester=request.user, target=alvo).values_list('pk', flat=True))
+    avisos = _chamar_view_form(request, web.request_meeting, alvo.pk, post={
+        'title': titulo, 'description': _texto(d.get('descricao')), 'meeting_type': tipo,
+        'proposed_start': _iso_local_sem_fuso(inicio), 'proposed_end': _iso_local_sem_fuso(fim),
+        'location': _texto(d.get('local'), 255)})
+    nova = (MeetingRequest.objects.filter(requester=request.user, target=alvo).exclude(pk__in=antes)
+            .select_related('requester', 'requester__sector', 'target', 'target__sector').order_by('-pk').first())
+    if nova is None:
+        return _erro(next((t for n, t in avisos if n == 'error'), 'Não foi possível enviar a solicitação.'))
+    return Response({'ok': True, 'mensagem': next((t for n, t in avisos if n == 'success'), 'Solicitação enviada.'),
+                     'solicitacao': _solicitacao_completa(nova, request.user)}, status=status.HTTP_201_CREATED)
+
+
+def _solicitacao_completa(sol, user):
+    return {**fmt.solicitacao(sol), 'para': fmt.pessoa_curta(sol.target), 'status': sol.status,
+            'status_nome': sol.get_status_display(), 'resposta': sol.response_notes or None,
+            'evento_id': sol.created_event_id, 'enviada_por_mim': sol.requester_id == user.pk,
+            'pode_cancelar': sol.requester_id == user.pk and sol.status == 'pending',
+            'pode_responder': sol.target_id == user.pk and sol.status == 'pending'}
+
+
+@_api()
+def solicitacoes(request):
+    """Solicitações de reunião recebidas ou enviadas, todas as situações (meeting_requests_list, :1285)."""
+    from agenda.models import MeetingRequest
+
+    user = request.user
+    aba = 'enviadas' if request.query_params.get('aba') == 'enviadas' else 'recebidas'
+    qs = (MeetingRequest.objects.filter(**({'requester': user} if aba == 'enviadas' else {'target': user}))
+          .select_related('requester', 'requester__sector', 'target', 'target__sector').order_by('-created_at'))
+    return Response({
+        'aba': aba,
+        'pendentes_recebidas': MeetingRequest.objects.filter(target=user, status='pending').count(),
+        'resultados': [_solicitacao_completa(x, user) for x in qs[:100]],
+        'url_web': '/agenda/solicitacoes/?tab=' + ('sent' if aba == 'enviadas' else 'received'),
+    })
+
+
+@_api(('POST',))
+def solicitacao_cancelar(request, pk):
+    """Cancelar a solicitação enviada e ainda pendente (meeting_request_cancel, :1342; avisa a pessoa)."""
+    from agenda.models import MeetingRequest
+    web = _web()
+
+    sol = get_object_or_404(MeetingRequest, pk=pk, requester=request.user, status='pending')
+    avisos = _chamar_view_form(request, web.meeting_request_cancel, sol.pk)
+    sol.refresh_from_db()
+    if sol.status == 'pending':
+        return _erro(next((t for n, t in avisos if n == 'error'), 'Não foi possível cancelar.'))
+    return Response({'ok': True, 'mensagem': next((t for n, t in avisos if n == 'success'), 'Solicitação cancelada.'),
+                     'solicitacao': _solicitacao_completa(sol, request.user)})
+
+
 # ── Transcrições de reunião ──────────────────────────────────────────────────
 
 def _transcricoes(user):
@@ -514,6 +667,10 @@ def _detalhe_transcricao(request, t):
         'lista_tarefas': [fmt.tarefa(task, disponivel) for task in tasks],
         # transcription_detail: 'pode_atribuir_tarefas' = True para quem enxerga a transcrição.
         'pode_atribuir': True,
+        # Compartilhar é só do dono (api_transcription_share: owner=request.user).
+        'pode_compartilhar': t.owner_id == user.pk,
+        'compartilhada_com': ([fmt.pessoa_curta(u) for u in t.shared_with.select_related('sector')
+                               .order_by('first_name', 'last_name')] if t.owner_id == user.pk else []),
         'impulso': ({
             'sou_gestor': bool(impulso.get('impulso_sou_gestor')),
             'gestores': [{'id': g.pk, 'nome': fmt.nome(g), 'sou_eu': g.pk == user.pk}
@@ -572,6 +729,27 @@ def tarefa_impulso(request, pk, task_id):
                      'transcricao': _detalhe_transcricao(request, t)})
 
 
+@_api(('POST',))
+def transcricao_compartilhar(request, pk):
+    """A lista de com quem a transcrição é compartilhada, pelo ``api_transcription_share`` do portal
+    (só o dono; avisa quem entrou na lista)."""
+    web = _web()
+    t = _transcricao_visivel(request.user, pk)
+    if t.owner_id != request.user.pk:
+        raise Http404
+    d = request.data if isinstance(request.data, dict) else {}
+    ids = d.get('user_ids')
+    if not isinstance(ids, list):
+        return _erro('Escolha as pessoas.')
+    codigo, conteudo = _chamar_view_json(request, web.api_transcription_share, t.pk, corpo={'user_ids': ids})
+    if codigo != 200 or not conteudo.get('ok'):
+        return _erro(conteudo.get('error') or 'Não foi possível compartilhar.', codigo if codigo >= 400 else 400)
+    n = conteudo.get('shared_count') or 0
+    return Response({'mensagem': 'Compartilhada com {} pessoa{}.'.format(n, '' if n == 1 else 's') if n
+                     else 'Transcrição não está mais compartilhada.',
+                     'transcricao': _detalhe_transcricao(request, t)})
+
+
 urlpatterns = [
     path('eventos/', eventos, name='agenda_eventos'),
     path('eventos/novo/', evento_criar, name='agenda_evento_criar'),
@@ -582,7 +760,12 @@ urlpatterns = [
     path('opcoes/', opcoes, name='agenda_opcoes'),
     path('convites/', convites, name='agenda_convites'),
     path('convites/<int:pk>/responder/', convite_responder, name='agenda_convite_responder'),
+    path('solicitacoes/', solicitacoes, name='agenda_solicitacoes'),
     path('solicitacoes/<int:pk>/responder/', solicitacao_responder, name='agenda_solicitacao_responder'),
+    path('solicitacoes/<int:pk>/cancelar/', solicitacao_cancelar, name='agenda_solicitacao_cancelar'),
+    path('pessoas/<int:user_id>/disponibilidade/', disponibilidade, name='agenda_disponibilidade'),
+    path('pessoas/<int:user_id>/solicitar/', solicitar, name='agenda_solicitar'),
+    path('transcricoes/<int:pk>/compartilhar/', transcricao_compartilhar, name='agenda_transcricao_compartilhar'),
     path('transcricoes/', transcricoes, name='agenda_transcricoes'),
     path('transcricoes/<int:pk>/', transcricao, name='agenda_transcricao'),
     path('transcricoes/<int:pk>/tarefas/<int:task_id>/responsavel/', tarefa_responsavel,

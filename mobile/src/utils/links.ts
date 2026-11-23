@@ -32,8 +32,15 @@ const ROTAS_DE_MODULO: [RegExp, (m: RegExpMatchArray) => string][] = [
   [/^\/power-bi\/?$/, () => '/modulo/power_bi'],
   [/^\/agenda\/transcricoes\/(\d+)\/?$/, (m) => `/modulo/agenda/transcricao/${m[1]}`],
   [/^\/agenda\/transcricoes\/?$/, () => '/modulo/agenda/transcricoes'],
-  [/^\/agenda\/solicitacoes\/?$/, () => '/modulo/agenda/convites'],
+  [/^\/agenda\/solicitacoes\/?$/, () => '/modulo/agenda/solicitacoes'],
+  [/^\/agenda\/(usuario|disponibilidade|solicitar)\/(\d+)\/?$/, (m) => `/modulo/agenda/pessoa/${m[2]}`],
   [/^\/agenda\/?$/, () => '/modulo/agenda'],
+  [/^\/simulator\/tabela\/?$/, () => '/modulo/simulador/tabela'],
+  [/^\/simulator\/?$/, () => '/modulo/simulador'],
+  [/^\/gestao-metas\/(\d{4}-\d{2})\/?$/, (m) => `/modulo/gestao_metas/${m[1]}`],
+  [/^\/gestao-metas\/(\d{4}-\d{2})\/historico\/?$/, (m) => `/modulo/gestao_metas/historico?codigo=${m[1]}`],
+  [/^\/gestao-metas\/?$/, () => '/modulo/gestao_metas'],
+  [/^\/compliments\/mural\/?$/, () => '/reconhecimento'],
 ];
 
 export function abrirNoPortal(caminho: string) {

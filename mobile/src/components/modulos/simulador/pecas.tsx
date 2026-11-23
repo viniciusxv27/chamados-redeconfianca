@@ -39,7 +39,7 @@ export function CartaoGanho({ sim, visao }: { sim: Simulacao; visao: Visao }) {
   return (
     <View style={{ borderRadius: raios.xl, padding: 20, gap: 4, backgroundColor: VERDE_LIMA, boxShadow: `0px 8px 24px ${comAlfa(VERDE_LIMA, 0.3)}` }}>
       <Texto variante="legenda" tom="branco" style={{ opacity: 0.85 }}>
-        {visao === 'realizado' ? 'Ganho com o realizado até ontem' : 'Ganho projetado no mês'}
+        {visao === 'realizado' ? 'Ganho com o realizado até ontem' : visao === 'simulador' ? 'Ganho simulado com os valores informados' : 'Ganho projetado no mês'}
       </Texto>
       <Texto variante="display" tom="branco" numberOfLines={1} adjustsFontSizeToFit>
         {reais(sim.ganho_total)}

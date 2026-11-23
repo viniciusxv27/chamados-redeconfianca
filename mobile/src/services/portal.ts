@@ -15,8 +15,11 @@ import type {
   Inicio,
   Modulo,
   Notificacao,
+  FiltroMural,
   Opcao,
   Pagina,
+  PaginaDestinatarios,
+  PaginaReconhecimentos,
   Prioridade,
   SituacaoComunicado,
   Usuario,
@@ -120,6 +123,23 @@ export const comunicados = {
   },
   async curtir(id: number) {
     const { data } = await api.post<{ curti: boolean; curtidas: number }>(`/comunicados/${id}/curtir/`);
+    return data;
+  },
+  /** Status de cada destinatário (só SUPERADMIN e quem enviou). */
+  async destinatarios(id: number, filtro: { situacao: string; busca: string }, pagina: number) {
+    const { data } = await api.get<PaginaDestinatarios>(`/comunicados/${id}/destinatarios/`, {
+      params: { pagina, situacao: filtro.situacao || undefined, busca: filtro.busca || undefined },
+    });
+    return data;
+  },
+};
+
+/** Mural de Reconhecimento (/compliments/mural/ do portal). */
+export const reconhecimentos = {
+  async listar(filtro: { ver: FiltroMural; busca: string }, pagina: number) {
+    const { data } = await api.get<PaginaReconhecimentos>('/reconhecimentos/', {
+      params: { pagina, ver: filtro.ver || undefined, q: filtro.busca || undefined },
+    });
     return data;
   },
 };

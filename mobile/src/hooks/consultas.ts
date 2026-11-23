@@ -8,8 +8,9 @@ import {
   type FiltroChamados,
   listarModulos,
   notificacoes,
+  reconhecimentos,
 } from '@/services/portal';
-import type { Chamado, Comunicado, ComunicadoResumo, Notificacao, Pagina } from '@/services/tipos';
+import type { Chamado, Comunicado, ComunicadoResumo, FiltroMural, Notificacao, Pagina } from '@/services/tipos';
 
 export const chaves = {
   inicio: ['inicio'] as const,
@@ -22,6 +23,8 @@ export const chaves = {
   comunicado: (id: number) => ['comunicado', id] as const,
   notificacoes: ['notificacoes'] as const,
   modulos: ['modulos'] as const,
+  destinatarios: (id: number, situacao: string, busca: string) => ['comunicado', id, 'destinatarios', situacao, busca] as const,
+  reconhecimentos: (ver: FiltroMural, busca: string) => ['reconhecimentos', ver, busca] as const,
 };
 
 export function useInicio() {
@@ -184,4 +187,27 @@ export function useMarcarTodas() {
 /** Módulos liberados para a pessoa (muda pouco: 5 min de cache). */
 export function useModulos() {
   return useQuery({ queryKey: chaves.modulos, queryFn: listarModulos, staleTime: 5 * 60_000 });
+}
+
+/** Status de cada destinatário do comunicado, em páginas de 20 (filtro por situação e busca no portal). */
+export function useDestinatarios(id: number, situacao: string, busca: string, ligado = true) {
+  return useInfiniteQuery({
+    queryKey: chaves.destinatarios(id, situacao, busca),
+    queryFn: ({ pageParam }) => comunicados.destinatarios(id, { situacao, busca }, pageParam),
+    initialPageParam: 1,
+    getNextPageParam: (ultima) => (ultima.tem_mais ? ultima.pagina + 1 : undefined),
+    enabled: id > 0 && ligado,
+    placeholderData: (anterior) => anterior,
+  });
+}
+
+/** Mural de Reconhecimento: 24 por página, com filtro e busca. */
+export function useReconhecimentos(ver: FiltroMural, busca: string) {
+  return useInfiniteQuery({
+    queryKey: chaves.reconhecimentos(ver, busca),
+    queryFn: ({ pageParam }) => reconhecimentos.listar({ ver, busca }, pageParam),
+    initialPageParam: 1,
+    getNextPageParam: (ultima) => (ultima.tem_mais ? ultima.pagina + 1 : undefined),
+    placeholderData: (anterior) => anterior,
+  });
 }

@@ -137,8 +137,8 @@ try:
 
     chamadas = []
 
-    def calcular_falso(alvo, papel_alvo, visao, hunter, acelerador):
-        chamadas.append((alvo.id, papel_alvo, visao, hunter, acelerador))
+    def calcular_falso(alvo, papel_alvo, visao, hunter, acelerador, entradas=None):
+        chamadas.append((alvo.id, papel_alvo, visao, hunter, acelerador, entradas or {}))
         return dict(SIM_FALSA, rows=[dict(r) for r in SIM_FALSA['rows']])
 
     with mock.patch.object(mod, 'calcular', side_effect=calcular_falso):
@@ -182,7 +182,36 @@ try:
         r = c_cons.get(f'{M}/', {'visao': 'realizado', 'hunter_movel': '2', 'acelerador': '1'})
         t('visão, Hunter e acelerador chegam ao motor', chamadas[-1][2] == sv.VIEW_REALIZADO
           and chamadas[-1][3]['movel'] == 2 and chamadas[-1][4] is True, chamadas[-1])
-        t('visão inválida vira projeção', c_cons.get(f'{M}/', {'visao': 'simulador'}).json()['visao'] == sv.VIEW_PROJECAO)
+        t('visão inválida vira projeção', c_cons.get(f'{M}/', {'visao': 'xyz'}).json()['visao'] == sv.VIEW_PROJECAO)
+        t('as três visões da web (Projeção, Realizado, Simulador)',
+          [v['valor'] for v in c_cons.get(f'{M}/').json()['visoes']] == [sv.VIEW_PROJECAO, sv.VIEW_REALIZADO, sv.VIEW_SIMULADOR])
+        j = c_cons.get(f'{M}/', {'hunter_fixa': '3'}).json()
+        t('níveis Hunter: os pilares da web e o nível escolhido de volta', [p['chave'] for p in j['pilares_hunter']]
+          == [k for k, _ in sv.HUNTER_PILLARS] and j['hunter']['fixa'] == 3 and j['hunter']['movel'] == 0, j.get('hunter'))
+
+        print('\n== VISÃO SIMULADOR ==')
+        j = c_cons.get(f'{M}/', {'visao': 'simulador'}).json()
+        f = j['simulador'] or {}
+        t('1ª entrada: calcula o REALIZADO, sem valores (como o fragmento da web)', chamadas[-1][2] == sv.VIEW_REALIZADO
+          and chamadas[-1][5] == {} and f.get('primeira') is True, chamadas[-1])
+        t('campos pré-preenchidos com o realizado (build_simulador_prefill)', f.get('valores', {}).get('movel__real') == '6000'
+          and f['valores'].get('movel__realpdv') == '40000' and f['valores'].get('fixa__qty') == '12', f.get('valores'))
+        t('consultor: Meta, Real Individual e Real PDV', [c['rotulo'] for c in f['colunas']] == ['Meta (opcional)', 'Real Individual', 'Real PDV'])
+        fixa = next(p for p in f['pilares'] if p['chave'] == 'fixa')
+        t('Fixa: quantidade + receita no real, quantidade no PDV', [c['chave'] for c in fixa['campos']['real']] == ['fixa__qty', 'fixa__receita']
+          and [c['chave'] for c in fixa['campos']['realpdv']] == ['fixa__qtypdv'] and fixa['campo_diario'] == 'fixa__qty')
+        t('metas para a meta-diária', f['metas'].get('movel') == 10000.0, f.get('metas'))
+        j = c_cons.get(f'{M}/', {'visao': 'simulador', 'sim__movel__real': '7000', 'sim__fixa__qty': '3', 'outro': 'x'}).json()
+        t('com valores: calcula a visão Simulador com eles', chamadas[-1][2] == sv.VIEW_SIMULADOR
+          and chamadas[-1][5] == {'movel__real': '7000', 'fixa__qty': '3'} and j['simulador']['primeira'] is False
+          and j['simulador']['valores'] == {'movel__real': '7000', 'fixa__qty': '3'}, chamadas[-1])
+        f = c_ger.get(f'{M}/', {'visao': 'simulador'}).json()['simulador']
+        t('gerente: a 3ª coluna é Real Coordenação', f['colunas'][2]['rotulo'] == 'Real Coordenação')
+        f = c_coord.get(f'{M}/', {'visao': 'simulador'}).json()['simulador']
+        t('coordenador: sem a 3ª coluna', [c['chave'] for c in f['colunas']] == ['meta', 'real']
+          and all('realpdv' not in p['campos'] for p in f['pilares']))
+        t('fora do Simulador, os valores sim__ não chegam ao motor',
+          c_cons.get(f'{M}/', {'sim__movel__real': '1'}).status_code == 200 and chamadas[-1][5] == {})
         s = c_cons.get(f'{M}/').json()
         pil = {p['chave']: p for p in s['simulacao']['pilares']}
         t('fixa mostra a quantidade como realizado', pil['fixa']['realizado'] == 12 and pil['fixa']['quantidade'] is True)
@@ -201,6 +230,52 @@ try:
         r = c_cons.get(f'{M}/')
         t('motor fora do ar: 200 com erro amigável', r.status_code == 200 and r.json()['erro']
           and r.json()['simulacao'] is None)
+
+    print('\n== COPIAR PROJEÇÃO / REALIZADO ==')
+    visoes_pedidas = []
+
+    def motor_falso(alvo, fatores, hunter, view_mode=None, **kw):
+        visoes_pedidas.append(view_mode)
+        return dict(SIM_FALSA, rows=[dict(r) for r in SIM_FALSA['rows']])
+
+    with mock.patch('simulator.views.compute_consultor_simulation', side_effect=motor_falso):
+        r = c_cons.get(f'{M}/valores/', {'visao': 'realizado'})
+        j = r.json()
+        t('valores da coluna pela view da web (_simulador_valores_json)', r.status_code == 200 and visoes_pedidas[-1] == sv.VIEW_REALIZADO
+          and j['valores']['real'].get('movel__real') == '6000' and j['valores']['realpdv'].get('movel__realpdv') == '40000'
+          and j['metas'].get('movel') == 10000.0, r.content[:300])
+        r = c_cons.get(f'{M}/valores/', {'visao': 'xyz'})
+        t('visão inválida: 400 com a mensagem da web', r.status_code == 400 and 'Visão inválida' in r.json().get('erro', ''))
+        t('mesmo recorte do resumo: outra loja 404', c_cons.get(f'{M}/valores/', {'visao': 'projecao', 'usuario': fora.id}).status_code == 404)
+        r = c_chefe.get(f'{M}/valores/', {'visao': 'projecao'})
+        t('superadmin sem escolher pessoa: 400', r.status_code == 400)
+
+    print('\n== TABELA DA REDE ==')
+    from users.commission_views import pode_ver_comissionamento
+
+    def linha(u, setor_id, papel_, real, proj):
+        return {'id': u.id, 'name': u.get_full_name(), 'role_key': papel_, 'role_label': papel_.title(), 'sector': 'ZZ',
+                'sector_id': setor_id, 'coordinator': 'ZZ COORD', 'realizado': real, 'projecao': proj, 'diferenca': proj - real,
+                'fatores': [{'tipo': 'pilar', 'label': 'Móvel', 'delta': proj - real, 'realizado': real, 'projecao': proj,
+                             'atingimento': 0.8}], 'motivo': 'Móvel +', 'has_data': True, 'erro': ''}
+
+    dataset = {'rows': [linha(cons, loja.id, sv.ROLE_CONSULTOR, 100.0, 150.0), linha(fora, outra.id, sv.ROLE_CONSULTOR, 50.0, 40.0)],
+               'generated_at': None, 'built_on': None, 'status': 'ready', 'is_stale': False}
+    with mock.patch('simulator.tabela.get_tabela_dataset', return_value=dataset):
+        t('"pode_ver_tabela" = a porta da web (pode_ver_comissionamento)',
+          all(c.get(f'{M}/').json()['pode_ver_tabela'] == pode_ver_comissionamento(u)
+              for c, u in ((c_cons, cons), (c_ger, gerente), (c_chefe, chefe))))
+        r = c_ger.get(f'{M}/tabela/')
+        j = r.json()
+        t('gerente: só a própria loja (_scope_rows)', r.status_code == 200 and [x['id'] for x in j['linhas']] == [cons.id]
+          and j['resumo']['projecao'] == 150.0 and j['linhas'][0]['fatores'][0]['delta'] == 50.0, r.content[:300])
+        j = c_chefe.get(f'{M}/tabela/').json()
+        t('superadmin: a rede toda', {x['id'] for x in j['linhas']} == {cons.id, fora.id} and j['papeis'][0]['quantos'] == 2)
+        with mock.patch.object(mod, '_pode_ver_tabela', return_value=False):
+            t('quem não vê o comissionamento: 403', c_cons.get(f'{M}/tabela/').status_code == 403)
+    with mock.patch('simulator.tabela.get_tabela_dataset',
+                    return_value={'rows': [], 'generated_at': None, 'built_on': None, 'status': 'building', 'is_stale': True}):
+        t('montando: "calculando", sem rodar o motor aqui', c_chefe.get(f'{M}/tabela/').json()['status'] == 'calculando')
 
     print('\n== NÚMEROS: API × WEB (pessoas reais, só leitura) ==')
     fabrica = APIRequestFactory()

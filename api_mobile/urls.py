@@ -18,6 +18,8 @@ urlpatterns = [
     path('comunicados/<int:pk>/', views.comunicado, name='comunicado'),
     path('comunicados/<int:pk>/situacao/', views.comunicado_situacao, name='comunicado_situacao'),
     path('comunicados/<int:pk>/curtir/', views.comunicado_curtir, name='comunicado_curtir'),
+    path('comunicados/<int:pk>/destinatarios/', views.comunicado_destinatarios, name='comunicado_destinatarios'),
+    path('reconhecimentos/', views.reconhecimentos, name='reconhecimentos'),
     path('notificacoes/', views.notificacoes, name='notificacoes'),
     path('notificacoes/lidas/', views.notificacoes_lidas, name='notificacoes_lidas'),
     path('notificacoes/<str:ident>/lida/', views.notificacao_lida, name='notificacao_lida'),
@@ -41,4 +43,5 @@ urlpatterns = [
     path('m/power_bi_metas/', include('api_mobile.modulos.power_bi_metas')),
     path('m/mercadinho/', include('api_mobile.modulos.mercadinho')),
     path('m/facilitador/', include('api_mobile.modulos.facilitador')),
+    path('m/gestao_metas/', include('api_mobile.modulos.gestao_metas')),
 ]

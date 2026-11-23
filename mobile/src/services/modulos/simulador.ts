@@ -4,7 +4,7 @@ import { api } from '../api';
 /** A primeira consulta do mês busca o realizado no MySQL (até ~30 s); depois fica em cache por 15 min. */
 const TEMPO_MOTOR = 90_000;
 
-export type Visao = 'projecao' | 'realizado';
+export type Visao = 'projecao' | 'realizado' | 'simulador';
 
 export type PessoaSimulador = { id: number; nome: string; setor: string | null; papel: string };
 
@@ -54,6 +54,20 @@ export type Simulacao = {
   pilares: PilarSimulador[];
 };
 
+export type CampoSimulador = { chave: string; rotulo: string; dinheiro: boolean };
+
+/** A tabela de valores da visão Simulador (colunas Meta, Real Individual e Real PDV/Coordenação). */
+export type FormularioSimulador = {
+  colunas: { chave: 'meta' | 'real' | 'realpdv'; rotulo: string }[];
+  pilares: { chave: string; rotulo: string; quantidade: boolean; campos: Partial<Record<'meta' | 'real' | 'realpdv', CampoSimulador[]>>; campo_diario: string }[];
+  /** 1ª entrada: os campos vêm com o realizado do mês. */
+  primeira: boolean;
+  valores: Record<string, string>;
+  /** Meta por pilar (chave do formulário) para a meta-diária. */
+  metas: Record<string, number>;
+  pode_copiar: boolean;
+};
+
 export type ResumoSimulador = {
   papel: string;
   papel_rotulo: string;
@@ -66,14 +80,68 @@ export type ResumoSimulador = {
   vendo_outro: boolean;
   simulacao: Simulacao | null;
   erro: string | null;
+  simulador: FormularioSimulador | null;
+  pilares_hunter: { chave: string; rotulo: string }[];
+  hunter: Record<string, number>;
+  /** A tabela da rede (/simulator/tabela/): quem vê o comissionamento. */
+  pode_ver_tabela: boolean;
 };
 
-export type FiltroSimulador = { visao: Visao; usuario?: number; acelerador?: boolean };
+export type LinhaTabela = {
+  id: number;
+  nome: string;
+  papel: string;
+  papel_rotulo: string;
+  setor: string | null;
+  coordenador: string | null;
+  realizado: number;
+  projecao: number;
+  diferenca: number;
+  motivo: string;
+  tem_dado: boolean;
+  erro: string | null;
+  fatores: { tipo: 'pilar' | 'extra'; rotulo: string; delta: number; realizado: number; projecao: number; atingimento: number | null }[];
+};
+
+export type TabelaRede = {
+  status: 'calculando' | 'pronto';
+  desatualizado: boolean;
+  gerado_em: string | null;
+  referencia: string;
+  resumo: { pessoas: number; com_dados: number; realizado: number; projecao: number; diferenca: number; media_projecao: number };
+  papeis: { chave: string; rotulo: string; quantos: number }[];
+  linhas: LinhaTabela[];
+};
+
+export type FiltroSimulador = {
+  visao: Visao;
+  usuario?: number;
+  acelerador?: boolean;
+  /** Nível Hunter por pilar (0, 2 ou 3). */
+  hunter?: Record<string, number>;
+  /** Visão Simulador: os valores digitados (chave do campo → texto). */
+  entradas?: Record<string, string>;
+};
+
+function parametros({ visao, usuario, acelerador, hunter, entradas }: FiltroSimulador) {
+  const p: Record<string, string | number> = { visao };
+  if (usuario) p.usuario = usuario;
+  if (acelerador) p.acelerador = 1;
+  for (const [k, v] of Object.entries(hunter ?? {})) if (v) p[`hunter_${k}`] = v;
+  if (visao === 'simulador') for (const [k, v] of Object.entries(entradas ?? {})) if (v !== '') p[`sim__${k}`] = v;
+  return p;
+}
 
 export const simulador = {
-  resumo: ({ visao, usuario, acelerador }: FiltroSimulador) =>
+  resumo: (filtro: FiltroSimulador) => api.get<ResumoSimulador>('/m/simulador/', { params: parametros(filtro), timeout: TEMPO_MOTOR }).then((r) => r.data),
+  /** "Copiar Projeção / Copiar Realizado": os valores de toda a tabela naquela visão. */
+  valores: (visao: 'projecao' | 'realizado', usuario?: number) =>
     api
-      .get<ResumoSimulador>('/m/simulador/', { params: { visao, usuario, acelerador: acelerador ? 1 : undefined }, timeout: TEMPO_MOTOR })
+      .get<{ visao: string; valores: Record<'meta' | 'real' | 'realpdv', Record<string, string>>; metas: Record<string, number> }>('/m/simulador/valores/', {
+        params: { visao, usuario },
+        timeout: TEMPO_MOTOR,
+      })
       .then((r) => r.data),
+  tabela: () => api.get<TabelaRede>('/m/simulador/tabela/').then((r) => r.data),
   pessoas: () => api.get<{ resultados: PessoaSimulador[] }>('/m/simulador/pessoas/').then((r) => r.data.resultados),
 };

@@ -24,7 +24,7 @@ from ..permissoes import PortalBloqueado, bloqueio_do_usuario
 logger = logging.getLogger(__name__)
 
 # Ordem em que aparecem no app.
-CHAVES = ['impulso', 'ponto', 'agenda', 'cursos', 'contracheque', 'documentos', 'comissao', 'simulador', 'vendas',
+CHAVES = ['impulso', 'ponto', 'agenda', 'cursos', 'contracheque', 'documentos', 'comissao', 'simulador', 'gestao_metas', 'vendas',
           'power_bi', 'power_bi_metas', 'mercadinho', 'facilitador', 'checklists', 'quadro_hc', 'cameras', 'usuarios']
 
 

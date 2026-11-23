@@ -4,12 +4,12 @@ import { useState } from 'react';
 import { Alert, Platform, ScrollView, View } from 'react-native';
 
 import { dataDoIso, duracao, isoDaData } from '@/components/modulos/agenda/datas';
-import { CampoData, COR_NIVEL, COR_STATUS_TRANSCRICAO, Folha, Interruptor, ROTULO_NIVEL, Secao } from '@/components/modulos/agenda/pecas';
+import { CampoData, COR_NIVEL, COR_STATUS_TRANSCRICAO, EscolhaDePessoas, Folha, Interruptor, ROTULO_NIVEL, Secao } from '@/components/modulos/agenda/pecas';
 import { EsqueletoBloco } from '@/components/modulos/comum';
 import { BarraDetalhe, Botao, BotaoIcone, Campo, Cartao, EstadoErro, Icone, Pressionavel, Selo, Tela, Texto } from '@/components/ui';
 import { Seletor } from '@/components/ui/seletor';
 import { estado, marca } from '@/constants/theme';
-import { useAtribuirTarefa, useImportarImpulso, useOpcoesAgenda, useTranscricao } from '@/hooks/modulos/agenda';
+import { useAtribuirTarefa, useCompartilharTranscricao, useImportarImpulso, useOpcoesAgenda, useTranscricao } from '@/hooks/modulos/agenda';
 import { useCores } from '@/providers/tema';
 import { mensagemDoErro } from '@/services/api';
 import type { DetalheTranscricao, MetaCurta, TarefaTranscricao } from '@/services/modulos/agenda';
@@ -194,6 +194,8 @@ function Conteudo({ t }: { t: DetalheTranscricao }) {
           ))}
         </View>
       ) : null}
+
+      {t.pode_compartilhar ? <Compartilhar t={t} /> : null}
 
       <Botao titulo="Ver a transcrição completa no portal" variante="secundario" icone="open-outline" onPress={() => void abrirNoPortal(t.url_web)} />
     </ScrollView>
@@ -440,5 +442,37 @@ function FormularioImpulso({
       ) : null}
       <Botao titulo="Importar" icone="flash" carregando={importar.isPending} desativado={semGestor} onPress={enviar} />
     </ScrollView>
+  );
+}
+
+/** Com quem a transcrição é compartilhada (só o dono muda; quem entra na lista recebe aviso). */
+function Compartilhar({ t }: { t: DetalheTranscricao }) {
+  const opcoes = useOpcoesAgenda();
+  const compartilhar = useCompartilharTranscricao(t.id);
+  const atuais = (t.compartilhada_com ?? []).map((p) => p.id);
+  const [escolhidos, setEscolhidos] = useState<number[]>(atuais);
+  const mudou = escolhidos.length !== atuais.length || escolhidos.some((id) => !atuais.includes(id));
+  const pessoas = (opcoes.data?.pessoas ?? []).filter((p) => p.id !== opcoes.data?.eu);
+
+  return (
+    <Secao icone="share-social-outline" titulo="Compartilhar" cor={estado.info}>
+      <Texto variante="legenda" tom="suave">
+        Quem estiver na lista vê esta transcrição no portal e no app.
+      </Texto>
+      <EscolhaDePessoas pessoas={pessoas} grupos={opcoes.data?.grupos ?? []} escolhidos={escolhidos} aoMudar={setEscolhidos} rotulo="Compartilhada com" acao="Escolher pessoas" />
+      {mudou ? (
+        <Botao
+          titulo="Salvar compartilhamento"
+          icone="checkmark"
+          carregando={compartilhar.isPending}
+          onPress={() =>
+            compartilhar.mutate(escolhidos, {
+              onSuccess: (r) => (sucesso(), Alert.alert('Pronto', r.mensagem)),
+              onError: (e) => Alert.alert('Não deu certo', mensagemDoErro(e)),
+            })
+          }
+        />
+      ) : null}
+    </Secao>
   );
 }

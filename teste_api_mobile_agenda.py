@@ -290,6 +290,82 @@ try:
     r = post(ca, url, corpo)
     t('importar de novo: 409 com a meta', r.status_code == 409 and r.json().get('meta_id') == meta.id, r.content[:200])
 
+    print('\n== AGENDA DE OUTRA PESSOA ==')
+    ev_caio = CalendarEvent.objects.create(owner=caio, title='ZZ Compromisso do Caio', event_type='meeting',
+                                           start=timezone.make_aware(datetime.combine(amanha, time(14, 0))),
+                                           end=timezone.make_aware(datetime.combine(amanha, time(15, 0))))
+    periodo = {'inicio': amanha.isoformat(), 'fim': amanha.isoformat()}
+    r = ca.get(f'{M}/eventos/', {**periodo, 'usuario': caio.pk})
+    j = r.json()
+    t('colega comum: só os horários ocupados, sem detalhe (api_events com user_id)', r.status_code == 200
+      and j['completa'] is False and j['eventos'] == [] and len(j['ocupados']) == 1
+      and j['ocupados'][0]['inicio'].startswith(f'{amanha.isoformat()}T14:00') and j['pessoa']['id'] == caio.pk, r.content[:300])
+    j = cchefe.get(f'{M}/eventos/', {**periodo, 'usuario': caio.pk}).json()
+    t('SUPERADMIN vê a agenda completa (_can_view_full_calendar)', j['completa'] is True
+      and [e['id'] for e in j['eventos']] == [ev_caio.pk] and j['ocupados'] == [], j)
+    t('pessoa inativa ou inexistente: 404', ca.get(f'{M}/eventos/', {**periodo, 'usuario': parado.pk}).status_code == 404
+      and ca.get(f'{M}/eventos/', {**periodo, 'usuario': 'x'}).status_code == 404)
+    j = ca.get(f'{M}/eventos/', {**periodo, 'usuario': ana.pk}).json()
+    t('com o próprio id é a minha agenda', j['pessoa'] is None and j['completa'] is True)
+
+    print('\n== DISPONIBILIDADE ==')
+    r = ca.get(f'{M}/pessoas/{caio.pk}/disponibilidade/', {'data': amanha.isoformat()})
+    j = r.json()
+    inicios = [x['inicio'][11:16] for x in j.get('livres', [])]
+    t('livres em blocos de 30 min das 8h às 18h, fora do compromisso (user_availability)', r.status_code == 200
+      and inicios[0] == '08:00' and '14:00' not in inicios and '14:30' not in inicios and '15:00' in inicios
+      and inicios[-1] == '17:30' and len(j['semana']) == 7, inicios)
+    t('colega comum não vê a agenda completa; SUPERADMIN vê', j['pode_ver_completa'] is False
+      and cchefe.get(f'{M}/pessoas/{caio.pk}/disponibilidade/').json()['pode_ver_completa'] is True)
+    t('tipos do pedido (Reunião, Chamada, Horário)', [x['valor'] for x in j['tipos']] == ['meeting', 'call', 'appointment'])
+    t('pessoa inativa: 404', ca.get(f'{M}/pessoas/{parado.pk}/disponibilidade/').status_code == 404)
+
+    print('\n== PEDIR REUNIÃO ==')
+    url = f'{M}/pessoas/{caio.pk}/solicitar/'
+    pedido = {'titulo': 'ZZ Alinhar metas', 'tipo': 'call', 'inicio': hora(amanha, 15), 'fim': hora(amanha, 15, 30),
+              'local': 'Sala 2', 'descricao': 'Conversa rápida'}
+    r = post(ca, url, {**pedido, 'titulo': ' '})
+    t('sem título: 400 com o campo', r.status_code == 400 and 'titulo' in r.json().get('campos', {}), r.content[:200])
+    r = post(ca, url, {**pedido, 'fim': hora(amanha, 14)})
+    t('fim antes do início: 400', r.status_code == 400 and 'fim' in r.json().get('campos', {}))
+    t('consigo mesmo: 400', post(ca, f'{M}/pessoas/{ana.pk}/solicitar/', pedido).status_code == 400)
+    push_antes = m_push.call_count
+    r = post(ca, url, pedido)
+    sol = MeetingRequest.objects.filter(requester=ana, target=caio).order_by('-pk').first()
+    t('pede pela view do portal (request_meeting)', r.status_code == 201 and sol is not None and sol.status == 'pending'
+      and sol.meeting_type == 'call' and sol.location == 'Sala 2' and r.json()['solicitacao']['id'] == sol.pk
+      and timezone.localtime(sol.proposed_start).time() == time(15, 0), r.content[:300])
+    t('o Caio é avisado (sino; push trocado por mock)', Notification.objects.filter(user=caio, title='Nova solicitação de reunião').exists()
+      and m_push.call_count == push_antes + 1)
+
+    print('\n== SOLICITAÇÕES ==')
+    j = ca.get(f'{M}/solicitacoes/', {'aba': 'enviadas'}).json()
+    s_ana = next((x for x in j['resultados'] if x['id'] == sol.pk), None)
+    t('enviadas: a minha, com "cancelar"', s_ana and s_ana['para']['id'] == caio.pk and s_ana['pode_cancelar']
+      and not s_ana['pode_responder'], s_ana)
+    j = cc.get(f'{M}/solicitacoes/').json()
+    s_caio = next((x for x in j['resultados'] if x['id'] == sol.pk), None)
+    t('recebidas: a do Caio, com "responder"', j['aba'] == 'recebidas' and s_caio and s_caio['pode_responder']
+      and not s_caio['pode_cancelar'] and j['pendentes_recebidas'] >= 1, j)
+    t('quem recebeu não cancela: 404', post(cc, f'{M}/solicitacoes/{sol.pk}/cancelar/').status_code == 404)
+    r = post(ca, f'{M}/solicitacoes/{sol.pk}/cancelar/')
+    sol.refresh_from_db()
+    t('cancelar pela view do portal (meeting_request_cancel)', r.status_code == 200 and sol.status == 'cancelled'
+      and r.json()['solicitacao']['status'] == 'cancelled', r.content[:200])
+    t('cancelar de novo: 404', post(ca, f'{M}/solicitacoes/{sol.pk}/cancelar/').status_code == 404)
+
+    print('\n== COMPARTILHAR TRANSCRIÇÃO ==')
+    url = f'{M}/transcricoes/{t1.pk}/compartilhar/'
+    t('quem só recebeu a transcrição não compartilha: 404', post(cb, url, {'user_ids': [caio.pk]}).status_code == 404)
+    t('sem lista: 400', post(ca, url, {'user_ids': 'x'}).status_code == 400)
+    r = post(ca, url, {'user_ids': [caio.pk, ana.pk]})
+    t('compartilha pela view do portal (o dono sai da lista)', r.status_code == 200
+      and set(t1.shared_with.values_list('pk', flat=True)) == {caio.pk}
+      and [p['id'] for p in r.json()['transcricao']['compartilhada_com']] == [caio.pk], r.content[:300])
+    t('o Caio agora vê a transcrição', cc.get(f'{M}/transcricoes/{t1.pk}/').status_code == 200)
+    t('só o dono tem "compartilhar"', ca.get(f'{M}/transcricoes/{t1.pk}/').json()['pode_compartilhar'] is True
+      and cc.get(f'{M}/transcricoes/{t1.pk}/').json()['pode_compartilhar'] is False)
+
     print('\n== NADA SAIU ==')
     t('webpush de verdade nunca foi chamado', m_webpush.call_count == 0)
     t('nenhum processamento de transcrição (IA) foi disparado', m_processar.call_count == 0)

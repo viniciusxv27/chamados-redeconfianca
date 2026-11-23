@@ -47,6 +47,10 @@ export type Semana = {
   fim: string;
   hoje: string;
   eventos: Evento[];
+  /** Agenda de outra pessoa sem permissão de ver tudo: só os horários ocupados. */
+  ocupados?: { inicio: string; fim: string }[];
+  completa?: boolean;
+  pessoa?: PessoaAgenda | null;
   convites_pendentes: number;
   solicitacoes_pendentes: number;
   url_web: string;
@@ -91,6 +95,32 @@ export type SolicitacaoReuniao = {
   solicitante: PessoaAgenda | null;
   criada_em: string;
 };
+
+export type StatusSolicitacao = 'pending' | 'accepted' | 'rejected' | 'cancelled';
+
+export type SolicitacaoCompleta = SolicitacaoReuniao & {
+  para: PessoaAgenda | null;
+  status: StatusSolicitacao;
+  status_nome: string;
+  resposta: string | null;
+  evento_id: number | null;
+  enviada_por_mim: boolean;
+  pode_cancelar: boolean;
+  pode_responder: boolean;
+};
+
+export type Disponibilidade = {
+  pessoa: PessoaAgenda;
+  sou_eu: boolean;
+  data: string;
+  semana: string[];
+  pode_ver_completa: boolean;
+  livres: { inicio: string; fim: string }[];
+  tipos: { valor: string; rotulo: string }[];
+  url_web: string;
+};
+
+export type CamposSolicitacao = { titulo: string; descricao: string; tipo: string; inicio: string; fim: string; local: string };
 
 export type Resposta = 'aceitar' | 'recusar';
 
@@ -148,6 +178,9 @@ export type DetalheTranscricao = Omit<TranscricaoResumo, 'decisoes'> & {
   riscos: { texto: string; mitigacao: string | null; responsavel: string | null; severidade: Nivel }[];
   lista_tarefas: TarefaTranscricao[];
   pode_atribuir: boolean;
+  /** Só o dono compartilha. */
+  pode_compartilhar?: boolean;
+  compartilhada_com?: PessoaAgenda[];
   impulso: { sou_gestor: boolean; gestores: { id: number; nome: string; sou_eu: boolean }[]; hoje: string } | null;
   url_web: string;
 };
@@ -157,8 +190,28 @@ export type PaginaTranscricoes = { resultados: TranscricaoResumo[]; pagina: numb
 export type ImportarImpulso = { titulo: string; descricao: string; prazo: string; gestor: number; precisa_aprovacao: boolean };
 
 export const agenda = {
-  async semana(inicio: string, fim: string) {
-    const { data } = await api.get<Semana>(`${BASE}/eventos/`, { params: { inicio, fim } });
+  async semana(inicio: string, fim: string, usuario?: number) {
+    const { data } = await api.get<Semana>(`${BASE}/eventos/`, { params: { inicio, fim, usuario } });
+    return data;
+  },
+  async disponibilidade(usuario: number, dia: string) {
+    const { data } = await api.get<Disponibilidade>(`${BASE}/pessoas/${usuario}/disponibilidade/`, { params: { data: dia } });
+    return data;
+  },
+  async solicitar(usuario: number, campos: CamposSolicitacao) {
+    const { data } = await api.post<{ ok: boolean; mensagem: string; solicitacao: SolicitacaoCompleta }>(`${BASE}/pessoas/${usuario}/solicitar/`, campos);
+    return data;
+  },
+  async solicitacoes(aba: 'recebidas' | 'enviadas') {
+    const { data } = await api.get<{ aba: string; pendentes_recebidas: number; resultados: SolicitacaoCompleta[]; url_web: string }>(`${BASE}/solicitacoes/`, { params: { aba } });
+    return data;
+  },
+  async cancelarSolicitacao(id: number) {
+    const { data } = await api.post<{ ok: boolean; mensagem: string; solicitacao: SolicitacaoCompleta }>(`${BASE}/solicitacoes/${id}/cancelar/`);
+    return data;
+  },
+  async compartilhar(id: number, usuarios: number[]) {
+    const { data } = await api.post<{ mensagem: string; transcricao: DetalheTranscricao }>(`${BASE}/transcricoes/${id}/compartilhar/`, { user_ids: usuarios });
     return data;
   },
   async evento(id: number) {

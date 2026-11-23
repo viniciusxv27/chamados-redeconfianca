@@ -1,20 +1,20 @@
 /**
  * Início — a home do portal (templates/home.html) no celular, na mesma ordem:
- * boas-vindas, cartão do perfil (saldo C$ só para quem vê no portal, Mercadinho,
- * Criar comunicado para quem gerencia), comunicados obrigatórios, Comunicados
- * Fixados, Elogios Recentes, Feed de Comunicados com "Carregar mais" — e, por
- * baixo, os chamados da pessoa.
+ * topo em degradê (saudação pela hora, perfil, saldo C$ só para quem vê no portal e
+ * os atalhos), comunicados obrigatórios (não aparece para o SUPERADMIN, como os popups
+ * do portal), Comunicados Fixados, Reconhecimento (faixa com os 12 mais recentes e o
+ * mural), Feed de Comunicados com "Carregar mais" — e, por baixo, os chamados da pessoa.
  */
-import { router } from 'expo-router';
-import { RefreshControl, View } from 'react-native';
+import { type Href, router } from 'expo-router';
+import { FlatList, RefreshControl, View } from 'react-native';
 import Animated, { Extrapolation, FadeInDown, interpolate, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CartaoChamado } from '@/components/chamados/cartao-chamado';
 import { EsqueletoPost, PostComunicado } from '@/components/comunicados/post-comunicado';
-import { CartaoElogio } from '@/components/elogios/cartao-elogio';
+import { CartaoReconhecimento } from '@/components/elogios/cartao-reconhecimento';
+import { NumeroQueConta, TopoInicio } from '@/components/inicio/topo';
 import {
-  Avatar,
   Botao,
   Cartao,
   Entrada,
@@ -34,8 +34,10 @@ import { useFeed, useInicio } from '@/hooks/consultas';
 import { mensagemDoErro } from '@/services/api';
 import { useSessao } from '@/providers/sessao';
 import { useCores } from '@/providers/tema';
-import { comAlfa, saudacao } from '@/utils/formatar';
+import { comAlfa } from '@/utils/formatar';
 import { abrirNoPortal } from '@/utils/links';
+
+const LARGURA_RECONHECIMENTO = 270;
 
 export default function Inicio() {
   const { usuario } = useSessao();
@@ -70,25 +72,18 @@ export default function Inicio() {
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: 120, gap: 32 }}
         refreshControl={<RefreshControl refreshing={inicio.isRefetching || (feed.isRefetching && !feed.isFetchingNextPage)} onRefresh={atualizar} tintColor={marca[500]} colors={[marca[500]]} />}>
-        {/* Boas-vindas + cartão do perfil */}
-        <View style={{ gap: 18, paddingHorizontal: 20 }}>
-          <Animated.View entering={FadeInDown.duration(380)}>
-            <Texto variante="legenda" tom="fraco">
-              {saudacao()} · {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
-            </Texto>
-            <Texto variante="titulo1" numberOfLines={1}>
-              Bem-vindo, {pessoa?.primeiro_nome ?? ''}
-            </Texto>
-          </Animated.View>
-          <Entrada indice={1}>
-            <CartaoPerfil
-              nome={pessoa?.nome ?? ''}
-              foto={pessoa?.foto}
-              linha={[pessoa?.hierarquia_nome, pessoa?.setor].filter(Boolean).join(' - ')}
-              saldo={data?.saldo_cs ?? null}
-              podeCriarComunicado={!!data?.pode_criar_comunicado}
-            />
-          </Entrada>
+        {/* Topo em degradê: saudação pela hora, perfil, saldo e atalhos (o estilo novo do portal) */}
+        <View style={{ paddingHorizontal: 20 }}>
+          <TopoInicio
+            primeiroNome={pessoa?.primeiro_nome ?? ''}
+            nome={pessoa?.nome ?? ''}
+            foto={pessoa?.foto}
+            linha={[pessoa?.hierarquia_nome, pessoa?.setor].filter(Boolean).join(' · ')}
+            saldo={data?.saldo_cs ?? null}
+            saudacao={data?.saudacao}
+            podeCriarComunicado={!!data?.pode_criar_comunicado}
+            avisosOcultos={data?.avisos_ocultos?.length ?? 0}
+          />
         </View>
 
         {inicio.isError && !data ? (
@@ -132,28 +127,87 @@ export default function Inicio() {
               </Secao>
             ) : null}
 
-            {/* Elogios Recentes */}
+            {/* Reconhecimento (antes "Elogios Recentes"): faixa com os 12 mais recentes + o mural */}
             {inicio.isPending ? (
-              <Secao icone="star" cor="#EAB308" titulo="Elogios Recentes">
+              <Secao icone="ribbon" cor="#F59E0B" titulo="Reconhecimento">
                 <GrupoEsqueleto>
-                  <Cartao style={{ padding: 18, flexDirection: 'row', gap: 14 }}>
-                    <Esqueleto largura={52} altura={52} raio={16} />
-                    <View className="flex-1 gap-2">
-                      <Esqueleto largura="80%" />
-                      <Esqueleto largura={90} altura={12} />
-                      <Esqueleto largura="95%" altura={11} />
-                      <Esqueleto largura="70%" altura={11} />
-                    </View>
-                  </Cartao>
+                  <View className="flex-row gap-3">
+                    {[0, 1].map((i) => (
+                      <Cartao key={i} style={{ width: LARGURA_RECONHECIMENTO, padding: 16, gap: 10 }}>
+                        <View className="flex-row gap-3">
+                          <Esqueleto largura={44} altura={44} raio={22} />
+                          <View className="flex-1 gap-2">
+                            <Esqueleto largura="80%" />
+                            <Esqueleto largura={70} altura={11} />
+                          </View>
+                        </View>
+                        <Esqueleto largura="95%" altura={11} />
+                        <Esqueleto largura="70%" altura={11} />
+                      </Cartao>
+                    ))}
+                  </View>
                 </GrupoEsqueleto>
               </Secao>
-            ) : data?.elogios.length ? (
-              <Secao icone="star" cor="#EAB308" titulo="Elogios Recentes" acao="Ver todos" aoAgir={() => abrirNoPortal('/compliments/')}>
-                {data.elogios.map((e, i) => (
-                  <Entrada key={e.id} indice={i + 3}>
-                    <CartaoElogio elogio={e} />
-                  </Entrada>
-                ))}
+            ) : data ? (
+              <Secao
+                icone="ribbon"
+                cor="#F59E0B"
+                titulo="Reconhecimento"
+                subtitulo={
+                  data.total_reconhecimentos ? (
+                    <>
+                      <NumeroQueConta valor={data.total_reconhecimentos} /> {data.total_reconhecimentos === 1 ? 'reconhecimento na rede' : 'reconhecimentos na rede'}
+                    </>
+                  ) : (
+                    'Quem fez a diferença aparece aqui'
+                  )
+                }
+                acao="Ver todos"
+                aoAgir={() => router.push('/reconhecimento' as Href)}>
+                {data.elogios.length ? (
+                  <FlatList
+                    data={data.elogios}
+                    horizontal
+                    keyExtractor={(e) => String(e.id)}
+                    showsHorizontalScrollIndicator={false}
+                    snapToInterval={LARGURA_RECONHECIMENTO + 12}
+                    decelerationRate="fast"
+                    style={{ marginHorizontal: -20 }}
+                    contentContainerStyle={{ paddingHorizontal: 20, gap: 12 }}
+                    renderItem={({ item, index }) => (
+                      <Entrada indice={index < 4 ? index + 3 : 0} style={{ width: LARGURA_RECONHECIMENTO }}>
+                        <CartaoReconhecimento elogio={item} largura={LARGURA_RECONHECIMENTO} />
+                      </Entrada>
+                    )}
+                    ListFooterComponent={
+                      <Pressionavel
+                        onPress={() => router.push('/reconhecimento' as Href)}
+                        escala={0.96}
+                        accessibilityLabel="Ver todos os reconhecimentos"
+                        style={{ width: 150, alignSelf: 'stretch', minHeight: 180, borderRadius: raios['2xl'], borderWidth: 2, borderStyle: 'dashed', borderColor: comAlfa(marca[500], 0.35), alignItems: 'center', justifyContent: 'center', gap: 8, padding: 14 }}>
+                        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: comAlfa(marca[500], 0.12), alignItems: 'center', justifyContent: 'center' }}>
+                          <Icone nome="arrow-forward" tamanho={20} cor={marca[500]} />
+                        </View>
+                        <Texto variante="legenda" tom="marca" className="text-center" style={{ fontFamily: fontes.seminegrito }}>
+                          Ver todos os reconhecimentos
+                        </Texto>
+                        {data.total_reconhecimentos ? (
+                          <Texto variante="legenda" tom="fraco" style={{ fontSize: 12 }}>
+                            {data.total_reconhecimentos} no mural
+                          </Texto>
+                        ) : null}
+                      </Pressionavel>
+                    }
+                  />
+                ) : (
+                  <Cartao onPress={() => abrirNoPortal('/compliments/create/')} style={{ padding: 20, alignItems: 'center', gap: 8 }}>
+                    <Icone nome="ribbon-outline" tamanho={28} cor="#F59E0B" />
+                    <Texto variante="corpoForte">Ninguém foi reconhecido ainda</Texto>
+                    <Texto variante="legenda" tom="suave" className="text-center">
+                      Seja o primeiro a reconhecer o trabalho de um colega.
+                    </Texto>
+                  </Cartao>
+                )}
               </Secao>
             ) : null}
 
@@ -244,63 +298,40 @@ export default function Inicio() {
   );
 }
 
-/** O "User Info Card" da home do portal. */
-function CartaoPerfil({ nome, foto, linha, saldo, podeCriarComunicado }: { nome: string; foto?: string | null; linha: string; saldo: string | null; podeCriarComunicado: boolean }) {
-  return (
-    <Cartao style={{ padding: 18, gap: 16 }}>
-      <Pressionavel onPress={() => router.navigate('/perfil')} escala={0.98} accessibilityLabel="Abrir perfil" style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-        <Avatar nome={nome || '?'} foto={foto} tamanho={56} borda={marca[500]} />
-        <View className="flex-1">
-          <Texto variante="titulo3" numberOfLines={1}>
-            {nome}
-          </Texto>
-          {linha ? (
-            <Texto variante="legenda" tom="suave" numberOfLines={2}>
-              {linha}
-            </Texto>
-          ) : null}
-        </View>
-      </Pressionavel>
-      <View className="flex-row flex-wrap gap-2">
-        {saldo != null ? (
-          <View style={{ backgroundColor: marca[500], borderRadius: 999, paddingHorizontal: 14, height: 36, justifyContent: 'center' }}>
-            <Texto variante="legenda" tom="branco" style={{ fontFamily: fontes.negrito, fontSize: 14 }}>
-              C$ {saldo}
-            </Texto>
-          </View>
-        ) : null}
-        <Atalho icone="storefront-outline" rotulo="Mercadinho" cor={estado.sucesso} aoTocar={() => abrirNoPortal('/prizes/')} />
-        {podeCriarComunicado ? <Atalho icone="add" rotulo="Criar comunicado" cor={estado.info} aoTocar={() => abrirNoPortal('/communications/create/')} /> : null}
-      </View>
-    </Cartao>
-  );
-}
-
-function Atalho({ icone, rotulo, cor, aoTocar }: { icone: NomeIcone; rotulo: string; cor: string; aoTocar: () => void }) {
-  return (
-    <Pressionavel
-      onPress={aoTocar}
-      vibrar
-      escala={0.95}
-      accessibilityLabel={rotulo}
-      style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 14, borderRadius: 10, backgroundColor: cor }}>
-      <Icone nome={icone} tamanho={16} cor="#FFFFFF" />
-      <Texto variante="legenda" tom="branco" style={{ fontFamily: fontes.seminegrito, fontSize: 13 }}>
-        {rotulo}
-      </Texto>
-    </Pressionavel>
-  );
-}
-
-function Secao({ icone, cor, titulo, acao, aoAgir, children }: { icone: NomeIcone; cor: string; titulo: string; acao?: string; aoAgir?: () => void; children: React.ReactNode }) {
+function Secao({
+  icone,
+  cor,
+  titulo,
+  subtitulo,
+  acao,
+  aoAgir,
+  children,
+}: {
+  icone: NomeIcone;
+  cor: string;
+  titulo: string;
+  subtitulo?: React.ReactNode;
+  acao?: string;
+  aoAgir?: () => void;
+  children: React.ReactNode;
+}) {
   return (
     <View style={{ gap: 16, paddingHorizontal: 20 }}>
       <View className="flex-row items-center justify-between">
-        <View className="flex-row items-center gap-2">
-          <Icone nome={icone} tamanho={19} cor={cor} />
-          <Texto variante="titulo3" accessibilityRole="header">
-            {titulo}
-          </Texto>
+        <View className="flex-1 flex-row items-center gap-2.5">
+          <View style={{ width: 30, height: 30, borderRadius: 10, backgroundColor: cor, alignItems: 'center', justifyContent: 'center' }}>
+            <Icone nome={icone} tamanho={16} cor="#FFFFFF" />
+          </View>
+          <View className="flex-1">
+            <Texto variante="titulo3" accessibilityRole="header">
+              {titulo}
+            </Texto>
+            {subtitulo ? (
+              <Texto variante="legenda" tom="fraco" numberOfLines={1}>
+                {subtitulo}
+              </Texto>
+            ) : null}
+          </View>
         </View>
         {acao && aoAgir ? (
           <Pressionavel onPress={aoAgir} hitSlop={8} escala={0.94}>

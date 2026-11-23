@@ -104,6 +104,8 @@ function Navegacao() {
           <Stack.Screen name="chamado/novo" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="comunicado/[id]" />
           <Stack.Screen name="comunicados" />
+          <Stack.Screen name="destinatarios/[id]" />
+          <Stack.Screen name="reconhecimento" />
         </Stack.Protected>
         {/* Módulos: também abertos no bloqueio por curso vencido — como /cursos/ na web, é por lá
             que a pessoa manda o comprovante e sai da trava (o servidor só libera o módulo Cursos). */}

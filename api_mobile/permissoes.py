@@ -14,8 +14,16 @@ class PortalBloqueado(APIException):
         super().__init__(detail={'erro': bloqueio['mensagem'], 'bloqueio': bloqueio})
 
 
+def e_superadmin(user):
+    """O mesmo teste das travas do portal (portal_popups/context_processors.py ``_e_superadmin``)."""
+    return bool(user and (user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN'))
+
+
 def bloqueio_do_usuario(user, usar_cache=True):
-    if getattr(user, 'needs_pre_registration_adjustment', lambda: False)():
+    # Ajuste de pré-cadastro: a regra de users/pre_registration_middleware.py, que não prende o
+    # SUPERADMIN (23/11/2026). As outras travas vêm dos próprios middlewares (bloqueios.py), que já
+    # deixam o SUPERADMIN passar.
+    if not e_superadmin(user) and getattr(user, 'needs_pre_registration_adjustment', lambda: False)():
         return {'tipo': 'cadastro', 'titulo': 'Cadastro com ajustes pendentes',
                 'mensagem': 'Seu cadastro precisa de ajustes. Corrija no portal para continuar.',
                 'caminho_web': '/'}

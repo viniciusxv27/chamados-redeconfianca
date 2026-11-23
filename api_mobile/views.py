@@ -10,6 +10,7 @@ from django.contrib.auth import authenticate
 from django.core.paginator import EmptyPage, Paginator
 from django.db import transaction
 from django.db.models import Count, Q
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -25,11 +26,12 @@ from core.middleware import log_action
 from . import dados
 from .autenticacao import TokenMobileAuthentication
 from .models import TokenMobile
-from .permissoes import SemBloqueio, bloqueio_do_usuario
+from .permissoes import SemBloqueio, bloqueio_do_usuario, e_superadmin
 
 logger = logging.getLogger(__name__)
 
 TAMANHO_PAGINA = 20
+RECONHECIMENTOS_NA_HOME = 12
 MAX_ANEXO = 50 * 1024 * 1024
 MAX_ANEXOS = 5
 
@@ -136,6 +138,15 @@ def _marcas_de_comunicados(user, comunicados):
     return lidos, curtidos
 
 
+def _saudacao():
+    """Bom dia / Boa tarde / Boa noite pela hora do portal (communications.views._saudacao)."""
+    try:
+        from communications.views import _saudacao as saudacao_do_portal
+        return saudacao_do_portal()
+    except Exception:  # noqa: BLE001
+        return 'Olá'
+
+
 @api_view(['GET'])
 @authentication_classes([TokenMobileAuthentication])
 @permission_classes([SemBloqueio])
@@ -159,16 +170,33 @@ def inicio(request):
     base = comunicados_visiveis(user).order_by('-created_at')
     fixados = list(base.filter(is_pinned=True)[:3])
     novos = list(base.filter(is_pinned=False)[:6])
-    # Elogios recentes: os mesmos 2 da home do portal (communications.views.home_feed).
+    # Reconhecimento (antes "Elogios Recentes"): os mesmos 12 mais recentes da faixa da home do
+    # portal e o total da rede (communications.views.home_feed, 23/11/2026).
+    total_reconhecimentos = 0
     try:
         from compliments.models import Compliment
-        elogios = list(Compliment.objects.filter(is_active=True)
-                       .select_related('from_user', 'from_user__sector', 'to_user', 'to_user__sector', 'to_sector')
-                       .order_by('-created_at')[:2])
+        ativos = Compliment.objects.filter(is_active=True)
+        elogios = list(ativos.select_related('from_user', 'from_user__sector', 'to_user', 'to_user__sector', 'to_sector')
+                       .order_by('-created_at')[:RECONHECIMENTOS_NA_HOME])
+        total_reconhecimentos = ativos.count()
     except Exception:  # noqa: BLE001 — sem o app de elogios a home segue
         elogios = []
     lidos, curtidos = _marcas_de_comunicados(user, fixados + novos)
-    pendentes = list(comunicados_pendentes(user).values('id', 'title')[:5])
+    # Nenhum popup nem trava para o SUPERADMIN (portal_popups/context_processors.py, 23/11/2026): o
+    # aviso de comunicado obrigatório também não aparece para ele; em troca, como o botão da home do
+    # portal, ele vê quantos avisos deixaram de aparecer.
+    superadmin = e_superadmin(user)
+    pendentes = [] if superadmin else list(comunicados_pendentes(user).values('id', 'title')[:5])
+    avisos_ocultos = []
+    if superadmin:
+        try:
+            from portal_popups.context_processors import avisos_ocultos_do_superadmin
+            avisos_ocultos = [{'titulo': a['titulo'], 'texto': dados.texto_do_html(a.get('texto') or '', 200),
+                               'url': a.get('url') or None, 'rotulo': a.get('rotulo') or 'Abrir',
+                               'bloqueante': bool(a.get('bloqueante'))}
+                              for a in avisos_ocultos_do_superadmin(user)]
+        except Exception:  # noqa: BLE001 — a lista é só informativa
+            avisos_ocultos = []
     return Response({
         'usuario': dados.pessoa(request, user, completo=True),
         'chamados': contagem,
@@ -176,6 +204,9 @@ def inicio(request):
         'comunicados_fixados': [dados.comunicado_resumo(request, c, lidos, curtidos) for c in fixados],
         'comunicados': [dados.comunicado_resumo(request, c, lidos, curtidos) for c in novos],
         'elogios': [dados.elogio(request, e) for e in elogios],
+        'total_reconhecimentos': total_reconhecimentos,
+        'saudacao': _saudacao(),
+        'avisos_ocultos': avisos_ocultos,
         # Saldo C$ no cartão do perfil: a home do portal esconde de PADRÃO, ADMINISTRATIVO e SUPERVISOR.
         'saldo_cs': (str(user.balance_cs) if user.hierarchy not in ('PADRAO', 'ADMINISTRATIVO', 'SUPERVISOR')
                      and getattr(user, 'balance_cs', None) is not None else None),
@@ -381,13 +412,34 @@ def _comunicado_visivel(user, pk):
     return get_object_or_404(comunicados_visiveis(user), pk=pk)
 
 
+def _pode_ver_destinatarios(user, c):
+    """SUPERADMIN e quem enviou (communications.views._pode_ver_status_dos_destinatarios)."""
+    from communications.views import _pode_ver_status_dos_destinatarios
+    return _pode_ver_status_dos_destinatarios(user, c)
+
+
+def _comunicado_aberto_para(user, pk):
+    """O comunicado que a pessoa abre: os que chegam a ela e — como na web, que abre qualquer
+    comunicado — os que ela pode acompanhar (quem enviou e o SUPERADMIN), mesmo sem ser destinatária."""
+    from communications.models import Communication
+
+    c = comunicados_visiveis(user).filter(pk=pk).first()
+    if c is not None:
+        return c, True
+    c = (Communication.objects.select_related('sender', 'sender__sector')
+         .prefetch_related('images', 'liked_by').filter(pk=pk).first())
+    if c is None or not _pode_ver_destinatarios(user, c):
+        raise Http404
+    return c, False
+
+
 @api_view(['GET'])
 @authentication_classes([TokenMobileAuthentication])
 @permission_classes([SemBloqueio])
 def comunicado(request, pk):
     from communications.models import CommunicationRead
 
-    c = _comunicado_visivel(request.user, pk)
+    c, destinatario = _comunicado_aberto_para(request.user, pk)
     # Abrir conta como visualizado, como no portal (communication_detail_view).
     CommunicationRead.objects.get_or_create(communication=c, user=request.user)
     c.viewed_by.add(request.user)
@@ -398,6 +450,63 @@ def comunicado(request, pk):
         **dados.comunicado_resumo(request, c, lidos, curtidos),
         'texto': dados.texto_do_html(c.message),
         'imagens': [i for i in imagens if i],
+        # Status de cada destinatário (ciente, dúvida, abriu, não abriu): só SUPERADMIN e quem enviou.
+        'pode_ver_destinatarios': _pode_ver_destinatarios(request.user, c),
+        # Quem só acompanha (enviou / SUPERADMIN fora da lista) não marca "Estou ciente".
+        'sou_destinatario': destinatario,
+    })
+
+
+SITUACOES_DO_DESTINATARIO = ('ESTOU_CIENTE', 'ESTOU_COM_DUVIDA', 'ABRIU', 'NAO_ABRIU')
+
+
+def _sem_acento(texto):
+    import unicodedata
+    return ''.join(ch for ch in unicodedata.normalize('NFKD', str(texto or '')) if not unicodedata.combining(ch)).lower()
+
+
+@api_view(['GET'])
+@authentication_classes([TokenMobileAuthentication])
+@permission_classes([SemBloqueio])
+def comunicado_destinatarios(request, pk):
+    """Status de cada destinatário do comunicado — o painel do detalhe na web
+    (communications.views._status_dos_destinatarios), com filtro por situação, busca e páginas.
+    Só para o SUPERADMIN e quem enviou; para os outros o comunicado "não existe" aqui (404)."""
+    from communications.models import Communication, CommunicationRead
+    from communications.views import _status_dos_destinatarios
+
+    c = get_object_or_404(Communication, pk=pk)
+    if not _pode_ver_destinatarios(request.user, c):
+        raise Http404
+    leituras = CommunicationRead.objects.filter(communication=c).select_related('user', 'user__sector')
+    linhas, contagem = _status_dos_destinatarios(c, leituras)
+    situacao = request.query_params.get('situacao') or ''
+    if situacao in SITUACOES_DO_DESTINATARIO:
+        linhas = [x for x in linhas if x['status'] == situacao]
+    busca = _sem_acento((request.query_params.get('busca') or '').strip())
+    if busca:
+        def bate(x):
+            u = x['user']
+            alvo = ' '.join([u.get_full_name() or '', u.email or '', getattr(u, 'job_title', '') or '',
+                             u.sector.name if u.sector_id else ''])
+            return all(t in _sem_acento(alvo) for t in busca.split())
+        linhas = [x for x in linhas if bate(x)]
+    itens, pagina = _pagina(request, linhas)
+    return Response({
+        'contagem': {'ciente': contagem.get('aware', 0), 'duvida': contagem.get('with_doubt', 0),
+                     'abriu': contagem.get('opened', 0), 'nao_abriu': contagem.get('not_viewed', 0),
+                     'total': contagem.get('total', 0)},
+        'situacoes': [{'valor': v, 'rotulo': r} for v, r in (
+            ('', 'Todos'), ('ESTOU_CIENTE', 'Ciente'), ('ESTOU_COM_DUVIDA', 'Com dúvida'),
+            ('ABRIU', 'Abriu, sem marcar'), ('NAO_ABRIU', 'Não abriu'))],
+        'resultados': [{
+            'pessoa': {**dados.pessoa(request, x['user']), 'cargo': getattr(x['user'], 'job_title', '') or None},
+            'situacao': x['status'], 'situacao_nome': x['status_display'],
+            'aberto_em': dados.iso(x['aberto_em']), 'respondido_em': dados.iso(x['respondido_em']),
+        } for x in itens],
+        # A planilha (CSV) continua no portal: o detalhe da web exporta com ?exportar=status.
+        'url_csv': f'/communications/{c.pk}/?exportar=status',
+        **pagina,
     })
 
 
@@ -430,6 +539,47 @@ def comunicado_curtir(request, pk):
         c.liked_by.add(request.user)
         curti = True
     return Response({'curti': curti, 'curtidas': c.liked_by.count()})
+
+
+# ── Reconhecimento (mural) ───────────────────────────────────────────────────
+
+POR_PAGINA_DO_MURAL = 24
+
+
+@api_view(['GET'])
+@authentication_classes([TokenMobileAuthentication])
+@permission_classes([SemBloqueio])
+def reconhecimentos(request):
+    """O Mural de Reconhecimento (compliments.views.mural, só @login_required): todos os
+    reconhecimentos da rede, filtro Todos/Para mim/Meu setor/Que eu fiz (``ver``), busca (``q``)
+    e páginas de 24 — o filtro é o ``_mural_filtrado`` do portal, chamado daqui."""
+    from compliments.models import Compliment
+    from compliments.views import FILTROS_DO_MURAL, _mural_filtrado
+
+    qs, ver, busca = _mural_filtrado(request._request)
+    try:
+        numero = max(int(request.query_params.get('pagina') or 1), 1)
+    except ValueError:
+        numero = 1
+    paginador = Paginator(qs.select_related('from_user__sector'), POR_PAGINA_DO_MURAL)
+    try:
+        pagina = paginador.page(numero)
+        itens, tem_mais = list(pagina.object_list), pagina.has_next()
+    except EmptyPage:
+        itens, tem_mais = [], False
+    saida = {'resultados': [dados.elogio(request, e) for e in itens], 'pagina': numero,
+             'total': paginador.count, 'tem_mais': tem_mais, 'ver': ver, 'busca': busca}
+    if numero == 1:
+        # Os números do topo do mural (só na 1ª página: o "Carregar mais" não precisa).
+        hoje = timezone.localdate()
+        ativos = Compliment.objects.filter(is_active=True)
+        saida['numeros'] = {
+            'total': ativos.count(),
+            'no_mes': ativos.filter(created_at__year=hoje.year, created_at__month=hoje.month).count(),
+            'para_mim': ativos.filter(to_user=request.user).count(),
+        }
+        saida['filtros'] = [{'valor': v, 'rotulo': r} for v, r in FILTROS_DO_MURAL]
+    return Response(saida)
 
 
 # ── Notificações ──────────────────────────────────────────────────────────────
