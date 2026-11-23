@@ -48,3 +48,12 @@ example
 # pastas nativas geradas pelo prebuild (CNG)
 /ios
 /android
+
+# Chave de upload do Android (Play Console) — nunca versionar; guardar cópia em local seguro
+credentials/
+credentials.json
+
+# Chave da conta de serviço do Firebase (FCM v1) — vai só para o EAS (eas credentials), nunca para o git.
+# (O google-services.json pode ser versionado: o build do EAS precisa dele.)
+*firebase-adminsdk*.json
+fcm-*.json

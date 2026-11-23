@@ -40,4 +40,6 @@ export const CHAVES = {
   tema: 'rc.tema',
   /** E-mail lembrado na tela de entrar ("Lembrar meu e-mail"). Nunca a senha. */
   email: 'rc.email',
+  /** Quando a pessoa disse "Agora não" para as notificações (a explicação volta depois de uns dias). */
+  pushAdiado: 'rc.push.adiado',
 } as const;

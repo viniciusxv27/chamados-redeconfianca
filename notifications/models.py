@@ -2,6 +2,7 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 from users.models import User, Sector
+from api_mobile.push import AvisaOCelularManager
 import json
 
 
@@ -220,6 +221,9 @@ class UserNotification(models.Model):
     
     # Metadados
     created_at = models.DateTimeField(auto_now_add=True)
+
+    # Cada linha nova do sino (também em bulk_create) vira push no app — api_mobile/push.py
+    objects = AvisaOCelularManager()
     
     class Meta:
         verbose_name = "Notificação do Usuário"

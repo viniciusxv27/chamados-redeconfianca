@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import TokenMobile
+from .models import PushMobile, TokenMobile
 
 
 @admin.register(TokenMobile)
@@ -16,6 +16,16 @@ class TokenMobileAdmin(admin.ModelAdmin):
     def revogar(self, request, queryset):
         for token in queryset:
             token.revogar()
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(PushMobile)
+class PushMobileAdmin(admin.ModelAdmin):
+    list_display = ('sessao', 'plataforma', 'criado_em', 'atualizado_em')
+    search_fields = ('sessao__user__email', 'sessao__user__first_name', 'sessao__dispositivo')
+    readonly_fields = ('sessao', 'token_expo', 'plataforma', 'criado_em', 'atualizado_em')
 
     def has_add_permission(self, request):
         return False

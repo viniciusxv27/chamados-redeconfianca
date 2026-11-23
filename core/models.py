@@ -2,6 +2,7 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 from core.utils import upload_tutorial_pdf, upload_report_evidence
+from api_mobile.push import AvisaOCelularManager
 
 User = settings.AUTH_USER_MODEL
 
@@ -355,6 +356,9 @@ class Notification(models.Model):
     is_read = models.BooleanField(default=False, verbose_name="Lida")
     created_at = models.DateTimeField(auto_now_add=True)
     read_at = models.DateTimeField(null=True, blank=True)
+
+    # Cada notificação nova (também em bulk_create) vira push no app — api_mobile/push.py
+    objects = AvisaOCelularManager()
     
     class Meta:
         verbose_name = "Notificação"

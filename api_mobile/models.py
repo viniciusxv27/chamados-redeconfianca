@@ -9,7 +9,7 @@ import hashlib
 import secrets
 
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 
@@ -52,3 +52,33 @@ class TokenMobile(models.Model):
         if self.revogado_em is None:
             self.revogado_em = timezone.now()
             self.save(update_fields=['revogado_em'])
+        # Sessão encerrada não recebe mais push. (O envio já ignora sessão revogada; isto só
+        # limpa. Num savepoint e sem deixar escapar erro: antes do migrate a tabela não existe.)
+        try:
+            with transaction.atomic():
+                PushMobile.objects.filter(sessao=self).delete()
+        except Exception:
+            pass
+
+
+class PushMobile(models.Model):
+    """O endereço de push (Expo) do aparelho daquela sessão do app.
+
+    Preso à sessão (TokenMobile): sair do app, revogar o aparelho ou a sessão expirar
+    corta o push junto. Tabela à parte — e não colunas no TokenMobile — para que o
+    código novo rode antes do migrate sem derrubar o login (só o push fica parado).
+    """
+    sessao = models.OneToOneField(TokenMobile, on_delete=models.CASCADE, related_name='push',
+                                  verbose_name='Sessão do app')
+    # Um aparelho só tem um endereço: se outra pessoa entrar nele, o endereço muda de dono.
+    token_expo = models.CharField('Token do Expo', max_length=200, unique=True)
+    plataforma = models.CharField('Plataforma', max_length=20, blank=True)
+    criado_em = models.DateTimeField('Registrado em', auto_now_add=True)
+    atualizado_em = models.DateTimeField('Atualizado em', auto_now=True)
+
+    class Meta:
+        verbose_name = 'Push do aparelho'
+        verbose_name_plural = 'Push dos aparelhos'
+
+    def __str__(self):
+        return f'{self.sessao} — {self.token_expo[:24]}…'

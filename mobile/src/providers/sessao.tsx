@@ -11,6 +11,7 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 import { aoBloquear, aoEncerrarSessao, definirToken } from '@/services/api';
 import { apagar, CHAVES, gravar, ler } from '@/services/armazenamento';
 import { sessao as apiSessao } from '@/services/portal';
+import { desregistrarAparelho } from '@/services/push';
 import type { Bloqueio, Usuario } from '@/services/tipos';
 
 type Estado = 'carregando' | 'anonimo' | 'logado';
@@ -86,6 +87,8 @@ export function ProvedorSessao({ children }: { children: ReactNode }) {
   }, []);
 
   const sair = useCallback(async () => {
+    // Antes de encerrar a sessão (o desregistrar ainda precisa do token): este aparelho para de receber push.
+    await desregistrarAparelho();
     try {
       await apiSessao.sair();
     } catch {

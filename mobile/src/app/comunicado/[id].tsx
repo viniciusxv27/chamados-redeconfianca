@@ -21,6 +21,8 @@ export default function DetalheComunicado() {
   const cores = useCores();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  // Em telas de 360 de largura (muito Android) ícone + texto não cabem nos dois botões lado a lado.
+  const estreito = width < 400;
   const { data, isPending, isError, error, refetch } = useComunicado(numero);
   const situacao = useSituacaoComunicado(numero);
   const [pagina, setPagina] = useState(0);
@@ -133,9 +135,9 @@ export default function DetalheComunicado() {
                 ) : null}
                 <View className="flex-row gap-3">
                   {data.situacao !== 'ESTOU_COM_DUVIDA' ? (
-                    <Botao titulo="Tenho dúvida" variante="secundario" icone="help-circle-outline" onPress={() => marcar('ESTOU_COM_DUVIDA')} style={{ flex: 1 }} desativado={situacao.isPending} />
+                    <Botao titulo="Tenho dúvida" variante="secundario" icone={estreito ? undefined : 'help-circle-outline'} onPress={() => marcar('ESTOU_COM_DUVIDA')} style={{ flex: 1 }} desativado={situacao.isPending} />
                   ) : null}
-                  <Botao titulo="Estou ciente" icone="checkmark" onPress={() => marcar('ESTOU_CIENTE')} carregando={situacao.isPending} style={{ flex: 1 }} />
+                  <Botao titulo="Estou ciente" icone={estreito ? undefined : 'checkmark'} onPress={() => marcar('ESTOU_CIENTE')} carregando={situacao.isPending} style={{ flex: 1 }} />
                 </View>
               </View>
             )}

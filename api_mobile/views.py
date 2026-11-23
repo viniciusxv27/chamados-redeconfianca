@@ -94,6 +94,39 @@ def logout(request):
     return Response({'ok': True})
 
 
+# ── Push no celular ───────────────────────────────────────────────────────────
+# O aparelho manda o token do Expo depois que a pessoa deixa o app notificar. Fica
+# preso à sessão (PushMobile → TokenMobile): sair do app apaga junto. O envio é o
+# api_mobile/push.py, que espelha no celular tudo o que cai no sino do portal.
+
+@api_view(['POST'])
+@authentication_classes([TokenMobileAuthentication])
+@permission_classes([IsAuthenticated])
+def push_registrar(request):
+    from .models import PushMobile
+    from .push import token_valido
+
+    token = (request.data.get('token') or '').strip()
+    if not token_valido(token):
+        return _erro('Token de notificação inválido.')
+    plataforma = (request.data.get('plataforma') or request.auth.plataforma or '')[:20]
+    with transaction.atomic():
+        # O aparelho trocou de dono (outra pessoa entrou nele): o endereço sai da sessão antiga.
+        PushMobile.objects.filter(token_expo=token).exclude(sessao=request.auth).delete()
+        PushMobile.objects.update_or_create(sessao=request.auth,
+                                            defaults={'token_expo': token, 'plataforma': plataforma})
+    return Response({'ok': True})
+
+
+@api_view(['POST'])
+@authentication_classes([TokenMobileAuthentication])
+@permission_classes([IsAuthenticated])
+def push_desregistrar(request):
+    from .models import PushMobile
+    PushMobile.objects.filter(sessao=request.auth).delete()
+    return Response({'ok': True})
+
+
 @api_view(['GET'])
 @authentication_classes([TokenMobileAuthentication])
 @permission_classes([IsAuthenticated])

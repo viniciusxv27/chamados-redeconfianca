@@ -18,6 +18,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AberturaAnimada } from '@/components/navegacao/abertura-animada';
+import { PushDoPortal } from '@/components/navegacao/push-do-portal';
 import { ProvedorConsultas } from '@/providers/consultas';
 import { ProvedorSessao, useSessao } from '@/providers/sessao';
 import { ProvedorTema, useTema } from '@/providers/tema';
@@ -113,6 +114,7 @@ function Navegacao() {
           <Stack.Screen name="modulo" />
         </Stack.Protected>
       </Stack>
+      <PushDoPortal />
     </ThemeProvider>
   );
 }
