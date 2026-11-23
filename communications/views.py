@@ -459,16 +459,97 @@ def communication_detail_view(request, communication_id):
     
     # Get comments for this communication
     comments = communication.comments.select_related('user').order_by('created_at')
-    
+
+    # Status de cada destinatário, detalhado (24/11/2026): o SUPERADMIN vê todos os que
+    # marcaram "Estou ciente" (e os demais); quem enviou também — o painel já existia
+    # no template, mas a view nunca mandava os dados.
+    pode_ver_status = _pode_ver_status_dos_destinatarios(request.user, communication)
+    users_status, status_counts = ([], {})
+    if pode_ver_status:
+        users_status, status_counts = _status_dos_destinatarios(communication, status_reads)
+        if request.GET.get('exportar') == 'status':
+            return _exportar_status_csv(communication, users_status)
+
     context = {
         'communication': communication,
         'communication_status': communication_status,
         'reactions_info': reactions_info,
         'status_info': status_info,
-        'comments': comments
+        'comments': comments,
+        'is_sender': pode_ver_status,
+        'users_status': users_status,
+        'status_counts': status_counts,
     }
     
     return render(request, 'communications/detail.html', context)
+
+
+ORDEM_DO_STATUS = {'ESTOU_CIENTE': 0, 'ESTOU_COM_DUVIDA': 1, 'ABRIU': 2, 'NAO_ABRIU': 3}
+ROTULO_DO_STATUS = {'ESTOU_CIENTE': 'Ciente', 'ESTOU_COM_DUVIDA': 'Com dúvida',
+                    'ABRIU': 'Abriu, sem marcar', 'NAO_ABRIU': 'Não abriu'}
+
+
+def _pode_ver_status_dos_destinatarios(user, communication):
+    return bool(user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN'
+                or communication.sender_id == user.id)
+
+
+def _status_dos_destinatarios(communication, status_reads):
+    """[{user, status, status_display, aberto_em, respondido_em}] de todos os destinatários + contagens.
+
+    Destinatário = todo usuário ativo (send_to_all) ou os recipients; quem respondeu sem estar
+    na lista (ex.: foi tirado depois) também entra. Ciente primeiro, do mais recente ao mais antigo.
+    """
+    leituras = {r.user_id: r for r in status_reads}
+    if communication.send_to_all:
+        pessoas = User.objects.filter(is_active=True)
+    else:
+        pessoas = communication.recipients.all()
+    pessoas = list(pessoas.select_related('sector'))
+    vistos = {u.id for u in pessoas}
+    # Fora da lista só entra quem respondeu (abrir para conferir, como o SUPERADMIN faz, não conta).
+    pessoas += [r.user for r in status_reads
+                if r.user_id not in vistos and r.status in ('ESTOU_CIENTE', 'ESTOU_COM_DUVIDA')]
+    linhas = []
+    for u in pessoas:
+        r = leituras.get(u.id)
+        if r is None:
+            status = 'NAO_ABRIU'
+        elif r.status in ('ESTOU_CIENTE', 'ESTOU_COM_DUVIDA'):
+            status = r.status
+        else:
+            status = 'ABRIU'
+        linhas.append({
+            'user': u, 'status': status, 'status_display': ROTULO_DO_STATUS[status],
+            'aberto_em': r.read_at if r else None,
+            'respondido_em': r.updated_at if r and status in ('ESTOU_CIENTE', 'ESTOU_COM_DUVIDA') else None,
+        })
+    def quando(x):
+        d = x['respondido_em'] or x['aberto_em']
+        return -d.timestamp() if d else 0
+    linhas.sort(key=lambda x: (ORDEM_DO_STATUS[x['status']], quando(x), (x['user'].get_full_name() or '').lower()))
+    contagem = {k: 0 for k in ORDEM_DO_STATUS}
+    for x in linhas:
+        contagem[x['status']] += 1
+    status_counts = {'aware': contagem['ESTOU_CIENTE'], 'with_doubt': contagem['ESTOU_COM_DUVIDA'],
+                     'opened': contagem['ABRIU'], 'not_viewed': contagem['NAO_ABRIU'], 'total': len(linhas)}
+    return linhas, status_counts
+
+
+def _exportar_status_csv(communication, users_status):
+    import csv
+    from django.http import HttpResponse
+    resposta = HttpResponse(content_type='text/csv; charset=utf-8')
+    resposta['Content-Disposition'] = f'attachment; filename="comunicado-{communication.id}-status.csv"'
+    resposta.write('\ufeff')
+    w = csv.writer(resposta, delimiter=';')
+    w.writerow(['Nome', 'E-mail', 'Cargo', 'Setor', 'Status', 'Abriu em', 'Marcou em'])
+    fmt = lambda d: timezone.localtime(d).strftime('%d/%m/%Y %H:%M') if d else ''
+    for x in users_status:
+        u = x['user']
+        w.writerow([u.get_full_name(), u.email, getattr(u, 'job_title', '') or '', u.sector.name if u.sector_id else '',
+                    x['status_display'], fmt(x['aberto_em']), fmt(x['respondido_em'])])
+    return resposta
 
 
 COR_HEX = re.compile(r'^#[0-9A-Fa-f]{6}$')

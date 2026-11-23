@@ -210,6 +210,9 @@
                                     {% if status_info.ciente.count > 10 %}
                                         <span class="text-xs text-gray-500">+{{ status_info.ciente.count|add:"-10" }} outros</span>
                                     {% endif %}
+                                    {% if is_sender %}
+                                        <a href="#status-destinatarios" class="text-xs font-semibold text-green-700 hover:underline ml-1">ver todos detalhados</a>
+                                    {% endif %}
                                 </div>
                             </div>
                             {% endif %}
@@ -382,73 +385,134 @@
             </div>
             {% endif %}
             
-            <!-- Status de Usuários (apenas para quem criou o comunicado) -->
+            {% comment %}Status de cada destinatário: SUPERADMIN e quem enviou (24/11/2026).{% endcomment %}
             {% if is_sender and users_status %}
-            <div class="px-4 sm:px-6 py-5 border-t border-gray-200" data-rc-revela>
-                <h3 class="rc-secao-titulo text-lg font-bold text-gray-900 mb-4">
-                    <span class="rc-secao-icone bg-indigo-500"><i class="fas fa-users text-sm"></i></span>
-                    Status dos destinatários
-                </h3>
-                
-                <!-- Estatísticas -->
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
-                    <div class="bg-red-50 p-4 rounded-2xl text-center rc-post">
-                        <div class="text-2xl font-bold text-red-600">
-                            <span data-rc-conta="{{ status_counts.not_viewed }}">{{ status_counts.not_viewed }}</span>
-                        </div>
-                        <div class="text-sm text-red-800">Não Visualizados</div>
-                    </div>
-                    <div class="bg-yellow-50 p-4 rounded-2xl text-center rc-post">
-                        <div class="text-2xl font-bold text-yellow-600">
-                            <span data-rc-conta="{{ status_counts.with_doubt }}">{{ status_counts.with_doubt }}</span>
-                        </div>
-                        <div class="text-sm text-yellow-800">Com Dúvidas</div>
-                    </div>
-                    <div class="bg-green-50 p-4 rounded-2xl text-center rc-post">
-                        <div class="text-2xl font-bold text-green-600">
-                            <span data-rc-conta="{{ status_counts.aware }}">{{ status_counts.aware }}</span>
-                        </div>
-                        <div class="text-sm text-green-800">Cientes</div>
-                    </div>
+            <div class="px-4 sm:px-6 py-5 border-t border-gray-200" id="status-destinatarios" data-rc-revela data-rc-status>
+                <div class="flex items-center justify-between gap-3 flex-wrap mb-4">
+                    <h3 class="rc-secao-titulo text-lg font-bold text-gray-900">
+                        <span class="rc-secao-icone bg-indigo-500"><i class="fas fa-users text-sm"></i></span>
+                        Status dos destinatários
+                        <span class="text-sm font-normal text-gray-500">({{ status_counts.total }})</span>
+                    </h3>
+                    <a href="?exportar=status" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:border-orange-300 hover:text-orange-600 transition-colors">
+                        <i class="fas fa-file-csv"></i> Exportar
+                    </a>
                 </div>
-                
-                <!-- Lista detalhada -->
-                <div class="space-y-2 max-h-96 overflow-y-auto">
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4" role="tablist" aria-label="Filtrar por situação">
+                    <button type="button" data-rc-aba="ESTOU_CIENTE" aria-selected="true"
+                            class="rc-status-aba rc-post text-left p-3 rounded-2xl bg-green-50 border-2 border-transparent">
+                        <span class="block text-2xl font-bold text-green-600" data-rc-conta="{{ status_counts.aware }}">{{ status_counts.aware }}</span>
+                        <span class="text-xs sm:text-sm text-green-800"><i class="fas fa-check mr-1"></i>Cientes</span>
+                    </button>
+                    <button type="button" data-rc-aba="ESTOU_COM_DUVIDA" aria-selected="false"
+                            class="rc-status-aba rc-post text-left p-3 rounded-2xl bg-yellow-50 border-2 border-transparent">
+                        <span class="block text-2xl font-bold text-yellow-600" data-rc-conta="{{ status_counts.with_doubt }}">{{ status_counts.with_doubt }}</span>
+                        <span class="text-xs sm:text-sm text-yellow-800"><i class="fas fa-question mr-1"></i>Com dúvida</span>
+                    </button>
+                    <button type="button" data-rc-aba="ABRIU" aria-selected="false"
+                            class="rc-status-aba rc-post text-left p-3 rounded-2xl bg-blue-50 border-2 border-transparent">
+                        <span class="block text-2xl font-bold text-blue-600" data-rc-conta="{{ status_counts.opened }}">{{ status_counts.opened }}</span>
+                        <span class="text-xs sm:text-sm text-blue-800"><i class="fas fa-eye mr-1"></i>Abriu, sem marcar</span>
+                    </button>
+                    <button type="button" data-rc-aba="NAO_ABRIU" aria-selected="false"
+                            class="rc-status-aba rc-post text-left p-3 rounded-2xl bg-red-50 border-2 border-transparent">
+                        <span class="block text-2xl font-bold text-red-600" data-rc-conta="{{ status_counts.not_viewed }}">{{ status_counts.not_viewed }}</span>
+                        <span class="text-xs sm:text-sm text-red-800"><i class="fas fa-clock mr-1"></i>Não abriu</span>
+                    </button>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-2 mb-3">
+                    <div class="relative flex-1">
+                        <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                        <input type="search" data-rc-status-busca placeholder="Buscar por nome, setor ou cargo…"
+                               class="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm focus:border-orange-400 focus:outline-none">
+                    </div>
+                    <button type="button" data-rc-aba="" aria-selected="false"
+                            class="rc-status-aba px-4 py-2.5 rounded-xl border-2 border-transparent bg-gray-100 text-sm font-medium text-gray-700">Todos</button>
+                </div>
+                <p class="text-xs text-gray-500 mb-2" data-rc-status-resumo></p>
+
+                <ul class="divide-y divide-gray-100 border border-gray-100 rounded-2xl overflow-hidden max-h-[32rem] overflow-y-auto" data-rc-status-lista>
                     {% for status in users_status %}
-                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div class="flex items-center space-x-3 min-w-0 flex-1">
-                            <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0">
-                                <span class="text-xs font-medium text-gray-600">
-                                    {{ status.user.first_name|first|upper }}{{ status.user.last_name|first|upper }}
-                                </span>
-                            </div>
+                    <li class="flex items-center justify-between gap-3 px-3 sm:px-4 py-3 bg-white"
+                        data-status="{{ status.status }}"
+                        data-busca="{{ status.user.get_full_name|lower }} {{ status.user.sector.name|default:''|lower }} {{ status.user.job_title|default:''|lower }} {{ status.user.email|lower }}">
+                        <div class="flex items-center gap-3 min-w-0 flex-1">
+                            {% if status.user.profile_picture %}
+                            <img src="{{ status.user.profile_picture.url }}" alt="" loading="lazy" class="w-9 h-9 rounded-full object-cover flex-shrink-0">
+                            {% else %}
+                            <span class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-semibold" style="background:linear-gradient(135deg,#ff6b35,#f59e0b)">{{ status.user.first_name|first|upper }}{{ status.user.last_name|first|upper }}</span>
+                            {% endif %}
                             <div class="min-w-0">
-                                <div class="font-medium text-gray-900 truncate">{{ status.user.get_full_name }}</div>
-                                <div class="text-sm text-gray-500 truncate">{{ status.user.email }} - {{ status.user.sector.name }}</div>
+                                <p class="font-medium text-gray-900 truncate">{{ status.user.get_full_name|default:status.user.email }}</p>
+                                <p class="text-xs text-gray-500 truncate">
+                                    {% if status.user.job_title %}{{ status.user.job_title }} · {% endif %}{{ status.user.sector.name|default:"Sem setor" }}
+                                </p>
                             </div>
                         </div>
                         <div class="text-right flex-shrink-0">
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold
                                 {% if status.status == 'ESTOU_CIENTE' %}bg-green-100 text-green-800
                                 {% elif status.status == 'ESTOU_COM_DUVIDA' %}bg-yellow-100 text-yellow-800
+                                {% elif status.status == 'ABRIU' %}bg-blue-100 text-blue-800
                                 {% else %}bg-red-100 text-red-800{% endif %}">
-                                {% if status.status == 'ESTOU_CIENTE' %}
-                                    <i class="fas fa-check mr-1"></i>
-                                {% elif status.status == 'ESTOU_COM_DUVIDA' %}
-                                    <i class="fas fa-question mr-1"></i>
-                                {% else %}
-                                    <i class="fas fa-clock mr-1"></i>
-                                {% endif %}
-                                {{ status.status_display }}
+                                {% if status.status == 'ESTOU_CIENTE' %}<i class="fas fa-check mr-1"></i>{% elif status.status == 'ESTOU_COM_DUVIDA' %}<i class="fas fa-question mr-1"></i>{% elif status.status == 'ABRIU' %}<i class="fas fa-eye mr-1"></i>{% else %}<i class="fas fa-clock mr-1"></i>{% endif %}{{ status.status_display }}
                             </span>
-                            {% if status.read_at %}
-                                <div class="text-xs text-gray-500 mt-1">{{ status.read_at|date:"d/m/Y H:i" }}</div>
+                            {% if status.respondido_em %}
+                            <p class="text-[11px] text-gray-500 mt-1" title="Abriu em {{ status.aberto_em|date:'d/m/Y H:i' }}">marcou {{ status.respondido_em|date:"d/m/Y H:i" }}</p>
+                            {% elif status.aberto_em %}
+                            <p class="text-[11px] text-gray-500 mt-1">abriu {{ status.aberto_em|date:"d/m/Y H:i" }}</p>
                             {% endif %}
                         </div>
-                    </div>
+                    </li>
                     {% endfor %}
-                </div>
+                    <li class="hidden px-4 py-8 text-center text-sm text-gray-500 bg-white" data-rc-status-vazio>Ninguém nessa situação.</li>
+                </ul>
             </div>
+            <style>
+                .rc-status-aba[aria-selected="true"] { border-color: currentColor; box-shadow: 0 10px 22px -16px rgba(15, 23, 42, .5); }
+                .rc-status-aba[aria-selected="true"].bg-green-50 { border-color: #22c55e; }
+                .rc-status-aba[aria-selected="true"].bg-yellow-50 { border-color: #eab308; }
+                .rc-status-aba[aria-selected="true"].bg-blue-50 { border-color: #3b82f6; }
+                .rc-status-aba[aria-selected="true"].bg-red-50 { border-color: #ef4444; }
+                .rc-status-aba[aria-selected="true"].bg-gray-100 { border-color: #ff6b35; }
+            </style>
+            <script>
+            (function () {
+                var caixa = document.querySelector('[data-rc-status]');
+                if (!caixa) { return; }
+                var abas = [].slice.call(caixa.querySelectorAll('[data-rc-aba]'));
+                var busca = caixa.querySelector('[data-rc-status-busca]');
+                var itens = [].slice.call(caixa.querySelectorAll('[data-status]'));
+                var vazio = caixa.querySelector('[data-rc-status-vazio]');
+                var resumo = caixa.querySelector('[data-rc-status-resumo]');
+                var atual = 'ESTOU_CIENTE';
+                function limpo(t) { return (t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+                itens.forEach(function (li) { li.dataset.busca = limpo(li.dataset.busca); });
+                function filtrar() {
+                    var termo = limpo(busca.value).trim(), n = 0;
+                    itens.forEach(function (li) {
+                        var ok = (!atual || li.dataset.status === atual) && (!termo || li.dataset.busca.indexOf(termo) !== -1);
+                        li.classList.toggle('hidden', !ok);
+                        if (ok) { n++; }
+                    });
+                    vazio.classList.toggle('hidden', n > 0);
+                    var aba = abas.filter(function (a) { return a.dataset.rcAba === atual; })[0];
+                    resumo.textContent = n + (n === 1 ? ' pessoa' : ' pessoas') + (atual ? ' · ' + (aba ? aba.textContent.replace(/\s+/g, ' ').replace(/^[\d.\s]+/, '').trim() : '') : ' · todas as situações');
+                }
+                abas.forEach(function (a) {
+                    a.addEventListener('click', function () {
+                        atual = a.dataset.rcAba;
+                        abas.forEach(function (b) { b.setAttribute('aria-selected', String(b === a)); });
+                        filtrar();
+                    });
+                });
+                busca.addEventListener('input', filtrar);
+                if (location.hash === '#status-destinatarios-todos') { atual = ''; abas.forEach(function (b) { b.setAttribute('aria-selected', String(b.dataset.rcAba === '')); }); }
+                filtrar();
+            })();
+            </script>
             {% endif %}
         </div>
     </div>
