@@ -267,6 +267,25 @@ t('filtro por tipo', link(at.pk) in cd.get('/ponto/dp/', {'filtro': 'todas', 'ti
   and link(aj.pk) not in cd.get('/ponto/dp/', {'filtro': 'todas', 'tipo': 'ATESTADO'}).content.decode())
 t('contador no menu do DP', 'title="Esperando o DP">1<' in h)
 
+print('Exportar relatório (24/11/2026)')
+from io import BytesIO
+from openpyxl import load_workbook
+h = cd.get('/ponto/dp/', {'filtro': 'todas', 'tipo': 'ATESTADO'}).content.decode()
+t('o botão leva os filtros da tela', 'Exportar relatório' in h and 'exportar=xlsx' in h and 'tipo=ATESTADO' in h[h.index('Exportar relatório') - 300:])
+r = cd.get('/ponto/dp/', {'filtro': 'todas', 'exportar': 'xlsx'})
+t('baixa um .xlsx', r.status_code == 200 and 'spreadsheetml' in r['Content-Type'] and 'caixa-dp-' in r['Content-Disposition'], r.status_code)
+wb = load_workbook(BytesIO(r.content))
+linhas = list(wb['Solicitações'].iter_rows(values_only=True))
+t('uma linha por solicitação, com cabeçalho', linhas[0][:3] == ('Nº', 'Colaborador', 'E-mail') and len(linhas) - 1 == Solicitacao.objects.count(),
+  (len(linhas), Solicitacao.objects.count()))
+t('traz situação, período e justificativa', any(l[0] == velha.pk and l[6] == velha.get_status_display() and l[7] == velha.periodo
+                                             and l[11] == velha.justificativa for l in linhas[1:]))
+t('a aba Resumo diz o filtro e os números', wb['Resumo']['B4'].value == 'Todas' and wb['Resumo']['B11'].value == k['aguardando'])
+r = cd.get('/ponto/dp/', {'filtro': 'todas', 'tipo': 'ATESTADO', 'exportar': 'xlsx'})
+ids = [l[0] for l in list(load_workbook(BytesIO(r.content))['Solicitações'].iter_rows(values_only=True))[1:]]
+t('respeita o filtro (só atestados)', at.pk in ids and aj.pk not in ids, ids)
+t('colaborador não exporta', ca.get('/ponto/dp/', {'exportar': 'xlsx'}).status_code == 302)
+
 print('Responsáveis do DP')
 t('só o SUPERADMIN escolhe', cd.get('/ponto/dp/responsaveis/').status_code == 302)
 cs.post('/ponto/dp/responsaveis/', {'acao': 'adicionar', 'user': bruno.pk})

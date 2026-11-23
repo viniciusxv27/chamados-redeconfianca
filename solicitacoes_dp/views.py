@@ -232,10 +232,94 @@ def caixa(request):
         lista = lista.filter(data__gte=de)
     if ate:
         lista = lista.filter(data__lte=ate)
+    if request.GET.get('exportar') == 'xlsx':
+        return _exportar_caixa(lista, kpis, dict(FILTROS).get(filtro, 'Todas'), dict(S.TIPOS).get(tipo, ''), q, de, ate)
+    # O "Exportar relatório" leva os mesmos filtros da tela (24/11/2026).
+    parametros = request.GET.copy()
+    parametros.pop('pagina', None)
+    parametros['exportar'] = 'xlsx'
     return render(request, 'solicitacoes_dp/caixa.html', _base(
-        request, 'caixa_dp', kpis=kpis, filtro=filtro, filtros=FILTROS, tipo=tipo, tipos=S.TIPOS, q=q, de=de, ate=ate,
-        pagina=Paginator(lista, 30).get_page(request.GET.get('pagina')), voltar=request.get_full_path(),
-        e_superadmin=e_superadmin(request.user)))
+        request, 'caixa_dp', url_exportar='?' + parametros.urlencode(),
+        **_contexto_da_caixa(kpis, filtro, tipo, q, de, ate, lista, request)))
+
+
+def _contexto_da_caixa(kpis, filtro, tipo, q, de, ate, lista, request):
+    return dict(kpis=kpis, filtro=filtro, filtros=FILTROS, tipo=tipo, tipos=S.TIPOS, q=q, de=de, ate=ate,
+                pagina=Paginator(lista, 30).get_page(request.GET.get('pagina')), voltar=request.get_full_path(),
+                e_superadmin=e_superadmin(request.user))
+
+
+def _exportar_caixa(lista, kpis, filtro_rotulo, tipo_rotulo, q, de, ate):
+    """O relatório da caixa do DP em .xlsx: tudo o que o filtro da tela traz (todas as páginas) + resumo."""
+    from io import BytesIO
+
+    from django.http import HttpResponse
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    def quando(d):
+        return timezone.localtime(d).strftime('%d/%m/%Y %H:%M') if d else ''
+
+    wb = Workbook()
+    aba = wb.active
+    aba.title = 'Solicitações'
+    cabecalho = ['Nº', 'Colaborador', 'E-mail', 'Setor', 'Tipo', 'Tipo de documento', 'Situação', 'Período',
+                 'Dias', 'O que aconteceu', 'Marcações', 'Justificativa', 'Com', 'Última resposta do DP',
+                 'Enviada em', 'Aprovada em', 'Lançado no ponto', 'Lançado em']
+    aba.append(cabecalho)
+    for sol in lista.order_by('-enviada_em').prefetch_related(None):
+        c = sol.colaborador
+        aba.append([
+            sol.pk, c.get_full_name() or c.username, c.email, c.sector.name if c.sector_id else '',
+            sol.get_tipo_display(), sol.get_especie_display() if sol.especie else '', sol.get_status_display(),
+            sol.periodo, sol.dias, sol.get_motivo_ajuste_display() if sol.motivo_ajuste else '', sol.horarios_texto,
+            sol.justificativa, sol.responsavel.get_full_name() if sol.responsavel_id else '', sol.resposta,
+            quando(sol.enviada_em), quando(sol.aprovada_em),
+            ('Sim' if sol.ajustado_no_ponto else 'Não') if sol.tipo == S.AJUSTE else '', quando(sol.ajustado_em),
+        ])
+    destaque = PatternFill('solid', fgColor='0891B2')
+    for celula in aba[1]:
+        celula.font = Font(bold=True, color='FFFFFF')
+        celula.fill = destaque
+        celula.alignment = Alignment(vertical='center')
+    larguras = [7, 30, 30, 24, 16, 20, 22, 34, 6, 22, 34, 50, 26, 40, 17, 17, 14, 17]
+    for i, largura in enumerate(larguras, start=1):
+        aba.column_dimensions[get_column_letter(i)].width = largura
+    aba.freeze_panes = 'A2'
+    aba.auto_filter.ref = aba.dimensions
+
+    resumo = wb.create_sheet('Resumo')
+    linhas = [
+        ('Relatório da caixa do DP', ''),
+        ('Gerado em', timezone.localtime().strftime('%d/%m/%Y %H:%M')),
+        ('', ''),
+        ('Filtro', filtro_rotulo),
+        ('Tipo', tipo_rotulo or 'Todos os tipos'),
+        ('De', de.strftime('%d/%m/%Y') if de else ''),
+        ('Até', ate.strftime('%d/%m/%Y') if ate else ''),
+        ('Busca', q),
+        ('Solicitações no relatório', aba.max_row - 1),
+        ('', ''),
+        ('Aguardando o DP', kpis['aguardando']),
+        ('Em análise', kpis['em_analise']),
+        ('Devolvidas (com o colaborador)', kpis['devolvidas']),
+        ('Ajustes a lançar no ponto', kpis['lancar']),
+        ('Aprovadas no mês', kpis['aprovadas_mes']),
+        ('Atrasadas (mais de 2 dias)', kpis['atrasadas']),
+    ]
+    for linha in linhas:
+        resumo.append(list(linha))
+    resumo['A1'].font = Font(bold=True, size=14)
+    resumo.column_dimensions['A'].width = 34
+    resumo.column_dimensions['B'].width = 26
+
+    saida = BytesIO()
+    wb.save(saida)
+    resposta = HttpResponse(saida.getvalue(),
+                            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resposta['Content-Disposition'] = f'attachment; filename="caixa-dp-{timezone.localdate():%Y-%m-%d}.xlsx"'
+    return resposta
 
 
 @login_required

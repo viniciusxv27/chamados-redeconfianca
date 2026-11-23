@@ -2,7 +2,7 @@
 {% block tg_titulo %}Caixa do DP{% endblock %}
 {% block tg_cabecalho %}Caixa do DP{% endblock %}
 {% block tg_subtitulo %}Ajustes de ponto, atestados e declarações enviados pelos colaboradores{% endblock %}
-{% block tg_acoes %}{% if e_superadmin %}<a href="{% url 'solicitacoes_dp:responsaveis' %}" class="px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-700 hover:bg-gray-50"><i class="fas fa-users-gear mr-1"></i>Responsáveis do DP</a>{% endif %}{% endblock %}
+{% block tg_acoes %}<div class="flex items-center gap-2 flex-wrap"><a href="{{ url_exportar|default:'?exportar=xlsx' }}" class="px-3 py-2 rounded-lg bg-cyan-600 text-white text-sm font-semibold hover:bg-cyan-700" title="Baixa em Excel o que está filtrado na tela (todas as páginas)"><i class="fas fa-file-excel mr-1"></i>Exportar relatório</a>{% if e_superadmin %}<a href="{% url 'solicitacoes_dp:responsaveis' %}" class="px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-700 hover:bg-gray-50"><i class="fas fa-users-gear mr-1"></i>Responsáveis do DP</a>{% endif %}</div>{% endblock %}
 
 {% block dp_conteudo %}
 <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
