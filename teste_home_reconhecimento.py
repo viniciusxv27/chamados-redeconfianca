@@ -146,6 +146,30 @@ try:
     t('e as animações compartilhadas', 'id="rcProgresso"' in html and 'rc-reacoes' in html)
     t('comentários e confirmação de leitura continuam', 'id="comment-form"' in html and 'ESTOU_CIENTE' in html)
 
+    print('\n== /communications/ NO MESMO ESTILO ==')
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+    r = ca.get('/communications/')
+    html = r.content.decode()
+    t('a lista abre com o topo novo, filtros e busca', r.status_code == 200 and 'rc-hero' in html
+      and 'data-rc-filtro="ESTOU_CIENTE"' in html and 'data-rc-busca' in html, r.status_code)
+    t('o comunicado aparece com a situação para o filtro', f'data-rc-comm="{com.id}"' in html and 'data-status="NAO_VISUALIZADO"' in html)
+    t('ciente e curtir continuam (mesmos botões do JS)', 'class="status-btn' in html and 'class="reaction-btn' in html)
+    from communications.models import CommunicationRead
+    CommunicationRead.objects.update_or_create(communication=com, user=ana, defaults={'status': 'ESTOU_CIENTE'})
+    html = ca.get('/communications/').content.decode()
+    t('depois de "ciente" o cartão muda de situação', f'data-rc-comm="{com.id}" data-status="ESTOU_CIENTE"' in html)
+    extra = [Communication.objects.create(title=f'ZZ extra {i}', message='x', sender=bia) for i in range(4)]
+    for e in extra:
+        e.recipients.add(ana)
+    with CaptureQueriesContext(connection) as poucas:
+        ca.get('/communications/')
+    for e in extra[:2]:
+        CommunicationRead.objects.create(communication=e, user=ana, status='ESTOU_CIENTE')
+    with CaptureQueriesContext(connection) as depois:
+        ca.get('/communications/')
+    t('o status não custa uma consulta por comunicado', len(depois) <= len(poucas) + 1, (len(poucas), len(depois)))
+
     print('\n== /users/ E /users/profile/ NO MESMO ESTILO ==')
     r = ca.get('/users/')
     html = r.content.decode()

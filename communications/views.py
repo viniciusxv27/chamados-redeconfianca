@@ -307,33 +307,28 @@ def communication_list(request):
             'viewed_by', 'liked_by', 'comments', 'images'
         ).distinct().order_by('-created_at')
     
+    communications = list(communications)
+
     # Verificar quais comunicados foram lidos
     read_communications = CommunicationRead.objects.filter(
         user=request.user
     ).values_list('communication_id', flat=True)
-    
-    # Obter status de cada comunicado e calcular contadores
+
+    # Status de cada comunicado numa consulta só (antes era uma por comunicado).
+    rotulos = dict(CommunicationRead.STATUS_CHOICES)
+    leituras = dict(CommunicationRead.objects.filter(
+        user=request.user, communication_id__in=[c.id for c in communications]
+    ).values_list('communication_id', 'status'))
     communication_statuses = {}
     status_counts = {
         'NAO_VISUALIZADO': 0,
         'ESTOU_CIENTE': 0,
         'ESTOU_COM_DUVIDA': 0
     }
-    
     for comm in communications:
-        try:
-            read_obj = CommunicationRead.objects.get(user=request.user, communication=comm)
-            communication_statuses[comm.id] = {
-                'status': read_obj.status,
-                'status_display': read_obj.get_status_display()
-            }
-            status_counts[read_obj.status] += 1
-        except CommunicationRead.DoesNotExist:
-            communication_statuses[comm.id] = {
-                'status': 'NAO_VISUALIZADO',
-                'status_display': 'Não Visualizado'
-            }
-            status_counts['NAO_VISUALIZADO'] += 1
+        status = leituras.get(comm.id, 'NAO_VISUALIZADO')
+        communication_statuses[comm.id] = {'status': status, 'status_display': rotulos.get(status, 'Não Visualizado')}
+        status_counts[status] = status_counts.get(status, 0) + 1
     
     return render(request, 'communications/list.html', {
         'communications': communications,

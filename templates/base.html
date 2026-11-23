@@ -73,7 +73,8 @@
         .sidebar-collapsed {
             width: 4.5rem !important; /* 72px */
             min-width: 4.5rem !important;
-            max-width: 4.5rem !important;
+            /* Sem max-width: de "none" para um valor o navegador não anima, e o recolher pulava
+               direto para 72px (24/11/2026). A largura com !important já segura o tamanho. */
             overflow-x: hidden !important;
         }
         
@@ -212,6 +213,29 @@
         @media (max-width: 1023px) {
             #sidebar { transition: none !important; }
             html.rc-menu-aberto #sidebar { transform: none !important; }
+        }
+
+        /* Animação de abrir o menu (24/11/2026), sem reabrir a "tela cinza": o menu ABRE já na
+           tela (rc-menu-aberto, sem transição) e a animação é ligada depois, por classe posta
+           dentro de um requestAnimationFrame — se o WebView não desenhar, o rAF não roda, a classe
+           não entra e o menu simplesmente aparece. A animação usa `translate` (propriedade própria),
+           que não briga com o `transform: none !important` que garante o menu na tela. O fundo
+           escuro não anima. Fechar: o fundo some na hora; o menu desliza e a classe sai no fim da
+           animação ou por tempo. */
+        @keyframes rc-menu-entra { from { translate: -100% 0; } to { translate: 0 0; } }
+        @keyframes rc-menu-sai   { from { translate: 0 0; } to { translate: -100% 0; } }
+        @keyframes rc-menu-item  { from { opacity: 0; translate: -14px 0; } }
+        @media (max-width: 1023px) {
+            html.rc-menu-aberto #sidebar.rc-menu-anima { animation: rc-menu-entra .32s cubic-bezier(.2, .8, .2, 1); }
+            #sidebar.rc-menu-saindo { transform: none !important; animation: rc-menu-sai .22s ease-in forwards; }
+        }
+        #sidebar.rc-menu-anima nav > ul > li > .menu-item,
+        #sidebar.rc-menu-anima nav > ul > li > .menu-grupo {
+            animation: rc-menu-item .4s cubic-bezier(.2, .8, .2, 1) both;
+            animation-delay: calc(var(--rc-i, 0) * 22ms + 60ms);
+        }
+        @media (prefers-reduced-motion: reduce) {
+            #sidebar.rc-menu-anima, #sidebar.rc-menu-saindo, #sidebar.rc-menu-anima * { animation: none !important; }
         }
     </style>
     {% load static %}
@@ -1654,17 +1678,43 @@
                 if (!isMobile()) return;
 
                 isMobileOpen = true;
+                sidebar.classList.remove('rc-menu-saindo');
                 document.documentElement.classList.add('rc-menu-aberto');
                 sidebar.classList.remove('-translate-x-full');
                 sidebar.classList.add('translate-x-0');
                 mobileOverlay.classList.remove('hidden');
                 document.body.style.overflow = 'hidden';
+                animarMenu();
             }
+
+            // Liga a animação de entrada (e a cascata dos itens) só num quadro já desenhado.
+            var menuCalmo = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            function animarMenu() {
+                if (menuCalmo || !window.requestAnimationFrame) return;
+                requestAnimationFrame(function () {
+                    var itens = sidebar.querySelectorAll('nav > ul > li > .menu-item, nav > ul > li > .menu-grupo');
+                    for (var i = 0; i < itens.length; i++) { itens[i].style.setProperty('--rc-i', Math.min(i, 24)); }
+                    sidebar.classList.remove('rc-menu-anima');
+                    void sidebar.offsetWidth;
+                    sidebar.classList.add('rc-menu-anima');
+                });
+            }
+            sidebar.addEventListener('animationend', function (e) {
+                if (e.target !== sidebar) return;
+                if (e.animationName === 'rc-menu-sai') sidebar.classList.remove('rc-menu-saindo');
+            });
 
             // Fechar vale sempre — sem olhar a largura: se o WebView informasse uma largura de
             // desktop por um instante, o fechamento era ignorado e o fundo ficava.
             function closeMobileMenu() {
+                var estavaAberto = isMobileOpen && document.documentElement.classList.contains('rc-menu-aberto');
                 isMobileOpen = false;
+                sidebar.classList.remove('rc-menu-anima');
+                // Saída animada só se estava aberto; a classe sai no fim da animação ou em 400 ms.
+                if (estavaAberto && isMobile() && !menuCalmo && document.visibilityState === 'visible') {
+                    sidebar.classList.add('rc-menu-saindo');
+                    setTimeout(function () { sidebar.classList.remove('rc-menu-saindo'); }, 400);
+                }
                 document.documentElement.classList.remove('rc-menu-aberto');
                 if (isMobile()) {
                     sidebar.classList.remove('translate-x-0');
@@ -1802,6 +1852,7 @@
                     sidebar.classList.remove('sidebar-collapsed');
                     mainContent.classList.remove('main-content-collapsed', 'ml-0');
                     mainContent.classList.add('lg:ml-64');
+                    animarMenu();   // os itens entram em cascata ao expandir (PC)
                 }
                 
                 // Save state to localStorage
