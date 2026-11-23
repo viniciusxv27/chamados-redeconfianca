@@ -3,286 +3,219 @@
 
 {% block title %}Dashboard - Rede Confiança{% endblock %}
 
+{% block extra_css %}
+{% include '_rc_animacoes.html' %}
+<style>
+    .rc-numero { transition: transform .25s cubic-bezier(.2, .8, .2, 1), box-shadow .25s ease; }
+    .rc-numero:hover { transform: translateY(-3px); box-shadow: 0 16px 30px -22px rgba(15, 23, 42, .45); }
+    .rc-numero-icone { width: 2.6rem; height: 2.6rem; border-radius: .9rem; display: inline-flex; align-items: center; justify-content: center; }
+    @media (prefers-reduced-motion: reduce) { .rc-numero, .rc-numero:hover { transition: none; transform: none; } }
+</style>
+{% endblock %}
+
 {% block content %}
 {% include 'cameras/_alerta_dashboard.html' %}
-<div class="max-w-7xl mx-auto">
-    <!-- Page Header -->
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p class="text-gray-600 mt-2">Bem-vindo ao sistema de chamados</p>
-    </div>
-    
-    <!-- User Info Section -->
-    <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-6">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between space-y-4 sm:space-y-0">
-            <div class="flex items-center space-x-3 sm:space-x-4">
-                {% if user.profile_picture %}
-                    <img src="{{ user.profile_picture.url }}" alt="{{ user.full_name }}" class="w-12 h-12 sm:w-16 sm:h-16 rounded-full object-cover border-2 border-primary/20 flex-shrink-0">
-                {% elif user.avatar %}
-                    <img src="{{ user.avatar.url }}" alt="{{ user.full_name }}" class="w-12 h-12 sm:w-16 sm:h-16 rounded-full object-cover border-2 border-primary/20 flex-shrink-0">
-                {% else %}
-                    <div class="w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-primary to-orange-500 rounded-full flex items-center justify-center border-2 border-primary/20 flex-shrink-0">
-                        <span class="text-white font-bold text-lg sm:text-xl">{{ user.first_name.0 }}{{ user.last_name.0 }}</span>
-                    </div>
+<div class="max-w-6xl mx-auto">
+    {% comment %}Topo: quem é, saldo e atalhos (mesmo estilo da home, 23/11/2026).{% endcomment %}
+    <section class="rc-hero rc-surge relative overflow-hidden rounded-3xl text-white shadow-lg mb-6">
+        <span class="rc-forma rc-forma-1" aria-hidden="true"></span>
+        <span class="rc-forma rc-forma-2" aria-hidden="true"></span>
+        <div class="relative p-5 sm:p-7 flex flex-col lg:flex-row lg:items-center gap-5">
+            <div class="flex items-center gap-4 min-w-0 flex-1">
+                <a href="{% url 'profile' %}" class="rc-hero-avatar w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden" title="Meu perfil">
+                    {% if user.profile_picture %}
+                        <img src="{{ user.profile_picture.url }}" alt="{{ user.full_name }}" class="w-full h-full object-cover">
+                    {% elif user.avatar %}
+                        <img src="{{ user.avatar.url }}" alt="{{ user.full_name }}" class="w-full h-full object-cover">
+                    {% else %}
+                        <span class="font-bold text-xl sm:text-2xl">{{ user.first_name.0 }}{{ user.last_name.0 }}</span>
+                    {% endif %}
+                </a>
+                <div class="min-w-0">
+                    <p class="rc-hero-suave text-sm">Dashboard</p>
+                    <h1 class="text-2xl sm:text-3xl font-bold leading-tight truncate">{{ user.full_name }}</h1>
+                    <p class="rc-hero-suave text-sm truncate">{{ user.get_hierarchy_display }}{% if user.sector %} · {{ user.sector.name }}{% endif %}</p>
+                </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+                {% if user.hierarchy != 'PADRAO' and user.hierarchy != 'ADMINISTRATIVO' and user.hierarchy != 'SUPERVISOR' %}
+                <div class="rc-hero-saldo rounded-2xl px-4 py-2">
+                    <span class="rc-hero-suave text-[11px] uppercase tracking-wide block">Saldo</span>
+                    <span class="text-lg font-bold whitespace-nowrap"><i class="fas fa-coins text-sm mr-1"></i>C$ {{ user.balance_cs }}</span>
+                </div>
                 {% endif %}
-                <div class="min-w-0 flex-1">
-                    <h2 class="text-lg sm:text-xl font-semibold text-gray-900 truncate">{{ user.full_name }}</h2>
-                    <p class="text-sm sm:text-base text-gray-600 truncate">{{ user.get_hierarchy_display }}{% if user.sector %} - {{ user.sector.name }}{% endif %}</p>
-                    {% if user.hierarchy != 'PADRAO' and user.hierarchy != 'ADMINISTRATIVO' and user.hierarchy != 'SUPERVISOR' %}
-                    <p class="text-xs sm:text-sm text-gray-500">
-                        <i class="fas fa-coins text-primary mr-1"></i>
-                        Saldo: <span class="font-semibold text-primary">C$ {{ user.balance_cs }}</span>
-                    </p>
-                    {% endif %}
-                </div>
-            </div>
-            <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
-                <a href="{% url 'ticket_create' %}" class="bg-secondary text-white px-4 py-2 text-sm rounded-lg hover:bg-gray-800 transition-colors text-center">
-                    <i class="fas fa-plus mr-2 sm:mr-1"></i>
-                    <span class="sm:hidden">Novo Chamado</span>
-                    <span class="hidden sm:inline">Novo</span>
+                <a href="{% url 'ticket_create' %}" data-rc-pop style="--i: 1"
+                   class="rc-hero-acao rc-sobe rounded-2xl px-4 py-3 inline-flex items-center gap-2 font-semibold text-sm">
+                    <i class="fas fa-plus-circle"></i> Novo chamado
                 </a>
-                <a href="{% url 'communications:communications_list' %}" class="bg-blue-600 text-white px-4 py-2 text-sm rounded-lg hover:bg-blue-700 transition-colors text-center relative">
-                    <i class="fas fa-bullhorn mr-2 sm:mr-1"></i>
-                    <span class="sm:hidden">Comunicados</span>
-                    <span class="hidden sm:inline">Comunicados</span>
+                <a href="{% url 'communications:communications_list' %}" data-rc-pop style="--i: 2"
+                   class="rc-hero-acao rc-sobe rounded-2xl px-4 py-3 inline-flex items-center gap-2 font-semibold text-sm relative">
+                    <i class="fas fa-bullhorn"></i> Comunicados
                     {% if unread_communications %}
-                    <span class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full px-2 py-1 text-xs min-w-[1.25rem] h-5 flex items-center justify-center">{{ unread_communications|length }}</span>
+                    <span class="bg-white text-orange-600 rounded-full min-w-[1.4rem] h-[1.4rem] px-1 text-xs font-bold flex items-center justify-center" title="Não lidos">{{ unread_communications|length }}</span>
                     {% endif %}
                 </a>
             </div>
         </div>
-    </div>
-    
-    <!-- Comunicados não lidos -->
-    {% if unread_communications %}
-    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-        <div class="flex items-center">
-            <i class="fas fa-bullhorn text-blue-600 mr-3"></i>
-            <div class="flex-1">
-                <h3 class="text-blue-800 font-semibold">Você tem {{ unread_communications|length }} comunicado{{ unread_communications|length|pluralize }} não lido{{ unread_communications|length|pluralize }}</h3>
-                <div class="mt-2">
-                    {% for comm in unread_communications %}
-                    <div class="mb-1">
-                        <a href="{% url 'communications:communication_detail' comm.id %}" class="text-blue-600 hover:text-blue-800 text-sm">
-                            • {{ comm.title }}
-                        </a>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
+    </section>
+
+    {% comment %}Números dos chamados que a pessoa enxerga.{% endcomment %}
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-8">
+        {% with stats.total_tickets as n %}
+        <a href="{% url 'tickets_list' %}" class="rc-numero rc-sobe bg-white rounded-2xl border border-gray-100 p-4" style="--i: 1">
+            <span class="rc-numero-icone bg-blue-100 text-blue-600"><i class="fas fa-ticket-alt"></i></span>
+            <p class="text-2xl font-bold text-gray-900 mt-3" data-rc-conta="{{ n }}">{{ n }}</p>
+            <p class="text-xs font-medium text-gray-500">Total</p>
+        </a>
+        {% endwith %}
+        <div class="rc-numero rc-sobe bg-white rounded-2xl border border-gray-100 p-4" style="--i: 2">
+            <span class="rc-numero-icone bg-green-100 text-green-600"><i class="fas fa-play"></i></span>
+            <p class="text-2xl font-bold text-gray-900 mt-3" data-rc-conta="{{ stats.open_tickets }}">{{ stats.open_tickets }}</p>
+            <p class="text-xs font-medium text-gray-500">Abertos</p>
         </div>
-    </div>
-    {% endif %}
-    
-    <!-- Quick Stats -->
-    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 sm:gap-6 mb-8">
-        <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6">
-            <div class="flex items-center">
-                <div class="p-2 sm:p-3 rounded-full bg-blue-100 flex-shrink-0">
-                    <i class="fas fa-ticket-alt text-blue-600 text-sm sm:text-base"></i>
-                </div>
-                <div class="ml-3 sm:ml-4 min-w-0 flex-1">
-                    <p class="text-xs sm:text-sm font-medium text-gray-600 truncate">Total</p>
-                    <p class="text-lg sm:text-2xl font-semibold text-gray-900">{{ stats.total_tickets }}</p>
-                </div>
-            </div>
+        <div class="rc-numero rc-sobe bg-white rounded-2xl border border-gray-100 p-4" style="--i: 3">
+            <span class="rc-numero-icone bg-yellow-100 text-yellow-600"><i class="fas fa-clock"></i></span>
+            <p class="text-2xl font-bold text-gray-900 mt-3" data-rc-conta="{{ stats.pending_tickets }}">{{ stats.pending_tickets }}</p>
+            <p class="text-xs font-medium text-gray-500">Em andamento</p>
         </div>
-        
-        <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6">
-            <div class="flex items-center">
-                <div class="p-2 sm:p-3 rounded-full bg-green-100 flex-shrink-0">
-                    <i class="fas fa-play text-green-600 text-sm sm:text-base"></i>
-                </div>
-                <div class="ml-3 sm:ml-4 min-w-0 flex-1">
-                    <p class="text-xs sm:text-sm font-medium text-gray-600 truncate">Abertos</p>
-                    <p class="text-lg sm:text-2xl font-semibold text-gray-900">{{ stats.open_tickets }}</p>
-                </div>
-            </div>
+        <div class="rc-numero rc-sobe bg-white rounded-2xl border {% if stats.overdue_tickets %}border-red-200{% else %}border-gray-100{% endif %} p-4" style="--i: 4">
+            <span class="rc-numero-icone bg-red-100 text-red-600"><i class="fas fa-exclamation-triangle"></i></span>
+            <p class="text-2xl font-bold {% if stats.overdue_tickets %}text-red-600{% else %}text-gray-900{% endif %} mt-3" data-rc-conta="{{ stats.overdue_tickets }}">{{ stats.overdue_tickets }}</p>
+            <p class="text-xs font-medium text-gray-500">Atrasados</p>
         </div>
-        
-        <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6">
-            <div class="flex items-center">
-                <div class="p-2 sm:p-3 rounded-full bg-yellow-100 flex-shrink-0">
-                    <i class="fas fa-clock text-yellow-600 text-sm sm:text-base"></i>
-                </div>
-                <div class="ml-3 sm:ml-4 min-w-0 flex-1">
-                    <p class="text-xs sm:text-sm font-medium text-gray-600 truncate">Andamento</p>
-                    <p class="text-lg sm:text-2xl font-semibold text-gray-900">{{ stats.pending_tickets }}</p>
-                </div>
-            </div>
+        <div class="rc-numero rc-sobe bg-white rounded-2xl border border-gray-100 p-4" style="--i: 5">
+            <span class="rc-numero-icone bg-emerald-100 text-emerald-600"><i class="fas fa-check"></i></span>
+            <p class="text-2xl font-bold text-gray-900 mt-3" data-rc-conta="{{ stats.closed_tickets }}">{{ stats.closed_tickets }}</p>
+            <p class="text-xs font-medium text-gray-500">Fechados</p>
         </div>
-        
-        <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6">
-            <div class="flex items-center">
-                <div class="p-2 sm:p-3 rounded-full bg-red-100 flex-shrink-0">
-                    <i class="fas fa-exclamation-triangle text-red-600 text-sm sm:text-base"></i>
-                </div>
-                <div class="ml-3 sm:ml-4 min-w-0 flex-1">
-                    <p class="text-xs sm:text-sm font-medium text-gray-600 truncate">Atrasados</p>
-                    <p class="text-lg sm:text-2xl font-semibold text-gray-900">{{ stats.overdue_tickets }}</p>
-                </div>
-            </div>
-        </div>
-        
-        <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6">
-            <div class="flex items-center">
-                <div class="p-2 sm:p-3 rounded-full bg-green-100 flex-shrink-0">
-                    <i class="fas fa-check text-green-600 text-sm sm:text-base"></i>
-                </div>
-                <div class="ml-3 sm:ml-4 min-w-0 flex-1">
-                    <p class="text-xs sm:text-sm font-medium text-gray-600 truncate">Fechados</p>
-                    <p class="text-lg sm:text-2xl font-semibold text-gray-900">{{ stats.closed_tickets }}</p>
-                </div>
-            </div>
-        </div>
-        
-        <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 col-span-2 sm:col-span-1">
-            <div class="flex items-center">
-                <div class="p-2 sm:p-3 rounded-full bg-purple-100 flex-shrink-0">
-                    <i class="fas fa-users text-purple-600 text-sm sm:text-base"></i>
-                </div>
-                <div class="ml-3 sm:ml-4 min-w-0 flex-1">
-                    <p class="text-xs sm:text-sm font-medium text-gray-600 truncate">Usuários</p>
-                    <p class="text-lg sm:text-2xl font-semibold text-gray-900">{{ stats.active_users }}</p>
-                </div>
-            </div>
+        <div class="rc-numero rc-sobe bg-white rounded-2xl border border-gray-100 p-4" style="--i: 6">
+            <span class="rc-numero-icone bg-purple-100 text-purple-600"><i class="fas fa-users"></i></span>
+            <p class="text-2xl font-bold text-gray-900 mt-3" data-rc-conta="{{ stats.active_users }}">{{ stats.active_users }}</p>
+            <p class="text-xs font-medium text-gray-500">Usuários ativos</p>
         </div>
     </div>
 
-    <!-- Comunicados fixados na dashboard -->
-    {% if pinned_communications %}
-    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-        <div class="flex items-center mb-3">
-            <i class="fas fa-thumbtack text-blue-600 mr-3"></i>
-            <h3 class="text-blue-800 font-semibold">Comunicados Fixados</h3>
-        </div>
-        <div class="space-y-3">
-            {% for comm in pinned_communications %}
-            <div class="bg-white border border-blue-200 rounded p-3">
-                <div class="flex justify-between items-start">
-                    <div class="flex-1">
-                        <h4 class="font-medium text-gray-900">{{ comm.title }}</h4>
-                        <div class="text-sm text-gray-600 mt-1 line-clamp-2">{{ comm.message|striptags|truncatechars:100 }}</div>
-                        <div class="flex items-center mt-2 text-xs text-gray-500">
-                            <span>Por {{ comm.sender.full_name }}</span>
-                            <span class="mx-2">•</span>
-                            <span>{{ comm.created_at|date:"d/m/Y H:i" }}</span>
-                        </div>
-                    </div>
-                    <a href="{% url 'communications:communication_detail' comm.id %}" class="text-blue-600 hover:text-blue-800 text-sm ml-3">
-                        Ver completo
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div class="lg:col-span-2 space-y-6">
+            {% if overdue_tickets %}
+            <section class="bg-white rounded-2xl border border-red-200 overflow-hidden" data-rc-revela>
+                <div class="px-5 py-4 bg-red-50 flex items-center justify-between gap-3">
+                    <h2 class="rc-secao-titulo text-lg font-bold text-red-800">
+                        <span class="rc-secao-icone bg-red-500"><i class="fas fa-exclamation-triangle text-sm"></i></span>
+                        Chamados em atraso
+                    </h2>
+                    <span class="text-xs font-semibold text-red-700 bg-white rounded-full px-2.5 py-1">{{ overdue_tickets|length }}</span>
+                </div>
+                <ul class="divide-y divide-gray-100">
+                    {% for ticket in overdue_tickets %}
+                    <li>
+                        <a href="{% url 'ticket_detail' ticket.id %}" class="flex items-center justify-between gap-3 px-5 py-3 hover:bg-red-50/60 transition-colors">
+                            <span class="min-w-0">
+                                <span class="block text-sm font-medium text-gray-900 truncate">#{{ ticket.id }} · {{ ticket.title }}</span>
+                                <span class="block text-xs text-red-600">Venceu <time datetime="{{ ticket.due_date|date:'c' }}" data-rc-quando>{{ ticket.due_date|date:"d/m/Y H:i" }}</time></span>
+                            </span>
+                            <i class="fas fa-chevron-right text-xs text-gray-400"></i>
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </section>
+            {% endif %}
+
+            <section class="bg-white rounded-2xl border border-gray-100 overflow-hidden" data-rc-revela>
+                <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
+                    <h2 class="rc-secao-titulo text-lg font-bold text-gray-900">
+                        <span class="rc-secao-icone bg-primary"><i class="fas fa-headset text-sm"></i></span>
+                        Chamados recentes
+                    </h2>
+                    <a href="{% url 'tickets_list' %}" class="text-sm font-semibold text-orange-600 hover:underline whitespace-nowrap">Ver todos <i class="fas fa-arrow-right text-xs"></i></a>
+                </div>
+                <div class="p-4 sm:p-5 space-y-3">
+                    {% for ticket in recent_tickets %}
+                    <a href="{% url 'ticket_detail' ticket.id %}" class="rc-post rc-sobe flex items-start gap-3 p-4 rounded-2xl border border-gray-100 hover:border-orange-200" style="--i: {{ forloop.counter }}">
+                        {% if ticket.created_by.profile_picture %}
+                            <img src="{{ ticket.created_by.profile_picture.url }}" alt="" class="w-10 h-10 rounded-full object-cover flex-shrink-0">
+                        {% else %}
+                            <span class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-white text-sm font-semibold" style="background:linear-gradient(135deg,#64748b,#334155)">{{ ticket.created_by.first_name.0 }}{{ ticket.created_by.last_name.0 }}</span>
+                        {% endif %}
+                        <span class="min-w-0 flex-1">
+                            <span class="flex flex-wrap items-center gap-1.5 mb-1">
+                                {% if ticket.status == 'ABERTO' %}<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-800">Aberto</span>
+                                {% elif ticket.status == 'EM_ANDAMENTO' %}<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-yellow-100 text-yellow-800">Em andamento</span>
+                                {% elif ticket.status == 'RESOLVIDO' %}<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-100 text-blue-800">Resolvido</span>
+                                {% elif ticket.status == 'FECHADO' %}<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-800">Fechado</span>
+                                {% else %}<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-700">{{ ticket.get_status_display }}</span>{% endif %}
+                                {% if ticket.is_overdue %}<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-red-800">Atrasado</span>{% endif %}
+                                <span class="text-[11px] text-gray-400">#{{ ticket.id }}</span>
+                            </span>
+                            <span class="block text-sm font-semibold text-gray-900 line-clamp-2">{{ ticket.title }}</span>
+                            <span class="block text-xs text-gray-500 mt-1 truncate">
+                                {{ ticket.category.name }} · {{ ticket.created_by.full_name }} ·
+                                <time datetime="{{ ticket.created_at|date:'c' }}" title="{{ ticket.created_at|date:'d/m/Y H:i' }}" data-rc-quando>{{ ticket.created_at|date:"d/m/Y H:i" }}</time>
+                            </span>
+                        </span>
+                        <i class="fas fa-chevron-right text-xs text-gray-300 mt-2"></i>
                     </a>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-    {% endif %}
-    
-    <!-- Chamados em Atraso -->
-    {% if overdue_tickets %}
-    <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-        <div class="flex items-center mb-3">
-            <i class="fas fa-exclamation-triangle text-red-600 mr-3"></i>
-            <h3 class="text-red-800 font-semibold">Chamados em Atraso</h3>
-        </div>
-        <div class="space-y-2">
-            {% for ticket in overdue_tickets %}
-            <div class="bg-white border border-red-200 rounded p-3">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <span class="text-sm font-medium text-gray-900">#{{ ticket.id }} - {{ ticket.title }}</span>
-                        <span class="ml-2 text-xs text-red-600">Venceu em {{ ticket.due_date|date:"d/m/Y H:i" }}</span>
+                    {% empty %}
+                    <div class="text-center text-gray-500 py-10">
+                        <span class="w-16 h-16 mx-auto rounded-full bg-gray-50 flex items-center justify-center mb-3"><i class="fas fa-inbox text-2xl text-gray-300"></i></span>
+                        <p>Nenhum chamado por aqui.</p>
                     </div>
-                    <a href="{% url 'ticket_detail' ticket.id %}" class="text-blue-600 hover:text-blue-800 text-sm">
-                        Ver detalhes
-                    </a>
+                    {% endfor %}
                 </div>
-            </div>
-            {% endfor %}
+            </section>
         </div>
-    </div>
-    {% endif %}
-    
-    <!-- Recent Tickets -->
-    <div class="bg-white rounded-lg shadow-sm">
-        <div class="px-6 py-4 border-b border-gray-200">
-            <div class="flex items-center justify-between">
-                <h3 class="text-lg font-semibold text-gray-900">Chamados Recentes</h3>
-                <a href="{% url 'tickets_list' %}" class="text-primary hover:text-orange-600 text-sm font-medium">Ver todos</a>
-            </div>
-        </div>
-        
-        <div class="p-6">
-            <div class="space-y-4">
-                {% for ticket in recent_tickets %}
-                <div class="p-4 border border-gray-200 rounded-lg">
-                    <div class="flex flex-col sm:flex-row sm:items-center justify-between space-y-3 sm:space-y-0">
-                        <div class="flex items-start space-x-3 flex-1 min-w-0">
-                            <!-- Foto do usuário que criou o chamado -->
-                            <div class="flex-shrink-0">
-                                {% if ticket.created_by.profile_picture %}
-                                    <img src="{{ ticket.created_by.profile_picture.url }}" alt="{{ ticket.created_by.full_name }}" class="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-cover">
-                                {% else %}
-                                    <div class="w-8 h-8 sm:w-10 sm:h-10 bg-gray-500 rounded-full flex items-center justify-center">
-                                        <span class="text-white font-medium text-xs sm:text-sm">{{ ticket.created_by.first_name.0 }}{{ ticket.created_by.last_name.0 }}</span>
-                                    </div>
-                                {% endif %}
-                            </div>
-                            <div class="flex-1 min-w-0">
-                                <div class="flex flex-wrap items-center gap-2 mb-2">
-                                    {% if ticket.status == 'ABERTO' %}
-                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                            Aberto
-                                        </span>
-                                    {% elif ticket.status == 'EM_ANDAMENTO' %}
-                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                                            Em Andamento
-                                        </span>
-                                    {% elif ticket.status == 'RESOLVIDO' %}
-                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                            Resolvido
-                                        </span>
-                                    {% elif ticket.status == 'FECHADO' %}
-                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                            Fechado
-                                        </span>
-                                    {% endif %}
-                                    {% if ticket.is_overdue %}
-                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                            Atrasado
-                                        </span>
-                                    {% endif %}
-                                </div>
-                                <p class="text-sm font-medium text-gray-900 mb-1 line-clamp-2">{{ ticket.title }}</p>
-                                <div class="text-xs text-gray-500 space-y-1">
-                                    <p>ID: #{{ ticket.id }} - {{ ticket.category.name }}</p>
-                                    <p>Por {{ ticket.created_by.full_name }} em {{ ticket.created_at|date:"d/m/Y H:i" }}</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="flex items-center justify-between sm:justify-end space-x-3 sm:space-x-4">
-                            <div class="text-right hidden sm:block">
-                                <p class="text-xs text-gray-500">Criado por</p>
-                                <p class="text-sm font-medium text-gray-900 truncate max-w-24">{{ ticket.created_by.full_name }}</p>
-                            </div>
-                            <a href="{% url 'ticket_detail' ticket.id %}" class="text-secondary hover:text-gray-800 p-2 rounded-lg hover:bg-gray-100 transition-colors">
-                                <i class="fas fa-eye"></i>
-                            </a>
-                        </div>
-                    </div>
+
+        <aside class="space-y-6">
+            <section class="bg-white rounded-2xl border border-gray-100 overflow-hidden" data-rc-revela>
+                <div class="px-5 py-4 border-b border-gray-100">
+                    <h2 class="rc-secao-titulo text-lg font-bold text-gray-900">
+                        <span class="rc-secao-icone bg-blue-500"><i class="fas fa-envelope-open-text text-sm"></i></span>
+                        Não lidos
+                    </h2>
                 </div>
-                {% empty %}
-                <div class="text-center text-gray-500 py-8">
-                    <i class="fas fa-inbox fa-2x mb-2"></i>
-                    <p>Nenhum chamado encontrado</p>
+                {% if unread_communications %}
+                <ul class="divide-y divide-gray-100">
+                    {% for comm in unread_communications %}
+                    <li>
+                        <a href="{% url 'communications:communication_detail' comm.id %}" class="flex items-center gap-3 px-5 py-3 hover:bg-blue-50/60 transition-colors">
+                            <span class="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0"></span>
+                            <span class="text-sm text-gray-800 line-clamp-2 flex-1">{{ comm.title }}</span>
+                            <i class="fas fa-chevron-right text-xs text-gray-300"></i>
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="px-5 py-6 text-sm text-gray-500 text-center"><i class="fas fa-circle-check text-green-500 mr-1"></i>Tudo lido por aqui.</p>
+                {% endif %}
+            </section>
+
+            {% if pinned_communications %}
+            <section class="bg-white rounded-2xl border border-gray-100 overflow-hidden" data-rc-revela>
+                <div class="px-5 py-4 border-b border-gray-100">
+                    <h2 class="rc-secao-titulo text-lg font-bold text-gray-900">
+                        <span class="rc-secao-icone bg-red-500"><i class="fas fa-thumbtack text-sm"></i></span>
+                        Fixados
+                    </h2>
                 </div>
-                {% endfor %}
-            </div>
-        </div>
+                <ul class="divide-y divide-gray-100">
+                    {% for comm in pinned_communications %}
+                    <li>
+                        <a href="{% url 'communications:communication_detail' comm.id %}" class="block px-5 py-3 hover:bg-gray-50 transition-colors">
+                            <span class="block text-sm font-semibold text-gray-900">{{ comm.title }}</span>
+                            <span class="block text-xs text-gray-500 mt-0.5 line-clamp-2">{{ comm.message|striptags|truncatechars:100 }}</span>
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </section>
+            {% endif %}
+        </aside>
     </div>
 </div>
 
 {% include 'prizes/_pickup_popup.html' %}
+{% include 'compliments/_reconhecimento_script.html' %}
+{% include '_rc_animacoes_script.html' %}
 {% endblock %}

@@ -3,91 +3,78 @@
 
 {% block title %}Meu Perfil{% endblock %}
 
-{% block content %}
-<div class="min-h-screen bg-gray-50">
-    <!-- Header -->
-    <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
-        <div class="px-4 sm:px-6 py-4">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between space-y-4 sm:space-y-0">
-                <div class="min-w-0 flex-1">
-                    <h1 class="text-xl sm:text-2xl font-bold text-gray-900 flex items-center">
-                        <i class="fas fa-user text-primary mr-2 sm:mr-3"></i>
-                        Meu Perfil
-                    </h1>
-                    <p class="text-gray-600 mt-1 text-sm sm:text-base">Gerencie suas informações pessoais</p>
-                </div>
-                <a href="{% url 'dashboard' %}" class="bg-gray-100 text-gray-700 px-3 sm:px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center text-sm sm:text-base">
-                    <i class="fas fa-arrow-left mr-1 sm:mr-2"></i>
-                    Voltar
-                </a>
-            </div>
-        </div>
-    </div>
+{% block extra_css %}
+{% include '_rc_animacoes.html' %}
+<style>
+    .rc-perfil-camera { box-shadow: 0 6px 14px -6px rgba(0, 0, 0, .45); transition: transform .25s cubic-bezier(.2, .8, .2, 1); }
+    .rc-perfil-camera:hover { transform: scale(1.12) rotate(-8deg); }
+    .rc-cartao { border-radius: 1.25rem; }
+    @media (prefers-reduced-motion: reduce) { .rc-perfil-camera, .rc-perfil-camera:hover { transition: none; transform: none; } }
+</style>
+{% endblock %}
 
+{% block content %}
+<div class="min-h-screen">
     <div class="max-w-4xl mx-auto space-y-6 px-4 sm:px-0">
-        <!-- Profile Summary -->
-        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-            <div class="px-4 sm:px-6 py-4 border-b border-gray-200 bg-gray-50">
-                <div class="flex items-center space-x-3 sm:space-x-4">
+        {% comment %}Topo do perfil no estilo da home (23/11/2026).{% endcomment %}
+        <section class="rc-hero rc-surge relative overflow-hidden rounded-3xl text-white shadow-lg">
+            <span class="rc-forma rc-forma-1" aria-hidden="true"></span>
+            <span class="rc-forma rc-forma-2" aria-hidden="true"></span>
+            <div class="relative p-5 sm:p-7">
+                <div class="flex items-center justify-between gap-3">
+                    <span class="rc-vidro rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide"><i class="fas fa-user mr-1"></i>Meu perfil</span>
+                    <a href="{% url 'dashboard' %}" class="rc-vidro inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium">
+                        <i class="fas fa-arrow-left text-xs"></i> Voltar
+                    </a>
+                </div>
+                <div class="flex items-center gap-4 sm:gap-5 mt-5">
                     <div class="relative flex-shrink-0">
-                        {% if user.profile_picture %}
-                            <img src="{{ user.profile_picture.url }}" alt="{{ user.full_name }}" class="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover">
-                        {% else %}
-                            <div class="w-16 h-16 sm:w-20 sm:h-20 bg-primary rounded-full flex items-center justify-center">
-                                <span class="text-white font-bold text-lg sm:text-2xl">{{ user.first_name.0 }}{{ user.last_name.0 }}</span>
-                            </div>
-                        {% endif %}
-                        <button onclick="showPhotoModal()" class="absolute -bottom-1 -right-1 w-5 h-5 sm:w-6 sm:h-6 bg-primary rounded-full flex items-center justify-center text-white text-xs hover:bg-orange-600 transition-colors">
+                        <span class="rc-hero-avatar w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center overflow-hidden">
+                            {% if user.profile_picture %}
+                                <img src="{{ user.profile_picture.url }}" alt="{{ user.full_name }}" class="w-full h-full object-cover">
+                            {% else %}
+                                <span class="font-bold text-2xl sm:text-3xl">{{ user.first_name.0 }}{{ user.last_name.0 }}</span>
+                            {% endif %}
+                        </span>
+                        <button onclick="showPhotoModal()" data-rc-pop aria-label="Trocar a foto"
+                                class="rc-perfil-camera absolute -bottom-1 -right-1 w-8 h-8 bg-white text-orange-600 rounded-full flex items-center justify-center text-sm">
                             <i class="fas fa-camera"></i>
                         </button>
                     </div>
-                    <div class="min-w-0 flex-1">
-                        <h2 class="text-lg sm:text-xl font-semibold text-gray-900 truncate">{{ user.full_name }}</h2>
-                        <p class="text-gray-600 text-sm sm:text-base">{{ user.get_hierarchy_display }}</p>
-                        {% if user.sector %}
-                        <p class="text-gray-600 text-sm sm:text-base truncate">{{ user.sector.name }}</p>
-                        {% endif %}
+                    <div class="min-w-0">
+                        <h1 class="text-2xl sm:text-3xl font-bold leading-tight truncate">{{ user.full_name }}</h1>
+                        <p class="rc-hero-suave text-sm sm:text-base truncate">{{ user.get_hierarchy_display }}{% if user.sector %} · {{ user.sector.name }}{% endif %}</p>
+                        {% if user.email %}<p class="rc-hero-suave text-xs truncate mt-0.5"><i class="fas fa-envelope mr-1"></i>{{ user.email }}</p>{% endif %}
                     </div>
                 </div>
-            </div>
-            
-            <div class="p-4 sm:p-6">
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                <div class="grid grid-cols-2 {% if user.hierarchy != 'PADRAO' and user.hierarchy != 'ADMINISTRATIVO' and user.hierarchy != 'SUPERVISOR' %}sm:grid-cols-3{% endif %} gap-2 sm:gap-3 mt-6">
                     {% if user.hierarchy != 'PADRAO' and user.hierarchy != 'ADMINISTRATIVO' and user.hierarchy != 'SUPERVISOR' %}
-                    <div class="text-center">
-                        <div class="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-2">
-                            <i class="fas fa-coins text-green-600 text-lg sm:text-xl"></i>
-                        </div>
-                        <p class="text-xs sm:text-sm text-gray-600">Saldo C$</p>
-                        <p class="text-xl sm:text-2xl font-bold text-gray-900">{{ user.balance_cs }}</p>
+                    <div class="rc-hero-acao rc-sobe rounded-2xl px-4 py-3" style="--i: 1">
+                        <p class="rc-hero-suave text-[11px] uppercase tracking-wide"><i class="fas fa-coins mr-1"></i>Saldo</p>
+                        <p class="text-xl font-bold">C$ {{ user.balance_cs }}</p>
                     </div>
                     {% endif %}
-                    
-                    <div class="text-center">
-                        <div class="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-2">
-                            <i class="fas fa-ticket-alt text-blue-600 text-lg sm:text-xl"></i>
-                        </div>
-                        <p class="text-xs sm:text-sm text-gray-600">Chamados Abertos</p>
-                        <p class="text-xl sm:text-2xl font-bold text-gray-900">{{ user_tickets_count|default:0 }}</p>
-                    </div>
-                    
-                    <div class="text-center">
-                        <div class="w-10 h-10 sm:w-12 sm:h-12 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-2">
-                            <i class="fas fa-calendar text-purple-600 text-lg sm:text-xl"></i>
-                        </div>
-                        <p class="text-xs sm:text-sm text-gray-600">Membro desde</p>
-                        <p class="text-xl sm:text-2xl font-bold text-gray-900">{{ user.date_joined|date:"M/Y" }}</p>
+                    <a href="{% url 'tickets_list' %}" class="rc-hero-acao rc-sobe rounded-2xl px-4 py-3" style="--i: 2">
+                        <p class="rc-hero-suave text-[11px] uppercase tracking-wide"><i class="fas fa-ticket-alt mr-1"></i>Chamados abertos</p>
+                        <p class="text-xl font-bold" data-rc-conta="{{ user_tickets_count|default:0 }}">{{ user_tickets_count|default:0 }}</p>
+                    </a>
+                    <div class="rc-hero-acao rc-sobe rounded-2xl px-4 py-3" style="--i: 3">
+                        <p class="rc-hero-suave text-[11px] uppercase tracking-wide"><i class="fas fa-calendar mr-1"></i>Membro desde</p>
+                        <p class="text-xl font-bold first-letter:uppercase">{{ user.date_joined|date:"M/Y" }}</p>
                     </div>
                 </div>
             </div>
-        </div>
+        </section>
 
         <!-- Personal Information -->
-        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-            <div class="px-6 py-4 border-b border-gray-200">
-                <div class="flex items-center justify-between">
-                    <h3 class="text-lg font-semibold text-gray-900">Informações Pessoais</h3>
-                    <button onclick="toggleEdit()" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors text-sm">
+        <div class="rc-cartao bg-white border border-gray-100 shadow-sm overflow-hidden" data-rc-revela>
+            <div class="px-5 sm:px-6 py-4 border-b border-gray-100">
+                <div class="flex items-center justify-between gap-3">
+                    <h3 class="rc-secao-titulo text-lg font-bold text-gray-900">
+                        <span class="rc-secao-icone bg-primary"><i class="fas fa-id-card text-sm"></i></span>
+                        Informações pessoais
+                    </h3>
+                    <button onclick="toggleEdit()" data-rc-pop class="bg-primary text-white px-4 py-2 rounded-xl hover:bg-orange-600 transition-colors text-sm font-medium shadow-sm">
                         <i class="fas fa-edit mr-2"></i>
                         Editar
                     </button>
@@ -107,7 +94,7 @@
                                    id="first_name"
                                    value="{{ user.first_name }}"
                                    disabled
-                                   class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed">
+                                   class="w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-gray-100 text-gray-600 cursor-not-allowed">
                         </div>
 
                         <div>
@@ -119,7 +106,7 @@
                                    id="last_name"
                                    value="{{ user.last_name }}"
                                    disabled
-                                   class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed">
+                                   class="w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-gray-100 text-gray-600 cursor-not-allowed">
                             <p class="text-xs text-gray-500 mt-1">Nome e sobrenome só podem ser alterados pelo RH.</p>
                         </div>
                     </div>
@@ -132,7 +119,7 @@
                                    name="email" 
                                    value="{{ user.email }}"
                                    disabled
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-gray-100">
+                                   class="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-gray-100">
                         </div>
                         
                         <div>
@@ -142,7 +129,7 @@
                                    name="phone" 
                                    value="{{ user.phone }}"
                                    disabled
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-gray-100">
+                                   class="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-gray-100">
                         </div>
                     </div>
 
@@ -156,7 +143,7 @@
                                    maxlength="5"
                                    placeholder="ex: DISC"
                                    disabled
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-gray-100">
+                                   class="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-gray-100">
                             <p class="text-xs text-gray-500 mt-1">Perfil comportamental DISC (até 5 letras)</p>
                         </div>
                         <div></div>
@@ -175,7 +162,7 @@
                                    maxlength="3"
                                    placeholder="ex: P, M, G, GG"
                                    disabled
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-gray-100">
+                                   class="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-gray-100">
                             <p class="text-xs text-gray-500 mt-1">Tamanho da blusa do uniforme</p>
                         </div>
                         
@@ -191,7 +178,7 @@
                                    maxlength="3"
                                    placeholder="ex: P, M, G, 38, 40"
                                    disabled
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-gray-100">
+                                   class="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-gray-100">
                             <p class="text-xs text-gray-500 mt-1">Tamanho da calça do uniforme</p>
                         </div>
                     </div>
@@ -199,14 +186,14 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Setor</label>
-                            <div class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700">
+                            <div class="w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-gray-100 text-gray-700">
                                 {{ user.sector.name|default:"Não informado" }}
                             </div>
                         </div>
                         
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Hierarquia</label>
-                            <div class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700">
+                            <div class="w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-gray-100 text-gray-700">
                                 {{ user.get_hierarchy_display }}
                             </div>
                         </div>
@@ -234,9 +221,12 @@
 
         {% if ve_painel_experiencia %}
         <!-- Preferências da home -->
-        <div class="bg-white rounded-xl shadow-sm overflow-hidden" id="cardPopupExperiencia">
-            <div class="px-6 py-4 border-b border-gray-200">
-                <h3 class="text-lg font-semibold text-gray-900"><i class="fas fa-house text-primary mr-1"></i>Preferências da home</h3>
+        <div class="rc-cartao bg-white border border-gray-100 shadow-sm overflow-hidden" id="cardPopupExperiencia" data-rc-revela>
+            <div class="px-5 sm:px-6 py-4 border-b border-gray-100">
+                <h3 class="rc-secao-titulo text-lg font-bold text-gray-900">
+                    <span class="rc-secao-icone bg-teal-500"><i class="fas fa-house text-sm"></i></span>
+                    Preferências da home
+                </h3>
             </div>
             <div class="p-6">
                 <div class="flex items-center justify-between gap-4">
@@ -278,13 +268,16 @@
         {% endif %}
 
         <!-- Menu favorito -->
-        <div class="bg-white rounded-xl shadow-sm overflow-hidden" id="cardFavoritos">
-            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-3 flex-wrap">
+        <div class="rc-cartao bg-white border border-gray-100 shadow-sm overflow-hidden" id="cardFavoritos" data-rc-revela>
+            <div class="px-5 sm:px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
                 <div>
-                    <h3 class="text-lg font-semibold text-gray-900"><i class="fas fa-star text-yellow-400 mr-1"></i>Menu favorito</h3>
+                    <h3 class="rc-secao-titulo text-lg font-bold text-gray-900">
+                        <span class="rc-secao-icone bg-yellow-400"><i class="fas fa-star text-sm"></i></span>
+                        Menu favorito
+                    </h3>
                     <p class="text-sm text-gray-600">Escolha os menus que aparecem logo abaixo de Home e Power BI, na ordem que quiser.</p>
                 </div>
-                <button type="button" id="favSalvar" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors text-sm font-semibold disabled:opacity-40" disabled>
+                <button type="button" id="favSalvar" data-rc-pop class="bg-primary text-white px-4 py-2 rounded-xl hover:bg-orange-600 transition-colors text-sm font-semibold disabled:opacity-40" disabled>
                     <i class="fas fa-floppy-disk mr-1"></i>Salvar favoritos
                 </button>
             </div>
@@ -305,9 +298,12 @@
         </div>
 
         <!-- Security Settings -->
-        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-            <div class="px-6 py-4 border-b border-gray-200">
-                <h3 class="text-lg font-semibold text-gray-900">Segurança</h3>
+        <div class="rc-cartao bg-white border border-gray-100 shadow-sm overflow-hidden" data-rc-revela>
+            <div class="px-5 sm:px-6 py-4 border-b border-gray-100">
+                <h3 class="rc-secao-titulo text-lg font-bold text-gray-900">
+                    <span class="rc-secao-icone bg-slate-600"><i class="fas fa-shield-halved text-sm"></i></span>
+                    Segurança
+                </h3>
             </div>
             
             <div class="p-6">
@@ -317,7 +313,7 @@
                             <h4 class="text-sm font-medium text-gray-900">Alterar Senha</h4>
                             <p class="text-sm text-gray-600">Mantenha sua conta segura com uma senha forte</p>
                         </div>
-                        <a href="{% url 'change_password' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors text-sm">
+                        <a href="{% url 'change_password' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-xl hover:bg-gray-200 transition-colors text-sm font-medium">
                             Alterar Senha
                         </a>
                     </div>
@@ -502,7 +498,7 @@ function submitPhoto() {
 <!-- Modal de Upload de Foto -->
 <div id="photoModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden">
     <div class="flex items-center justify-center min-h-screen p-4">
-        <div class="bg-white rounded-lg p-6 max-w-md w-full">
+        <div class="rc-modal-cartao bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
             <div class="flex justify-between items-center mb-4">
                 <h3 class="text-lg font-bold">Alterar Foto de Perfil</h3>
                 <button onclick="hidePhotoModal()" class="text-gray-400 hover:text-gray-600">
@@ -529,5 +525,5 @@ function submitPhoto() {
         </div>
     </div>
 </div>
-</script>
+{% include '_rc_animacoes_script.html' %}
 {% endblock %}

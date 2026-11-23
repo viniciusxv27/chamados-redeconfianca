@@ -146,6 +146,19 @@ try:
     t('e as animações compartilhadas', 'id="rcProgresso"' in html and 'rc-reacoes' in html)
     t('comentários e confirmação de leitura continuam', 'id="comment-form"' in html and 'ESTOU_CIENTE' in html)
 
+    print('\n== /users/ E /users/profile/ NO MESMO ESTILO ==')
+    r = ca.get('/users/')
+    html = r.content.decode()
+    t('/users/ abre com o topo novo e os números', r.status_code == 200 and 'rc-hero' in html and 'data-rc-conta=' in html
+      and 'Chamados recentes' in html, r.status_code)
+    r = ca.get('/users/profile/')
+    html = r.content.decode()
+    t('/users/profile/ abre com o topo novo', r.status_code == 200 and 'rc-hero' in html and 'Zzana Reconhecida' in html, r.status_code)
+    t('o perfil mantém edição, foto, favoritos e senha', all(x in html for x in (
+        'onclick="toggleEdit()"', 'id="photoModal"', 'id="favLista"', 'id="favSalvar"', 'id="edit-buttons"', '/change-password')) or
+      all(x in html for x in ('onclick="toggleEdit()"', 'id="photoModal"', 'id="favLista"', 'id="favSalvar"', 'id="edit-buttons"')))
+    t('sem o </script> sobrando no fim', html.count('</script>') == html.count('<script'))
+
     print('\n== TEMPLATES ==')
     ruins = [f for f in ('templates/home.html', 'templates/compliments/mural.html',
                          'templates/compliments/_cartao_reconhecimento.html', 'templates/compliments/_mural_pagina.html')
