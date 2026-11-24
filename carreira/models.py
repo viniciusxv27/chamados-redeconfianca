@@ -1,6 +1,6 @@
 """Progresso — o caminho do consultor até Pleno (25/11/2026).
 
-O consultor acompanha os 8 requisitos do Pleno; quando cumpre todos, vira um
+O consultor acompanha os requisitos do Pleno; quando cumpre todos, vira um
 pedido para o SUPERADMIN decidir se promove. A regra de cada requisito mora em
 ``carreira/regras.py``; aqui ficam só os dados que o portal ainda não tinha
 (última promoção, resultado e satisfação lançados, advertências e loja apta).
@@ -110,7 +110,7 @@ class LojaApta(models.Model):
 
 
 class PedidoPromocao(models.Model):
-    """Cumpriu os 8 requisitos: vai para o SUPERADMIN decidir se promove."""
+    """Cumpriu os requisitos: vai para o SUPERADMIN decidir se promove."""
 
     ANALISE, PROMOVIDO, NAO_AGORA = 'ANALISE', 'PROMOVIDO', 'NAO_AGORA'
     SITUACOES = [(ANALISE, 'Em análise'), (PROMOVIDO, 'Promovido a Pleno'), (NAO_AGORA, 'Ainda não')]

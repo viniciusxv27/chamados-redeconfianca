@@ -129,8 +129,9 @@ t('quem não é do comercial (escritório) continua sem ver', cadm.get('/progres
 print('Requisitos')
 j = regras.avaliar(ana)
 req = {r['chave']: r for r in j['requisitos']}
-t('8 requisitos, na ordem da tabela', [r['chave'] for r in j['requisitos']] ==
-  ['tempo', 'resultado', 'satisfacao', 'qualidade', 'assiduidade', 'conduta', 'formacao', 'loja'])
+t('7 requisitos, na ordem da tabela (a etapa 8, Loja apta, saiu em 24/11/2026)', [r['chave'] for r in j['requisitos']] ==
+  ['tempo', 'resultado', 'satisfacao', 'qualidade', 'assiduidade', 'conduta', 'formacao'] and j['total'] == 7
+  and j['xp_total'] == 1000)
 t('tempo: 13 meses de casa cumpre', req['tempo']['situacao'] == 'ok' and req['tempo']['valor'] == '13 meses (12 exigidos)', req['tempo'])
 jb = {r['chave']: r for r in regras.avaliar(beto)['requisitos']}
 t('tempo: 6 meses ainda não, e diz quando completa', jb['tempo']['situacao'] == 'falta' and 'completa em' in jb['tempo']['dica']
@@ -158,10 +159,11 @@ t('advertência nos últimos 3 meses trava e diz quando libera', c['situacao'] =
 adv.data = HOJE - timedelta(days=120); adv.save()
 t('advertência antiga não conta', {r['chave']: r for r in regras.avaliar(ana)['requisitos']}['conduta']['situacao'] == 'ok')
 t('formação aguarda o SUPERADMIN escolher as trilhas', req['formacao']['situacao'] == 'aguardando')
-t('loja apta aguarda o comitê', req['loja']['situacao'] == 'aguardando')
+t('não há mais etapa de loja apta', 'loja' not in req)
 # a tela do consultor
 h = cana.get('/progresso/').content.decode()
-t('a tela mostra os 8 com situação e barra', h.count('data-requisito=') == 8 and 'pg-barra' in h and 'data-anel' in h
+t('a tela mostra os 7 com situação e barra (sem Etapa 8)', h.count('data-requisito=') == 7 and 'Etapa 8' not in h
+  and 'Loja apta' not in h and '7 requisitos' in h and 'pg-barra' in h and 'data-anel' in h
   and 'Aguardando dado' in h and 'Conquistado' in h)
 t('sem lançamentos de SUPERADMIN na tela do consultor', 'Lançar dados da jornada' not in h and 'data-decidir' not in h)
 
@@ -188,27 +190,26 @@ t('SUPERADMIN escolhe as trilhas', set(ConfigCarreira.atual().trilhas.values_lis
 TrailProgress.objects.create(trail=trilha1, user=ana, status='completed', completed_at=timezone.now())
 f = {r['chave']: r for r in regras.avaliar(ana)['requisitos']}['formacao']
 t('formação: 1 de 2 trilhas', f['situacao'] == 'falta' and f['valor'].startswith('1 de 2') and len(f['trilhas']) == 2)
-TrailProgress.objects.create(trail=trilha2, user=ana, status='completed', completed_at=timezone.now())
-ano, tri = regras.trimestre_de(HOJE)
-r = csa.post('/progresso/painel/lojas/', {'ano': ano, 'tri': tri, f'apta_{loja.pk}': '1', f'rent_{loja.pk}': 'xx'}, follow=True)
-t('rentabilidade inválida não salva nada', not LojaApta.objects.exists() and 'Nada salvo' in r.content.decode())
-csa.post('/progresso/painel/lojas/', {'ano': ano, 'tri': tri, f'apta_{loja.pk}': '0', f'rent_{loja.pk}': '12,5'})
-l = {r['chave']: r for r in regras.avaliar(ana)['requisitos']}['loja']
-t('loja não apta: falta, sem mostrar o número ao consultor', l['situacao'] == 'falta' and '12,5' not in l['valor']
-  and 'mudar de loja' in l['dica'], l)
-l = {r['chave']: r for r in regras.avaliar(ana, para_superadmin=True)['requisitos']}['loja']
-t('o SUPERADMIN vê a rentabilidade', '12,5%' in l['valor'], l)
 t('nenhum pedido antes de concluir', not PedidoPromocao.objects.exists())
 r = cana.get('/progresso/certificado/')
 t('certificado só depois de concluir', r.status_code == 302)
+t('o painel não tem mais o lançamento de lojas aptas', 'data-lojas' not in csa.get('/progresso/painel/').content.decode())
+ano, tri = regras.trimestre_de(HOJE)
+LojaApta.objects.create(setor=loja, ano=ano, trimestre=tri, apta=False, rentabilidade=Decimal('12.5'))
+TrailProgress.objects.create(trail=trilha2, user=ana, status='completed', completed_at=timezone.now())
+t('loja não apta já não segura a jornada', regras.avaliar(ana)['concluiu'])
+t('retrato antigo (com a loja) é recontado sem ela', regras.retrato_atual(
+    {'cumpridos': 7, 'total': 8, 'requisitos': {**{k: 'ok' for k in ('tempo', 'resultado', 'satisfacao', 'qualidade',
+                                                                     'assiduidade', 'conduta', 'formacao')}, 'loja': 'falta'}})
+  == {'cumpridos': 7, 'total': 7, 'requisitos': {k: 'ok' for k in ('tempo', 'resultado', 'satisfacao', 'qualidade',
+                                                                    'assiduidade', 'conduta', 'formacao')}})
 
 print('Concluiu: pedido para o SUPERADMIN')
-csa.post('/progresso/painel/lojas/', {'ano': ano, 'tri': tri, f'apta_{loja.pk}': '1', f'rent_{loja.pk}': '24'})
 r = cana.get('/progresso/')
 h = r.content.decode()
 pedidos = PedidoPromocao.objects.filter(user=ana)
-t('8 de 8: abre o pedido de promoção', r.context['concluiu'] and pedidos.count() == 1 and pedidos[0].situacao == 'ANALISE')
-t('o pedido guarda os 8 requisitos', len(pedidos[0].requisitos) == 8 and all(x['situacao'] == 'ok' for x in pedidos[0].requisitos))
+t('7 de 7: abre o pedido de promoção', r.context['concluiu'] and pedidos.count() == 1 and pedidos[0].situacao == 'ANALISE')
+t('o pedido guarda os 7 requisitos', len(pedidos[0].requisitos) == 7 and all(x['situacao'] == 'ok' for x in pedidos[0].requisitos))
 t('avisa o SUPERADMIN no sino', Notification.objects.filter(user=sa, title__icontains='promoção', related_url__contains=f'/progresso/pessoa/{ana.pk}/').exists())
 t('a tela comemora (confete e parabéns) e diz que foi para análise', 'pgParabens' in h and 'pgConfete' in h
   and 'Enviado para análise do SUPERADMIN' in h and '100' in h)
@@ -220,7 +221,8 @@ t('certificado da jornada', r.status_code == 200 and 'Certificado de Conquista' 
   and 'Ana Zz' in r.content.decode() and 'window.print()' in r.content.decode())
 t('outro consultor não abre o certificado dela', cbeto.get(f'/progresso/certificado/{ana.pk}/').status_code == 404)
 h = csa.get('/progresso/painel/').content.decode()
-t('o painel mostra o pedido com os requisitos', f'data-pedido="{pedidos[0].pk}"' in h and 'Loja apta' in h)
+t('o painel mostra o pedido com os requisitos (sem a loja)', f'data-pedido="{pedidos[0].pk}"' in h and 'Formação' in h
+  and 'Loja apta' not in h)
 
 print('Decisão')
 cana.post(f'/progresso/pedido/{pedidos[0].pk}/decidir/', {'decisao': 'PROMOVIDO'})

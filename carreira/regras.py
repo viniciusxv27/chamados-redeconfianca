@@ -1,4 +1,4 @@
-"""Os 8 requisitos do caminho do consultor até Pleno — de onde vem cada número e quando está cumprido.
+"""Os 7 requisitos do caminho do consultor até Pleno — de onde vem cada número e quando está cumprido.
 
 | Requisito  | Como é medido                                                   | De onde vem                                   |
 |------------|-----------------------------------------------------------------|-----------------------------------------------|
@@ -10,7 +10,9 @@
 | Assiduidade| absenteísmo de até 2% das horas previstas em 3 meses             | ponto do Tangerino (``tangerino.pendencias``) |
 | Conduta    | nenhuma advertência escrita nos últimos 3 meses                  | ``Advertencia``                               |
 | Formação   | as trilhas escolhidas pelo SUPERADMIN, concluídas                | ``knowledge_trails.TrailProgress``            |
-| Loja apta  | rentabilidade final da loja acima de 20% no trimestre            | ``LojaApta`` (o consultor não vê o número)    |
+
+A antiga etapa 8, "Loja apta" (rentabilidade da loja no trimestre), saiu em 24/11/2026: ``_loja``
+e ``LojaApta`` ficam no código e no banco, mas não entram na jornada (``REQUISITO_FORA``).
 
 Cada requisito sai como um dicionário com ``situacao`` em ``ok`` (cumprido), ``falta`` (ainda não) ou
 ``aguardando`` (sem dado ainda — não conta contra, mas também não conclui).
@@ -318,14 +320,14 @@ def _loja(user, perfil, hoje, mostrar_numero):
 # A jornada inteira
 # ---------------------------------------------------------------------------
 def avaliar(user, hoje=None, para_superadmin=False):
-    """A jornada da pessoa: os 8 requisitos, quantos cumpridos, nível e o pedido de promoção."""
+    """A jornada da pessoa: os 7 requisitos, quantos cumpridos, nível e o pedido de promoção."""
     hoje = hoje or timezone.localdate()
     perfil = perfil_de(user)
     config = ConfigCarreira.atual()
     requisitos = [
         _tempo(user, perfil, hoje), _resultado(user, perfil, hoje), _satisfacao(user, perfil, hoje),
         _qualidade(user, perfil, hoje), _assiduidade(user, perfil, hoje), _conduta(user, perfil, hoje),
-        _formacao(user, perfil, hoje, config), _loja(user, perfil, hoje, para_superadmin),
+        _formacao(user, perfil, hoje, config),
     ]
     for i, r in enumerate(requisitos, 1):
         r['numero'] = i
@@ -336,13 +338,25 @@ def avaliar(user, hoje=None, para_superadmin=False):
         'perfil': perfil, 'requisitos': requisitos, 'cumpridos': cumpridos, 'total': len(requisitos),
         'percentual': round(cumpridos * 100 / len(requisitos)),
         'faltam': len(requisitos) - cumpridos,
-        'xp': sum(round(r['progresso'] * 125) for r in requisitos),   # 8 x 125 = 1000 XP
-        'xp_total': 125 * len(requisitos),
+        'xp': round(sum(r['progresso'] for r in requisitos) * 1000 / len(requisitos)),   # a trilha inteira = 1000 XP
+        'xp_total': 1000,
         'concluiu': cumpridos == len(requisitos),
         'pleno': perfil.nivel == PerfilCarreira.PLENO,
         'pedido': pedido,
         'hoje': hoje,
     }
+
+
+# Etapa 8 ("Loja apta") retirada em 24/11/2026; retratos antigos ainda a trazem.
+REQUISITO_FORA = 'loja'
+
+
+def retrato_atual(retrato):
+    """O retrato guardado sem a etapa retirada: cumpridos/total recontados."""
+    reqs = {k: v for k, v in ((retrato or {}).get('requisitos') or {}).items() if k != REQUISITO_FORA}
+    if not reqs:
+        return retrato or {}
+    return {**retrato, 'requisitos': reqs, 'total': len(reqs), 'cumpridos': sum(1 for v in reqs.values() if v == OK)}
 
 
 def guardar_retrato(jornada):
@@ -355,7 +369,7 @@ def guardar_retrato(jornada):
 
 
 def pedir_promocao_se_concluiu(user, jornada):
-    """Concluiu os 8 e ainda é Jr: abre o pedido (uma vez) e avisa os SUPERADMIN. Devolve o pedido novo ou None."""
+    """Concluiu todos e ainda é Jr: abre o pedido (uma vez) e avisa os SUPERADMIN. Devolve o pedido novo ou None."""
     if not jornada['concluiu'] or jornada['pleno']:
         return None
     ultimo = jornada['pedido']
@@ -383,7 +397,7 @@ def _avisar_superadmins(user, pedido):
         nome = user.full_name or user.get_username()
         for sa in get_user_model().objects.filter(is_active=True).filter(Q(is_superuser=True) | Q(hierarchy='SUPERADMIN')):
             Notification.objects.create(user=sa, title='Pedido de promoção a Pleno',
-                                        message=f'{nome} cumpriu os 8 requisitos do Pleno. Analise e decida.',
+                                        message=f'{nome} cumpriu os requisitos do Pleno. Analise e decida.',
                                         notification_type='SYSTEM', related_object_id=pedido.pk, related_url=url)
     except Exception:  # noqa: BLE001 — o aviso não segura o pedido
         logger.warning('Carreira: aviso do pedido %s não enviado', pedido.pk, exc_info=True)

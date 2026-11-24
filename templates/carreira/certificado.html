@@ -59,10 +59,10 @@
         <p class="texto">
             {% if tipo == 'promocao' %}
             por concluir o caminho do consultor e ser promovido(a) a <strong>Consultor(a) Pleno</strong>,
-            cumprindo os requisitos de tempo, resultado, satisfação do cliente, qualidade, assiduidade, conduta, formação e loja apta.
+            cumprindo os requisitos de tempo, resultado, satisfação do cliente, qualidade, assiduidade, conduta e formação.
             {% else %}
-            por cumprir os <strong>8 requisitos</strong> do caminho do consultor até <strong>Pleno</strong> —
-            tempo, resultado, satisfação do cliente, qualidade, assiduidade, conduta, formação e loja apta.
+            por cumprir os <strong>{{ total }} requisitos</strong> do caminho do consultor até <strong>Pleno</strong> —
+            tempo, resultado, satisfação do cliente, qualidade, assiduidade, conduta e formação.
             {% endif %}
         </p>
         <div class="selos">{% for r in requisitos %}<span>✓ {{ r.titulo }}</span>{% endfor %}</div>

@@ -82,7 +82,7 @@ def certificado(request, user_id=None):
         raise Http404
     dados = regras.avaliar(alvo)
     if not (dados['concluiu'] or dados['pleno']):
-        messages.info(request, 'O certificado sai quando os 8 requisitos estiverem cumpridos.')
+        messages.info(request, 'O certificado sai quando todos os requisitos estiverem cumpridos.')
         return redirect('carreira:jornada' if alvo == request.user else 'carreira:pessoa', *([] if alvo == request.user else [alvo.pk]))
     pedido = dados['pedido']
     return render(request, 'carreira/certificado.html', {
@@ -102,18 +102,10 @@ def painel(request):
         return barra
     from knowledge_trails.models import KnowledgeTrail
     config = ConfigCarreira.atual()
-    hoje = timezone.localdate()
-    ano, tri = regras.trimestre_de(hoje)
-    try:
-        ano = int(request.GET.get('ano') or ano)
-        tri = min(4, max(1, int(request.GET.get('tri') or tri)))
-    except ValueError:
-        pass
-    registros = {r.setor_id: r for r in LojaApta.objects.filter(ano=ano, trimestre=tri)}
     pessoas = list(_comercial())
     for p in pessoas:
         perfil = getattr(p, 'perfil_carreira', None)
-        p.retrato = (perfil.retrato if perfil else {}) or {}
+        p.retrato = regras.retrato_atual(perfil.retrato if perfil else {})
         p.nivel = perfil.get_nivel_display() if perfil else 'Consultor Jr'
     pessoas.sort(key=lambda p: (-(p.retrato.get('cumpridos') or 0), (p.first_name or '').upper()))
     return render(request, 'carreira/painel.html', {
@@ -123,9 +115,6 @@ def painel(request):
         'pedidos': PedidoPromocao.objects.filter(situacao=PedidoPromocao.ANALISE).select_related('user', 'user__sector'),
         'decididos': PedidoPromocao.objects.exclude(situacao=PedidoPromocao.ANALISE)
                                            .select_related('user', 'decidido_por')[:15],
-        'lojas': [{'setor': s, 'registro': registros.get(s.pk)} for s in _lojas()],
-        'lojas_avaliadas': len(registros),
-        'ano': ano, 'tri': tri, 'anos': range(hoje.year - 1, hoje.year + 1),
         'pessoas': pessoas,
         'resultado_em': PerfilCarreira.objects.aggregate(m=Max('resultado_auto_em'))['m'],
     })

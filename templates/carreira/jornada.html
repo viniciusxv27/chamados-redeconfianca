@@ -26,7 +26,7 @@
     .pg-selo { display:inline-flex; align-items:center; gap:.4rem; padding:.3rem .75rem; border-radius:999px; font-size:.75rem;
                font-weight:700; background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.3); }
 
-    /* O caminho: uma trilha com as 8 estações. */
+    /* O caminho: uma trilha com as estações (uma por requisito). */
     .pg-trilha { position:relative; }
     .pg-trilha::before { content:''; position:absolute; left:1.6rem; top:1rem; bottom:1rem; width:4px; border-radius:4px;
                          background:linear-gradient(180deg,#C7D2FE,#FBCFE8); }
@@ -179,7 +179,7 @@
             <div class="flex items-end justify-between gap-3 mb-4">
                 <div>
                     <h2 class="text-lg font-bold text-gray-900">O caminho até Pleno</h2>
-                    <p class="text-sm text-gray-500">8 requisitos. Cada um conquistado acende na trilha.</p>
+                    <p class="text-sm text-gray-500">{{ total }} requisitos. Cada um conquistado acende na trilha.</p>
                 </div>
                 <div class="hidden sm:flex items-center gap-3 text-xs text-gray-500">
                     <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 mr-1"></span>Conquistado</span>
@@ -240,7 +240,7 @@
             <form method="post" action="{% url 'carreira:decidir' p.pk %}" class="sap-card bg-white rounded-2xl border border-indigo-200 p-4 space-y-2" data-decidir>
                 {% csrf_token %}
                 <p class="font-bold text-indigo-900"><i class="fas fa-gavel mr-1.5"></i>Pedido de promoção</p>
-                <p class="text-xs text-gray-500">Desde {{ p.criado_em|date:"d/m/Y H:i" }} — cumpriu os 8 requisitos.</p>
+                <p class="text-xs text-gray-500">Desde {{ p.criado_em|date:"d/m/Y H:i" }} — cumpriu os {{ total }} requisitos.</p>
                 <textarea name="parecer" rows="3" class="pg-campo" placeholder="Parecer (obrigatório para “ainda não”)"></textarea>
                 <div class="grid grid-cols-2 gap-2">
                     <button name="decisao" value="PROMOVIDO" class="px-3 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700" onclick="return confirm('Promover {{ pessoa.first_name|escapejs }} a Consultor Pleno?')"><i class="fas fa-crown mr-1"></i>Promover</button>
@@ -311,7 +311,7 @@
     <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 text-center shadow-2xl">
         <div class="mx-auto w-20 h-20 rounded-3xl flex items-center justify-center text-4xl text-white pg-brilho" style="background:linear-gradient(135deg,#F59E0B,#DB2777)"><i class="fas {% if pleno %}fa-crown{% else %}fa-trophy{% endif %}"></i></div>
         <h2 id="pgParabensTitulo" class="mt-4 text-2xl font-extrabold text-gray-900">Parabéns, {{ pessoa.first_name|title }}! 🎉</h2>
-        <p class="mt-2 text-gray-600">{% if pleno %}Você agora é <strong>Consultor Pleno</strong>.{% else %}Você cumpriu os <strong>8 requisitos</strong> do Pleno. Seu pedido foi para o SUPERADMIN analisar.{% endif %}</p>
+        <p class="mt-2 text-gray-600">{% if pleno %}Você agora é <strong>Consultor Pleno</strong>.{% else %}Você cumpriu os <strong>{{ total }} requisitos</strong> do Pleno. Seu pedido foi para o SUPERADMIN analisar.{% endif %}</p>
         <div class="mt-6 flex flex-col sm:flex-row gap-2 justify-center">
             <a href="{% if eu_mesmo %}{% url 'carreira:certificado' %}{% else %}{% url 'carreira:certificado_de' pessoa.pk %}{% endif %}" class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-white font-semibold" style="background:linear-gradient(135deg,#4F46E5,#DB2777)"><i class="fas fa-award"></i>Ver meu certificado</a>
             <button type="button" onclick="pgFecharParabens()" class="px-5 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50">Fechar</button>
