@@ -245,6 +245,14 @@ def percentuais_de_meta(ids=None) -> dict:
         return {}
 
 
+def ids_por_funcao(funcoes, hoje=None) -> set:
+    """Ids de quem o quadro mostra numa destas funções (mesma regra da tela: ativos, ajuste
+    manual de função e de contar, gerente pelo grupo GERENTES). Usado pelo Progresso (24/11/2026)."""
+    pessoas, _fora, ajustes = pessoas_do_quadro(hoje)
+    gerentes = ids_gerentes_por_grupo()
+    return {u.id for u in pessoas if funcao_da_pessoa(u, ajustes.get(u.id), gerentes)[1] in funcoes}
+
+
 def consultores_da_loja(setor, hoje=None) -> list[dict]:
     """Os consultores (consultor e consultor pleno) que o quadro mostra na loja, com o percentual de meta.
 

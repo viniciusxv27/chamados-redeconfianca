@@ -254,6 +254,23 @@ print('Painel')
 h = csa.get('/progresso/painel/').content.decode()
 t('o painel lista os consultores com o retrato', 'Ana ZZ' in h and 'Beto ZZ' in h and 'Adm ZZ' not in h and 'pp-pontos' in h)
 t('consultor não abre o painel', cana.get('/progresso/painel/').status_code == 302)
+# 24/11/2026: o painel mostra só quem o /quadro-hc/ tem como "Consultor".
+from quadro_hc.models import AjusteHC
+gerente_loja = novo('gerloja', sector=loja, job_title='GERENTE DE LOJA')
+recep = novo('recep', sector=loja, job_title='RECEPCIONISTA')
+pleno = novo('pleno', sector=loja, job_title='CONSULTOR DE VENDAS PL')
+virou_adm = novo('viradm', sector=loja, job_title='CONSULTOR DE VENDAS')
+AjusteHC.objects.create(colaborador=virou_adm, funcao='Administrativo', motivo='teste')
+fora_quadro = novo('foraq', sector=loja, job_title='CONSULTOR DE VENDAS')
+AjusteHC.objects.create(colaborador=fora_quadro, situacao=AjusteHC.EXCLUIR, motivo='teste')
+consultor_escr = novo('consescr', sector=escritorio, job_title='CONSULTOR DE VENDAS')
+h = csa.get('/progresso/painel/').content.decode()
+t('gerente, recepção e consultor pleno da loja ficam fora do painel',
+  all(n not in h for n in ('Gerloja ZZ', 'Recep ZZ', 'Pleno ZZ')) and 'Ana ZZ' in h)
+t('o ajuste do quadro manda (virou Administrativo / não conta no quadro)', 'Viradm ZZ' not in h and 'Foraq ZZ' not in h)
+t('consultor que o quadro mostra entra, mesmo fora de loja', 'Consescr ZZ' in h)
+for u in (gerente_loja, recep, pleno, virou_adm, fora_quadro, consultor_escr):
+    u.delete()
 h = csa.get(f'/progresso/pessoa/{beto.pk}/').content.decode()
 t('SUPERADMIN abre a jornada da pessoa com os lançamentos', 'Lançar dados da jornada' in h and 'Advertências' in h)
 csa.post(f'/progresso/pessoa/{beto.pk}/advertencia/', {'data': HOJE.isoformat(), 'motivo': 'Uniforme'})

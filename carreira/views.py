@@ -31,7 +31,13 @@ def _lojas():
 
 
 def _comercial():
-    return (User.objects.filter(is_active=True, hierarchy='PADRAO', sector__name__icontains='loja')
+    """Os consultores do painel: só quem o /quadro-hc/ mostra como "Consultor" (24/11/2026).
+
+    Antes era todo PADRAO com setor de loja — entravam gerente, ADM, recepção e sniper.
+    Consultor pleno fica de fora: o Progresso é a jornada até Pleno.
+    """
+    from quadro_hc.servicos import ids_por_funcao
+    return (User.objects.filter(is_active=True, pk__in=ids_por_funcao({'Consultor'}))
             .select_related('sector', 'perfil_carreira').order_by('first_name', 'last_name'))
 
 
