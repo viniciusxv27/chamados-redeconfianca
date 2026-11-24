@@ -38,6 +38,30 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
 
 {% block sap_conteudo %}
 <style>
+    /* Visão inicial: um cartão por categoria (25/11/2026). */
+    .est-cat { position:relative; display:flex; flex-direction:column; gap:.35rem; padding:1rem; border-radius:1rem;
+               background:#fff; border:1px solid #E9EDF2; box-shadow:0 1px 2px rgba(16,24,40,.04); min-width:0;
+               transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease; }
+    .est-cat:hover { transform:translateY(-2px); border-color:var(--c); box-shadow:0 6px 18px -8px var(--c); }
+    .est-cat-icone { width:2.75rem; height:2.75rem; border-radius:.85rem; display:flex; align-items:center; justify-content:center;
+                     color:#fff; font-size:1.2rem; background:var(--c); box-shadow:0 6px 14px -6px var(--c); }
+    .est-cat-nome { font-weight:700; color:#0F172A; font-size:.95rem; line-height:1.2; overflow-wrap:anywhere; }
+    .est-cat-num { font-size:.75rem; color:#475569; }
+    .est-cat-num strong { color:var(--c); }
+    .est-cat-sub { font-size:.7rem; color:#94A3B8; }
+    .est-cat-vazia { opacity:.55; }
+    html.dark .est-cat { background:var(--tema-superficie); border-color:var(--tema-borda); }
+    html.dark .est-cat-nome { color:var(--tema-texto); }
+    html.dark .est-cat-num { color:var(--tema-texto-2); }
+    /* Sugestões do campo Produto. */
+    .est-sug { position:absolute; left:0; min-width:100%; width:min(26rem, calc(100vw - 2rem)); top:calc(100% + 4px); z-index:30; background:#fff; border:1px solid #E2E8F0;
+               border-radius:.85rem; box-shadow:0 12px 28px -10px rgba(15,23,42,.25); max-height:22rem; overflow-y:auto; }
+    .est-sug button { display:block; width:100%; text-align:left; padding:.55rem .8rem; font-size:.85rem; }
+    .est-sug button:hover, .est-sug button.ativa { background:#F0F9FF; }
+    html.dark .est-sug { background:var(--tema-superficie); border-color:var(--tema-borda); }
+    html.dark .est-sug button:hover, html.dark .est-sug button.ativa { background:var(--tema-superficie-2); }
+    .est-plano { border:1px solid #BAE6FD; border-radius:.6rem; padding:.2rem .45rem; font-size:.75rem; font-weight:600; color:#0369A1; background:#F0F9FF; }
+
     /* Quantidades */
     .est-q { display:inline-flex; min-width:2.2rem; justify-content:center; padding:.22rem .5rem; border-radius:.6rem;
              font-weight:800; font-size:.8rem; font-variant-numeric:tabular-nums; cursor:pointer; border:1px solid transparent;
@@ -222,8 +246,10 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
             <span class="sap-rotulo"><i class="fas fa-box mr-1"></i>Produto</span>
             <div class="relative mt-1">
                 <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
-                <input type="search" name="q" value="{{ f.q }}" placeholder="Nome, cor, material ou fabricante"
+                <input type="search" name="q" value="{{ f.q }}" placeholder="Nome, cor, material ou fabricante" id="estBusca"
+                       autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="estSugestoes" aria-expanded="false"
                        class="w-full rounded-xl border border-gray-200 pl-8 pr-3 py-2.5 text-sm focus:ring-2 focus:ring-sky-200 focus:border-sky-400">
+                <div id="estSugestoes" class="est-sug hidden" role="listbox"></div>
             </div>
         </label>
         <label class="block lg:col-span-2">
@@ -283,6 +309,28 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
 </div>
 {% endif %}
 
+{% if inicial %}
+{# ------------------------------------------- visão inicial: as categorias #}
+<div class="mb-3 flex flex-wrap items-end justify-between gap-2">
+    <div>
+        <p class="text-base font-bold text-gray-900">O que você procura?</p>
+        <p class="text-xs text-gray-500">Escolha uma categoria{% if loja_nome %} — os números são de {{ loja_nome }} e da rede{% endif %}, ou digite o produto acima.</p>
+    </div>
+    <a href="?aba=disponivel&loja={{ f.loja|default:'todas' }}" class="text-sm font-semibold text-sky-700 hover:underline">Ver todo o estoque <i class="fas fa-arrow-right text-xs"></i></a>
+</div>
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6" data-cartoes-categorias>
+    {% for c in cartoes %}
+    <a href="?aba=disponivel&loja={{ f.loja|default:'todas' }}&categoria={{ c.nome|urlencode }}" class="est-cat {% if not c.rede %}est-cat-vazia{% endif %}" style="--c:{{ c.cor }}" data-categoria="{{ c.nome }}">
+        <span class="est-cat-icone"><i class="fas {{ c.icone }}"></i></span>
+        <span class="est-cat-nome">{{ c.nome }}</span>
+        <span class="est-cat-num">
+            {% if f.loja %}<strong>{{ c.loja }}</strong> na loja · {% endif %}<strong>{{ c.rede }}</strong> na rede
+        </span>
+        <span class="est-cat-sub">{{ c.produtos }} produto{{ c.produtos|pluralize }} com saldo</span>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
 {# -------------------------------------------------------- números coloridos #}
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
     <a href="?{{ q_base }}&aba=disponivel" class="est-kpi" style="--k:#0EA5E9;--k2:#2563EB">
@@ -586,6 +634,8 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
     {% endif %}
 </div>
 
+{% endif %}{# fim da visão inicial #}
+
 {# ------------------------------------------------- gaveta: as unidades #}
 <div id="estFundo" class="hidden fixed inset-0 bg-slate-900/30 backdrop-blur-[1px] z-40" onclick="estFechar()"></div>
 <aside id="estGaveta" class="fechada fixed top-0 right-0 h-full w-full sm:w-[27rem] bg-white shadow-2xl z-50 flex flex-col" aria-hidden="true">
@@ -768,24 +818,48 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
         return '<div class="est-renova-aviso mt-3 flex items-start gap-3"><i class="fas fa-recycle text-xl mt-0.5"></i><div>' +
             '<p class="font-bold">Tem desconto Vivo Renova: ' + reais(r.desconto) + '</p>' +
             '<p class="text-xs mt-0.5">Na troca do aparelho usado, até ' + esc(r.ate) +
-            (r.com_renova != null ? ' · o preço cai para <strong>' + reais(r.com_renova) + '</strong>' : '') + '.</p></div></div>';
+            (r.com_renova != null ? ' · o preço cai para <strong class="est-renova-preco" data-desconto="' + r.desconto + '">' + reais(r.com_renova) + '</strong>' : '') + '.</p></div></div>';
     }
-    function blocoPreco(p, compacto) {
-        if (!p) return '<div class="est-preco text-sm text-gray-500"><i class="fas fa-tag mr-1"></i>Sem preço na tabela de preços do portal para este material.</div>';
+    function linhasDoPreco(g) {
         var linhas = [];
-        if (p.pix != null) linhas.push('<span><i class="fas fa-bolt mr-1 text-amber-500"></i>PIX / Vivo Pay <strong>' + reais(p.pix) + '</strong></span>');
-        if (p.parcela12 != null) linhas.push('<span><i class="far fa-credit-card mr-1 text-sky-600"></i>12x de <strong>' + reais(p.parcela12) + '</strong> sem juros</span>');
-        if (p.parcela21 != null) linhas.push('<span>21x de <strong>' + reais(p.parcela21) + '</strong> (total ' + reais(p.total21) + ')</span>');
-        var html = '<div class="est-preco">' +
-            '<p class="text-[11px] uppercase tracking-wide font-bold text-sky-700">Preço' + (p.grupo ? ' · plano ' + esc(p.grupo) : '') + '</p>' +
-            '<p class="est-preco-valor mt-1">' + reais(p.valor) + '</p>' +
-            (linhas.length ? '<div class="mt-2 flex flex-col gap-1 text-xs text-gray-700">' + linhas.join('') + '</div>' : '') +
-            '<p class="mt-2 text-[10px] text-gray-400">Tabela de preços do portal' + (p.atualizado ? ' de ' + esc(p.atualizado) : '') +
-            (p.portfolio ? ' · portfólio ' + esc(p.portfolio) : '') + '</p></div>';
-        if (!compacto && p.grupos && p.grupos.length > 1) {
-            html += '<details class="mt-2 rounded-xl border border-gray-100"><summary class="cursor-pointer px-3 py-2 text-xs font-semibold text-gray-700">Preço em cada plano (' + p.grupos.length + ')</summary>' +
+        if (g.pix != null) linhas.push('<span><i class="fas fa-bolt mr-1 text-amber-500"></i>PIX / Vivo Pay <strong>' + reais(g.pix) + '</strong></span>');
+        if (g.parcela12 != null) linhas.push('<span><i class="far fa-credit-card mr-1 text-sky-600"></i>12x de <strong>' + reais(g.parcela12) + '</strong> sem juros</span>');
+        if (g.parcela21 != null) linhas.push('<span>21x de <strong>' + reais(g.parcela21) + '</strong> (total ' + reais(g.total21) + ')</span>');
+        return linhas.length ? '<div class="mt-2 flex flex-col gap-1 text-xs text-gray-700">' + linhas.join('') + '</div>' : '';
+    }
+    // Escolher o plano mostra o valor daquele plano (25/11/2026): PRÉ abre por padrão; os outros no seletor.
+    window.estTrocarPlano = function (sel) {
+        var caixa = sel.closest('.est-preco'), g = (caixa._grupos || [])[sel.selectedIndex];
+        if (!g) return;
+        caixa.querySelector('.est-preco-valor').textContent = reais(g.preco);
+        caixa.querySelector('.est-preco-linhas').innerHTML = linhasDoPreco(g);
+        // O preço com Renova acompanha o plano escolhido.
+        var corpo = caixa.parentNode, renova = corpo && corpo.querySelector('.est-renova-preco');
+        if (renova) renova.textContent = reais(Math.max(0, g.preco - Number(renova.getAttribute('data-desconto'))));
+    };
+    function blocoPreco(p, compacto) {
+        if (!p) return '<div class="est-preco text-sm text-gray-500"><i class="fas fa-tag mr-1"></i>Sem preço na tabela de valores de /vendas para este produto.</div>';
+        var grupos = (p.grupos || []).filter(function (g) { return g.preco != null; });
+        var atual = grupos.length ? (grupos.find(function (g) { return g.grupo === p.grupo; }) || grupos[0]) : null;
+        var base = atual || {preco: p.valor, pix: p.pix, parcela12: p.parcela12, parcela21: p.parcela21, total21: p.total21};
+        var seletor = grupos.length > 1
+            ? '<select class="est-plano" onchange="estTrocarPlano(this)" aria-label="Plano">' + grupos.map(function (g) {
+                return '<option' + (g === atual ? ' selected' : '') + '>' + esc(g.grupo) + '</option>'; }).join('') + '</select>'
+            : (p.grupo ? '<span class="normal-case">plano ' + esc(p.grupo) + '</span>' : '');
+        var id = 'estPreco' + Math.random().toString(36).slice(2);
+        var html = '<div class="est-preco" id="' + id + '">' +
+            '<div class="flex items-center justify-between gap-2"><p class="text-[11px] uppercase tracking-wide font-bold text-sky-700">Preço</p>' + seletor + '</div>' +
+            '<p class="est-preco-valor mt-1">' + reais(base.preco) + '</p>' +
+            '<div class="est-preco-linhas">' + linhasDoPreco(base) + '</div>' +
+            '<p class="mt-2 text-[10px] text-gray-400">Tabela de valores de /vendas' + (p.atualizado ? ' de ' + esc(p.atualizado) : '') +
+            (p.portfolio ? ' · portfólio ' + esc(p.portfolio) : '') +
+            (p.pelo_nome ? ' · achado pelo nome (' + esc(p.nome) + ')' : '') + '</p></div>';
+        // Os grupos ficam no próprio elemento, para o seletor trocar sem ir ao servidor.
+        setTimeout(function () { var el = document.getElementById(id); if (el) el._grupos = grupos; }, 0);
+        if (!compacto && grupos.length > 1) {
+            html += '<details class="mt-2 rounded-xl border border-gray-100"><summary class="cursor-pointer px-3 py-2 text-xs font-semibold text-gray-700">Preço em cada plano (' + grupos.length + ')</summary>' +
                 '<table class="w-full text-xs"><thead class="text-gray-400"><tr><th class="text-left px-3 py-1">Plano</th><th class="text-right px-2">Preço</th><th class="text-right px-2">PIX/Vivo Pay</th><th class="text-right px-3">12x</th></tr></thead><tbody>' +
-                p.grupos.map(function (g) {
+                grupos.map(function (g) {
                     return '<tr class="border-t border-gray-50"><td class="px-3 py-1">' + esc(g.grupo) + '</td><td class="text-right px-2 font-semibold">' + reais(g.preco) +
                         '</td><td class="text-right px-2">' + reais(g.pix) + '</td><td class="text-right px-3">' + reais(g.parcela12) + '</td></tr>';
                 }).join('') + '</tbody></table></details>';
@@ -891,6 +965,70 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
         var centro = alvo.getAttribute('data-centro') || colunas[+alvo.getAttribute('data-indice')];
         if (centro) abrir(centro, alvo.getAttribute('data-material'), alvo.getAttribute('data-modo'), alvo.getAttribute('data-minha'));
     });
+})();
+</script>
+<script>
+/* O campo Produto se autopreenche (25/11/2026): digitou 2 letras, aparecem os produtos que batem;
+   escolher um preenche o nome e já busca. Setas + Enter funcionam; Esc fecha. */
+(function () {
+    var campo = document.getElementById('estBusca'), caixa = document.getElementById('estSugestoes');
+    if (!campo || !caixa) return;
+    var URL_SUG = '{% url "auditoria_sap:estoque_sugestoes" %}';
+    var categoria = document.querySelector('#estFiltros select[name=categoria]');
+    var espera = null, pedido = 0, ativa = -1, itens = [];
+    function esc(t) { var d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; }
+    function fechar() { caixa.classList.add('hidden'); campo.setAttribute('aria-expanded', 'false'); ativa = -1; }
+    function escolher(i) {
+        if (!itens[i]) return;
+        campo.value = itens[i].nome;
+        fechar();
+        campo.form.submit();
+    }
+    function marcar(i) {
+        var botoes = caixa.querySelectorAll('button');
+        botoes.forEach(function (b, k) { b.classList.toggle('ativa', k === i); });
+        ativa = i;
+        if (botoes[i]) botoes[i].scrollIntoView({block: 'nearest'});
+    }
+    function mostrar(lista) {
+        itens = lista;
+        if (!lista.length) { caixa.innerHTML = '<p class="px-3 py-2 text-xs text-gray-500">Nenhum produto com esse nome.</p>'; }
+        else caixa.innerHTML = lista.map(function (s, i) {
+            return '<button type="button" role="option" data-i="' + i + '">' +
+                '<span class="font-semibold text-gray-900">' + esc(s.nome) + '</span>' +
+                '<span class="block text-[11px] text-gray-500">' + esc(s.categoria) + (s.fabricante ? ' · ' + esc(s.fabricante) : '') +
+                (s.cores.length ? ' · ' + esc(s.cores.slice(0, 4).join(', ')) + (s.cores.length > 4 ? '…' : '') : '') +
+                ' · <strong class="' + (s.livre ? 'text-emerald-700' : 'text-gray-400') + '">' + s.livre + ' livre' + (s.livre === 1 ? '' : 's') + ' na rede</strong></span></button>';
+        }).join('');
+        caixa.classList.remove('hidden');
+        campo.setAttribute('aria-expanded', 'true');
+        ativa = -1;
+    }
+    campo.addEventListener('input', function () {
+        clearTimeout(espera);
+        var termo = campo.value.trim();
+        if (termo.length < 2) { fechar(); return; }
+        espera = setTimeout(function () {
+            var meu = ++pedido;
+            var url = URL_SUG + '?q=' + encodeURIComponent(termo) + (categoria && categoria.value ? '&categoria=' + encodeURIComponent(categoria.value) : '');
+            fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}, credentials: 'same-origin'})
+                .then(function (r) { return r.json(); })
+                .then(function (d) { if (meu === pedido && d.ok && campo.value.trim().length >= 2) mostrar(d.sugestoes || []); })
+                .catch(function () {});
+        }, 200);
+    });
+    campo.addEventListener('keydown', function (e) {
+        if (caixa.classList.contains('hidden')) return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); marcar(Math.min(itens.length - 1, ativa + 1)); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); marcar(Math.max(0, ativa - 1)); }
+        else if (e.key === 'Enter' && ativa >= 0) { e.preventDefault(); escolher(ativa); }
+        else if (e.key === 'Escape') { fechar(); }
+    });
+    caixa.addEventListener('mousedown', function (e) {
+        var b = e.target.closest('button[data-i]');
+        if (b) { e.preventDefault(); escolher(Number(b.getAttribute('data-i'))); }
+    });
+    campo.addEventListener('blur', function () { setTimeout(fechar, 120); });
 })();
 </script>
 {% endif %}

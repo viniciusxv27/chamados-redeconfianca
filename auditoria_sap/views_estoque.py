@@ -21,8 +21,25 @@ from django.views.decorators.gzip import gzip_page
 
 from . import estoque as est
 from .mysql import SapIndisponivel
-from .permissions import pode_escolher_gestores
-from .views import so_auditoria
+from functools import wraps
+
+from django.contrib import messages
+from django.shortcuts import redirect
+
+from .permissions import pode_escolher_gestores, pode_ver_estoque, so_estoque
+
+
+def so_quem_ve_estoque(view):
+    """Quem vê a Visão SAP, ou quem foi liberado só para o estoque (sap.estoque)."""
+    @wraps(view)
+    def _view(request, *args, **kwargs):
+        if not pode_ver_estoque(request.user):
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'ok': False, 'erro': 'Sem acesso ao estoque SAP.'}, status=403)
+            messages.error(request, 'O estoque SAP é restrito: peça a liberação ao SUPERADMIN.')
+            return redirect('home')
+        return view(request, *args, **kwargs)
+    return _view
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +143,50 @@ def _resumo_da_loja(foto, loja):
     }
 
 
+# Visão inicial (25/11/2026): cartões das categorias, com nome e ícone, para escolher por onde começar.
+ICONES_DAS_CATEGORIAS = {
+    'smartphone': ('fa-mobile-screen-button', '#2563EB'), 'games': ('fa-gamepad', '#7C3AED'),
+    'audio': ('fa-headphones', '#DB2777'), 'bem estar': ('fa-heart-pulse', '#E11D48'),
+    'box e modem e fwt': ('fa-wifi', '#0891B2'), 'casa inteligente': ('fa-house', '#059669'),
+    'demais eletronicos': ('fa-plug', '#EA580C'), 'essenciais': ('fa-battery-full', '#16A34A'),
+    'notebook e tablets': ('fa-laptop', '#4F46E5'), 'tv': ('fa-tv', '#0F766E'),
+    'outros': ('fa-box', '#64748B'), 'sem categoria': ('fa-circle-question', '#94A3B8'),
+}
+
+
+def icone_da_categoria(nome):
+    """(ícone, cor) da categoria; aceita plural e variação de grafia ("Smartphones", "Games e Consoles")."""
+    alvo = ' '.join(est._sem_acento(nome).split())
+    if alvo in ICONES_DAS_CATEGORIAS:
+        return ICONES_DAS_CATEGORIAS[alvo]
+    for chave, valor in ICONES_DAS_CATEGORIAS.items():
+        if alvo.rstrip('s') == chave.rstrip('s') or alvo.startswith(chave.split()[0].rstrip('s')):
+            return valor
+    return ('fa-tag', '#0EA5E9')
+
+
+def _cartoes_das_categorias(foto, loja):
+    """Um cartão por categoria: ícone, cor, unidades livres na loja escolhida e na rede, e quantos produtos."""
+    livre_rede, livre_loja, produtos = {}, {}, {}
+    for (centro, material), deps in foto['saldos'].items():
+        qtd = deps.get(est.DEPOSITO_VENDA, (0, 0))[0]
+        if not qtd:
+            continue
+        cat = est.produto(foto, material)['categoria']
+        livre_rede[cat] = livre_rede.get(cat, 0) + qtd
+        produtos.setdefault(cat, set()).add(material)
+        if loja and centro == loja:
+            livre_loja[cat] = livre_loja.get(cat, 0) + qtd
+    cartoes = []
+    for nome in est.categorias(foto):
+        icone, cor = icone_da_categoria(nome)
+        cartoes.append({'nome': nome, 'icone': icone, 'cor': cor, 'rede': int(livre_rede.get(nome, 0)),
+                        'loja': int(livre_loja.get(nome, 0)), 'produtos': len(produtos.get(nome, ()))})
+    # Quem tem estoque primeiro; "Sem categoria" sempre no fim.
+    cartoes.sort(key=lambda c: (c['nome'] == 'Sem categoria', c['rede'] == 0, est._sem_acento(c['nome'])))
+    return cartoes
+
+
 def _matriz(foto, filtros, modo):
     colunas = est.colunas_da_matriz(foto, filtros['loja'])
     for c in colunas:
@@ -148,19 +209,23 @@ def _matriz(foto, filtros, modo):
 # comprime as respostas por padrão).
 @gzip_page
 @login_required
-@so_auditoria
+@so_quem_ve_estoque
 def estoque(request):
     try:
         foto = est.fotografia()
     except SapIndisponivel as exc:
         logger.warning('Estoque SAP indisponível', exc_info=True)
         return render(request, 'auditoria_sap/estoque.html', {
-            'aba': 'estoque', 'erro': str(exc), 'abas': ABAS,
+            'aba': 'estoque', 'erro': str(exc), 'abas': ABAS, 'so_estoque': so_estoque(request.user),
             'pode_escolher_gestores': pode_escolher_gestores(request.user)})
 
     filtros = _filtros(request, foto)
     aba = filtros['aba']
+    # Abriu sem escolher nada (nem aba, nem busca, nem categoria): mostra os cartões das categorias.
+    inicial = not any(request.GET.get(k) for k in ('aba', 'q', 'categoria', 'serial', 'loja', 'pagina', 'situacao',
+                                                    'deposito', 'fabricante', 'ordem', 'formato'))
     contexto = {
+        'inicial': inicial,
         'aba': 'estoque',
         'abas': ABAS,
         'f': filtros,
@@ -178,9 +243,13 @@ def estoque(request):
         'resumo': _resumo_da_loja(foto, filtros['loja']),
         'sem_vendas': foto['vendas'] is None,
         'pode_escolher_gestores': pode_escolher_gestores(request.user),
+        'so_estoque': so_estoque(request.user),
         'q_base': _query(filtros, aba='', situacao='', deposito='', fabricante=''),
         'q_atual': _query(filtros),
     }
+    if inicial:
+        contexto['cartoes'] = _cartoes_das_categorias(foto, filtros['loja'])
+        return render(request, 'auditoria_sap/estoque.html', contexto)
     if filtros['serial']:
         contexto['achados'] = est.unidades_de(foto, modo='todas', serial=filtros['serial'])[:30]
         for u in contexto['achados']:
@@ -332,9 +401,33 @@ def _indice_de_precos():
     return indice
 
 
-def preco_do_material(material):
+def _nome_para_preco(nome):
+    """'iPhone 17 256GB (Demo)' → 'iphone 17 256gb': sem acento, caixa, parênteses e espaços repetidos."""
+    import re
+    texto = est._sem_acento(re.sub(r'\([^)]*\)', ' ', nome or ''))
+    return ' '.join(re.sub(r'[^a-z0-9+]+', ' ', texto).split())
+
+
+def _indice_por_nome():
+    """{nome normalizado: preço} da mesma tabela — a reserva quando o material não está nos SKUs."""
+    indice = _indice_de_precos()
+    if _PRECOS.get('por_nome_de') is not indice:
+        por_nome = {}
+        for preco in indice.values():
+            por_nome.setdefault(_nome_para_preco(preco['nome']), preco)
+        _PRECOS.update(por_nome=por_nome, por_nome_de=indice)
+    return _PRECOS['por_nome']
+
+
+def preco_do_material(material, nome=''):
+    """Preço pelo SKU (material) na tabela de valores de /vendas/precos/; sem SKU, pelo nome do produto (25/11/2026)."""
     try:
-        return _indice_de_precos().get((material or '').upper())
+        preco = _indice_de_precos().get((material or '').upper())
+        if preco is None and nome:
+            achado = _indice_por_nome().get(_nome_para_preco(nome))
+            if achado is not None:
+                preco = {**achado, 'pelo_nome': True}
+        return preco
     except Exception:                                            # noqa: BLE001 — sem preço, a gaveta abre igual
         logger.warning('Estoque SAP: tabela de preços não lida', exc_info=True)
         return None
@@ -353,7 +446,7 @@ def _renova_para_json(renova, preco):
 
 
 @login_required
-@so_auditoria
+@so_quem_ve_estoque
 def estoque_produto(request):
     """A gaveta do produto: preço (base, PIX/Vivo Pay, 12x, 21x, por plano), Renova e onde tem."""
     try:
@@ -365,7 +458,7 @@ def estoque_produto(request):
     if not material:
         return JsonResponse({'ok': False, 'erro': 'Produto inválido.'}, status=400)
     p = est.produto(foto, material)
-    preco = preco_do_material(material)
+    preco = preco_do_material(material, p['nome'])
     lojas = est.lojas_com_o_produto(foto, material, minha)
     for loja in lojas:
         loja['cor'] = cor_da_loja(loja['centro'])
@@ -383,7 +476,40 @@ def estoque_produto(request):
 
 
 @login_required
-@so_auditoria
+@so_quem_ve_estoque
+def estoque_sugestoes(request):
+    """O campo Produto se autopreenche (25/11/2026): até 12 produtos que batem com o que foi digitado.
+
+    Um por nome (as cores do mesmo aparelho viram uma sugestão só), quem tem mais estoque primeiro."""
+    termo = (request.GET.get('q') or '').strip()[:80]
+    if len(termo) < 2:
+        return JsonResponse({'ok': True, 'sugestoes': []})
+    try:
+        foto = est.fotografia()
+    except SapIndisponivel:
+        return JsonResponse({'ok': True, 'sugestoes': []})
+    categoria = (request.GET.get('categoria') or '').strip()
+    vistos, saida = {}, []
+    for linha in est.catalogo(foto, busca=termo, categoria=categoria):
+        p = linha['produto']
+        chave = est._sem_acento(p['nome'])
+        if chave in vistos:
+            item = vistos[chave]
+            item['livre'] += int(linha['livre'])
+            if p['cor'] and p['cor'] not in item['cores']:
+                item['cores'].append(p['cor'])
+            continue
+        if len(saida) >= 12:
+            continue
+        item = {'nome': p['nome'], 'categoria': p['categoria'], 'fabricante': p['fabricante'],
+                'cores': [p['cor']] if p['cor'] else [], 'livre': int(linha['livre'])}
+        vistos[chave] = item
+        saida.append(item)
+    return JsonResponse({'ok': True, 'sugestoes': saida})
+
+
+@login_required
+@so_quem_ve_estoque
 def estoque_unidades(request):
     """A gaveta: as unidades de uma loja e um material (disponível ou em trânsito)."""
     try:
@@ -410,8 +536,8 @@ def estoque_unidades(request):
         'cor': cor_da_loja(centro),
         'km': round(km) if km is not None else None,
         'produto': {k: p[k] for k in ('nome', 'cor', 'material', 'categoria', 'descricao_sap')},
-        'preco': preco_do_material(material),
-        'renova': _renova_para_json(p.get('renova'), preco_do_material(material)),
+        'preco': preco_do_material(material, p['nome']),
+        'renova': _renova_para_json(p.get('renova'), preco_do_material(material, p['nome'])),
         'quantidade': int(qtd),
         'sem_serial': max(0, int(qtd) - len(unidades)),
         'unidades': [{

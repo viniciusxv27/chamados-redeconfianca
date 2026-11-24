@@ -45,6 +45,27 @@ def pode_ver(user):
     return ve_a_rede(user) or e_gerente_de_loja(user)
 
 
+CHAVE_ESTOQUE = 'sap.estoque'
+
+
+def pode_ver_estoque(user):
+    """Abre /sap/estoque/: quem vê a Visão SAP, ou quem o SUPERADMIN liberou só para o estoque (25/11/2026).
+
+    Estoque não tem cliente nem documento — por isso dá para liberar sem abrir a auditoria.
+    """
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False
+    if pode_ver(user):
+        return True
+    from users.module_access import user_has_module
+    return user_has_module(user, CHAVE_ESTOQUE)
+
+
+def so_estoque(user):
+    """Liberado só para o estoque: não vê a auditoria, o painel nem a Renova."""
+    return pode_ver_estoque(user) and not pode_ver(user)
+
+
 def no_menu_da_gestao(user):
     """O gerente acha a Visão SAP em "Gestão Administrativa".
 

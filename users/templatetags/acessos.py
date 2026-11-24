@@ -25,3 +25,13 @@ def sap_na_gestao(user):
         return no_menu_da_gestao(user)
     except Exception:  # noqa: BLE001 — menu nunca derruba a página
         return False
+
+
+@register.filter
+def sap_so_estoque(user):
+    """Liberado só para o estoque SAP (sap.estoque): o menu leva direto ao /sap/estoque/."""
+    try:
+        from auditoria_sap.permissions import so_estoque
+        return so_estoque(user)
+    except Exception:  # noqa: BLE001 — menu nunca derruba a página
+        return False

@@ -142,6 +142,7 @@ MODULOS = [
      'descricao': 'Ver a auditoria SAP x Vivo go e marcar linha como resolvida (nasce só para a administração).',
      'permissoes': [
          ('sap.gestor', 'Gestor da auditoria SAP', 'Atualizar o espelho lendo o MySQL do SAP.'),
+         ('sap.estoque', 'Só o estoque SAP', 'Abrir /sap/estoque/ (saldos, seriais e preços), sem a auditoria.'),
      ]},
     {'chave': 'treinamentos', 'rotulo': 'Treinamentos', 'grupo': 'Administrativo',
      'acesso': False,
@@ -250,6 +251,7 @@ GATES = {
     'caixa.piscofins': 'contagem_caixa.permissions:pode_piscofins',
     'sap': 'auditoria_sap.permissions:pode_ver',
     'sap.gestor': 'auditoria_sap.permissions:e_gestor',
+    'sap.estoque': 'auditoria_sap.permissions:pode_ver_estoque',
     'treinamentos.gestao': 'trainings.views:pode_gerenciar_treinamentos',
     'quiz.gestao': 'quiz.permissoes:pode_gerenciar',
     'comunicados.criar': 'metodo:can_create_communications',

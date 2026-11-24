@@ -263,7 +263,7 @@ vendedor = User.objects.create_user(username='zzest.cn', email='zzest.cn@exemplo
 cc, cg, cv = Client(), Client(), Client()
 cc.force_login(chefe); cg.force_login(gerente); cv.force_login(vendedor)
 
-r = cc.get('/sap/estoque/')
+r = cc.get('/sap/estoque/?aba=disponivel')
 html = r.content.decode()
 t('abre', r.status_code == 200, r.status_code)
 t('abre na loja de quem entra (Anchieta)', r.context['f']['loja'] == '057E')
@@ -324,7 +324,7 @@ t('item sem serial: diz quantas, sem lista', j['unidades'] == [] and j['sem_seri
 t('loja inválida: 400', cc.get(f'/sap/estoque/unidades/?centro=XXXX&material={GALAXY}').status_code == 400)
 
 print('\n== 7) QUEM ENTRA ==')
-r = cg.get('/sap/estoque/')
+r = cg.get('/sap/estoque/?aba=disponivel')
 t('gerente de loja entra e abre na loja dele, vendo a rede', r.status_code == 200 and r.context['f']['loja'] == '064E'
   and len(r.context['colunas']) == 4)
 t('quem não é da Visão SAP não entra', cv.get('/sap/estoque/').status_code == 302)
@@ -402,6 +402,81 @@ try:
     t('JS da tela (com preço e Renova) passa no node --check', chk.returncode == 0, chk.stderr[:300])
 except FileNotFoundError:
     print('  (node não encontrado: pulei o --check)')
+
+
+print('\n== 11) VISÃO INICIAL: CARTÕES DAS CATEGORIAS (25/11/2026) ==')
+from auditoria_sap.views_estoque import icone_da_categoria as ve_ic
+r = cc.get('/sap/estoque/')
+html = r.content.decode()
+cartoes = r.context['cartoes'] or []
+t('sem nada escolhido abre nos cartões das categorias', r.status_code == 200 and r.context['inicial']
+  and 'data-cartoes-categorias' in html and 'O que você procura?' in html)
+t('um cartão por categoria, com ícone', {c['nome'] for c in cartoes} == set(est.categorias(est.fotografia()))
+  and all(c['icone'].startswith('fa-') for c in cartoes), [(c['nome'], c['icone']) for c in cartoes])
+sm = next((c for c in cartoes if c['nome'] == 'Smartphones'), None)
+t('Smartphone com o ícone de celular e os números da loja e da rede', sm and sm['icone'] == 'fa-mobile-screen-button'
+  and sm['rede'] >= sm['loja'] and sm['rede'] > 0, sm)
+t('ícone tolera plural e grafia', ve_ic('Smartphone')[0] == ve_ic('Smartphones')[0] == 'fa-mobile-screen-button'
+  and ve_ic('Áudio')[0] == 'fa-headphones' and ve_ic('Games')[0] == 'fa-gamepad' and ve_ic('Xpto')[0] == 'fa-tag')
+t('"Sem categoria" fica por último', cartoes and cartoes[-1]['nome'] == 'Sem categoria')
+t('o cartão leva para a categoria', 'categoria=Smartphones' in html and 'aba=disponivel' in html)
+t('não monta a tabela na abertura', 'colunas' not in r.context and 'id="estRolagem"' not in html)
+r = cc.get('/sap/estoque/?aba=disponivel&categoria=Smartphones')
+t('clicar no cartão abre a tabela daquela categoria', r.status_code == 200 and not r.context['inicial']
+  and 'colunas' in r.context and 'data-cartoes-categorias' not in r.content.decode())
+
+print('\n== 12) O CAMPO PRODUTO SE AUTOPREENCHE ==')
+j = cc.get('/sap/estoque/sugestoes/?q=gal', HTTP_X_REQUESTED_WITH='XMLHttpRequest').json()
+nomes = [s['nome'] for s in j['sugestoes']]
+t('sugere os produtos que batem', j['ok'] and any('Galaxy' in n for n in nomes), nomes)
+t('um por nome (as cores viram uma sugestão só)', len(nomes) == len(set(n.lower() for n in nomes)))
+t('cada sugestão diz categoria e quanto tem livre', all({'categoria', 'livre', 'cores'} <= set(s) for s in j['sugestoes']))
+t('menos de 2 letras não sugere nada', cc.get('/sap/estoque/sugestoes/?q=g').json()['sugestoes'] == [])
+t('no máximo 12', len(cc.get('/sap/estoque/sugestoes/?q=a').json()['sugestoes']) <= 12)
+t('quem não vê o estoque não recebe sugestão', cv.get('/sap/estoque/sugestoes/?q=gal',
+                                                      HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code == 403)
+html = cc.get('/sap/estoque/?aba=disponivel').content.decode()
+t('o campo tem a lista de sugestões', 'id="estBusca"' in html and 'id="estSugestoes"' in html
+  and '/sap/estoque/sugestoes/' in html)
+
+print('\n== 13) PREÇO: ESCOLHER O PLANO E RESERVA PELO NOME ==')
+j = cc.get(f'/sap/estoque/produto/?material={GALAXY}&minha=057E').json()
+t('o preço traz os planos para o seletor (abre no PRÉ)', j['preco']['grupo'] == 'PRÉ'
+  and [g['grupo'] for g in j['preco']['grupos']] == ['PRÉ', 'VIVO V'] and j['preco']['grupos'][1]['preco'] == 1749.0)
+t('a tela tem o seletor de plano', 'estTrocarPlano' in html and 'est-plano' in html)
+from auditoria_sap import views_estoque as ve
+p_pel = est.produto(est.fotografia(), PELICULA)
+ItemPreco.objects.create(categoria='ACESSÓRIOS', nome=p_pel['nome'] + ' (Demo)', cod_sap='OUTRO-SKU', valor=59.9,
+                         ativo=True, importado_em=timezone.now(), extra={})
+j = cc.get(f'/sap/estoque/produto/?material={PELICULA}').json()
+t('sem o SKU na tabela: acha o preço pelo nome do produto', j['preco'] and j['preco']['valor'] == 59.9
+  and j['preco'].get('pelo_nome') is True, j.get('preco'))
+t('o SKU continua valendo antes do nome', cc.get(f'/sap/estoque/produto/?material={GALAXY}').json()['preco'].get('pelo_nome') is None)
+t('nome normalizado ignora acento, caixa e parênteses', ve._nome_para_preco('iPhone 17 256GB (Demo)') == 'iphone 17 256gb'
+  and ve._nome_para_preco('Película Câmera') == 'pelicula camera')
+
+print('\n== 14) LIBERAR SÓ O ESTOQUE (25/11/2026) ==')
+from users.models import UserModuleAccess
+from auditoria_sap.permissions import pode_ver, pode_ver_estoque, so_estoque
+csa = Client(); csa.force_login(chefe)
+h = csa.get('/sap/gestores/').content.decode()
+t('/sap/gestores/ tem a lista "Só o estoque"', 'Só o estoque' in h and 'name="estoque"' in h)
+csa.post('/sap/gestores/', {'secao': 'estoque', 'estoque': [vendedor.pk]})
+vendedor = User.objects.get(pk=vendedor.pk)
+t('liberado só para o estoque', UserModuleAccess.objects.filter(user=vendedor, module_key='sap.estoque').exists()
+  and pode_ver_estoque(vendedor) and not pode_ver(vendedor) and so_estoque(vendedor))
+r = cv.get('/sap/estoque/?aba=disponivel')
+h = r.content.decode()
+nav = h.split('<nav class="flex items-center gap-1 mt-4')[1][:3000] if '<nav class="flex items-center gap-1 mt-4' in h else ''
+t('ele abre o estoque', r.status_code == 200, r.status_code)
+t('e só vê a aba Estoque', 'Estoque' in nav and 'Auditoria' not in nav and 'Visão Renova' not in nav, nav[:300])
+t('a gaveta e as sugestões também abrem', cv.get(f'/sap/estoque/produto/?material={GALAXY}').status_code == 200
+  and cv.get('/sap/estoque/sugestoes/?q=gal').status_code == 200)
+t('mas a auditoria continua fechada', cv.get('/sap/').status_code == 302 and cv.get('/sap/painel/').status_code == 302)
+t('o menu mostra "Estoque SAP"', 'Estoque SAP' in h)
+t('liberar estoque não mexe na Visão SAP inteira', not UserModuleAccess.objects.filter(module_key='sap').exists())
+csa.post('/sap/gestores/', {'secao': 'estoque'})
+t('desmarcar tira o estoque', cv.get('/sap/estoque/?aba=disponivel').status_code == 302)
 
 print(f'\n{ok} OK / {fail} falhas')
 sys.exit(1 if fail else 0)
