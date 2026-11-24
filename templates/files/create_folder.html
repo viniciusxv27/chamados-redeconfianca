@@ -105,7 +105,6 @@ function loadSectors() {
     sectorSelect.innerHTML = '<option value="">Carregando setores...</option>';
     sectorSelect.disabled = true;
     
-    console.log('Carregando setores...');
     
     fetch('{% url "files:get_sectors" %}', {
         method: 'GET',
@@ -115,14 +114,12 @@ function loadSectors() {
         }
     })
     .then(response => {
-        console.log('Response status:', response.status);
         if (!response.ok) {
             throw new Error('Network response was not ok');
         }
         return response.json();
     })
     .then(data => {
-        console.log('Setores recebidos:', data);
         sectorSelect.innerHTML = '<option value="">Selecione um setor</option>';
         
         if (data.sectors && data.sectors.length > 0) {

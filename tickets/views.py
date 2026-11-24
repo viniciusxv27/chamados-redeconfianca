@@ -23,6 +23,9 @@ import io
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # Extensões de vídeo aceitas nos anexos (mesma lista usada na abertura do chamado).
@@ -240,13 +243,7 @@ def tickets_list_view(request):
                 models.Q(primary_users__in=carteira_users)  # Setor principal (ForeignKey)
             ).distinct()
             
-            print(f"DEBUG: Filtro carteira ativo: Grupo '{carteira_group.name}' (ID: {carteira_filter})")
-            print(f"DEBUG: Usuários da carteira ({carteira_users.count()}): {[u.username for u in carteira_users]}")
-            print(f"DEBUG: Setores da carteira ({carteira_sectors.count()}): {[s.name for s in carteira_sectors]}")
             
-            # Contar tickets antes do filtro
-            tickets_antes = tickets.count()
-            print(f"DEBUG: Tickets antes do filtro carteira: {tickets_antes}")
             
             # Filtrar chamados que foram direcionados PARA os setores da carteira
             # OU que foram atribuídos a usuários da carteira
@@ -256,18 +253,12 @@ def tickets_list_view(request):
                 models.Q(additional_assignments__user__in=carteira_users, additional_assignments__is_active=True)  # Atribuições adicionais
             ).distinct()
             
-            print(f"DEBUG: Tickets após filtro carteira: {tickets.count()}")
             
-            # Debug adicional: verificar se há tickets nos setores da carteira
-            tickets_por_setor = tickets.filter(sector__in=carteira_sectors).count()
-            tickets_atribuidos = tickets.filter(assigned_to__in=carteira_users).count()
-            print(f"DEBUG: Tickets por setor da carteira: {tickets_por_setor}")
-            print(f"DEBUG: Tickets atribuídos a usuários da carteira: {tickets_atribuidos}")
             
         except CommunicationGroup.DoesNotExist:
-            print(f"DEBUG: Grupo de carteira com ID {carteira_filter} não encontrado")
+            pass
         except Exception as e:
-            print(f"DEBUG: Erro no filtro carteira: {str(e)}")
+            pass
     
     # Filtro por setor do solicitante - disponível apenas para SUPERVISOR e acima
     # IMPORTANTE: Este filtro deve ser aplicado ANTES da paginação
@@ -484,7 +475,7 @@ def tickets_list_view(request):
 
     except Exception as e:
         # Em caso de erro, usar valores padrão vazios
-        print(f"Erro ao carregar categorias e setores: {str(e)}")
+        logger.warning(f"Erro ao carregar categorias e setores: {str(e)}")
         user_categories = []
         all_categories = []
         all_sectors = []

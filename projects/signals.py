@@ -3,6 +3,9 @@ from django.dispatch import receiver
 from django.contrib.auth import get_user_model
 from .models_chat import SupportChat
 from notifications.models import PushNotification
+import logging
+
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -31,7 +34,7 @@ def notify_support_chat_closed(sender, instance, created, **kwargs):
                 )
             except Exception as e:
                 # Log do erro se necessário
-                print(f"Erro ao criar notificação de suporte fechado: {e}")
+                logger.warning(f"Erro ao criar notificação de suporte fechado: {e}")
 
 @receiver(post_save, sender=SupportChat)
 def track_status_changes(sender, instance, **kwargs):

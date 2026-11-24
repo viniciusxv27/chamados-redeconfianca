@@ -11,15 +11,12 @@ const urlsToCache = [
 
 // Install event
 self.addEventListener('install', event => {
-  console.log('Service Worker: Installing...');
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
-        console.log('Service Worker: Cache opened');
         return cache.addAll(urlsToCache);
       })
       .then(() => {
-        console.log('Service Worker: Install complete');
         // Forçar ativação imediata
         return self.skipWaiting();
       })
@@ -46,19 +43,16 @@ self.addEventListener('fetch', event => {
 
 // Activate event
 self.addEventListener('activate', event => {
-  console.log('Service Worker: Activating...');
   event.waitUntil(
     caches.keys().then(cacheNames => {
       return Promise.all(
         cacheNames.map(cacheName => {
           if (cacheName !== CACHE_NAME) {
-            console.log('Service Worker: Deleting old cache:', cacheName);
             return caches.delete(cacheName);
           }
         })
       );
     }).then(() => {
-      console.log('Service Worker: Activated');
       // Assumir controle imediatamente
       return self.clients.claim();
     })
@@ -74,16 +68,13 @@ self.addEventListener('sync', event => {
 
 // Push notifications with enhanced iOS support
 self.addEventListener('push', event => {
-  console.log('Service Worker: Push event received', event);
   
   let notificationData = {};
   
   try {
     // Tentar parsear os dados da notificação
     notificationData = event.data ? event.data.json() : {};
-    console.log('Service Worker: Parsed notification data:', notificationData);
   } catch (e) {
-    console.log('Service Worker: Failed to parse JSON, using text fallback');
     // Fallback para texto simples
     notificationData = {
       title: 'Rede Confiança',
@@ -133,10 +124,8 @@ self.addEventListener('push', event => {
     }
   } else {
     // Para iOS, usar configurações simplificadas
-    console.log('Service Worker: iOS/Safari detected, using simplified notification options');
   }
 
-  console.log('Service Worker: Showing notification with options:', baseOptions);
 
   event.waitUntil(
     self.registration.showNotification(
@@ -144,7 +133,6 @@ self.addEventListener('push', event => {
       baseOptions
     )
     .then(() => {
-      console.log('Service Worker: Notification shown successfully');
       
       // Para iOS, tentar usar API nativa se disponível
       if (isIOS && 'Notification' in self && Notification.permission === 'granted') {
@@ -154,7 +142,6 @@ self.addEventListener('push', event => {
             icon: baseOptions.icon
           });
         } catch (e) {
-          console.log('Service Worker: Native Notification API not available or failed');
         }
       }
     })

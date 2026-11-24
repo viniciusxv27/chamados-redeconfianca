@@ -10,6 +10,9 @@ from django.db import models, transaction
 from .models import Activity
 from .models_chat import TaskChat, TaskChatMessage, SupportChat, SupportChatMessage, SupportAgent, SupportCategory, SupportChatRating, SupportChatFile, SupportTransferRequest
 from users.models import User
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _user_is_supervisor_or_higher(user):
@@ -2475,7 +2478,7 @@ def assign_chat_to_agent(request, chat_id):
         
     except Exception as e:
         import traceback
-        print(f"Erro ao assumir atendimento: {traceback.format_exc()}")
+        logger.exception(f"Erro ao assumir atendimento")
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 

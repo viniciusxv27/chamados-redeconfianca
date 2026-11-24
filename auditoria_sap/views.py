@@ -21,7 +21,7 @@ from .models import (GRUPOS_DA_TELA, LIMITE_VALOR_DESPREZIVEL, TIPO_NAO_LANCADA_
                      q_valor_desprezivel)
 from .mysql import SapIndisponivel
 from .permissions import e_gestor as _e_gestor
-from .permissions import (CHAVE_GESTOR, gestores_escolhidos, lojas_visiveis, nome_da_loja, normalizar_loja,
+from .permissions import (CHAVE_ACESSO, CHAVE_GESTOR, gestores_escolhidos, lojas_visiveis, nome_da_loja, normalizar_loja,
                           pode_escolher_gestores)
 from .permissions import pode_ver as _pode_ver
 
@@ -589,6 +589,27 @@ def gestores(request):
         messages.success(request, f'Leitura automática do SAP a cada {agenda.intervalo_horas} h.' if agenda.ativo
                          else 'Leitura automática do SAP desligada: só pelo botão "Atualizar do SAP".')
         return redirect('auditoria_sap:gestores')
+    # 24/11/2026: o SUPERADMIN libera a Visão SAP (a rede inteira) para quem precisar, sem mexer na hierarquia.
+    com_acesso = set(UserModuleAccess.objects.filter(module_key=CHAVE_ACESSO, user__is_active=True)
+                     .values_list('user_id', flat=True))
+    if request.method == 'POST' and request.POST.get('secao') == 'acessos':
+        escolhidos = {int(i) for i in request.POST.getlist('acessos') if str(i).isdigit()}
+        escolhidos = set(User.objects.filter(pk__in=escolhidos, is_active=True).values_list('pk', flat=True))
+        saem, entram = com_acesso - escolhidos, escolhidos - com_acesso
+        UserModuleAccess.objects.filter(user_id__in=saem, module_key=CHAVE_ACESSO).delete()
+        for pk in entram:
+            UserModuleAccess.objects.get_or_create(user_id=pk, module_key=CHAVE_ACESSO,
+                                                   defaults={'granted_by': request.user})
+        try:
+            from core.models import SystemLog
+            nomes = lambda ids: ', '.join(u.full_name for u in User.objects.filter(pk__in=ids)) or '—'
+            SystemLog.objects.create(user=request.user, action_type='ADMIN_ACTION',
+                                     description=(f'Acesso à Visão SAP — liberado: {nomes(entram)}; '
+                                                  f'retirado: {nomes(saem)}')[:1000])
+        except Exception:                                       # noqa: BLE001 — o log não segura a escolha
+            logger.warning('Log do acesso à Visão SAP não foi gravado', exc_info=True)
+        messages.success(request, f'Acesso à Visão SAP salvo: {len(escolhidos)} pessoa(s) liberada(s).')
+        return redirect('auditoria_sap:gestores')
     atuais = set(gestores_escolhidos().values_list('pk', flat=True))
     if request.method == 'POST':
         escolhidos = {int(i) for i in request.POST.getlist('gestores') if str(i).isdigit()}
@@ -610,9 +631,11 @@ def gestores(request):
         messages.success(request, f'Gestores da Visão SAP salvos: {len(escolhidos)} pessoa(s).')
         return redirect('auditoria_sap:gestores')
     pessoas = list(User.objects.filter(is_active=True).select_related('sector').order_by('first_name', 'last_name'))
+    pessoas_acesso = sorted(pessoas, key=lambda u: (u.pk not in com_acesso, (u.first_name or '').upper()))
     pessoas.sort(key=lambda u: (u.pk not in atuais, (u.first_name or '').upper()))
     return render(request, 'auditoria_sap/gestores.html', {
         'pessoas': pessoas, 'atuais': atuais, 'aba': 'gestores',
+        'pessoas_acesso': pessoas_acesso, 'com_acesso': com_acesso,
         'agenda': agenda, 'proxima': proxima_leitura(agenda),
         'pode_escolher_gestores': True, 'e_gestor': True, 'ultima': ultima_sincronizacao(),
     })

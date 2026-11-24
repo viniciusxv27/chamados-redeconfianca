@@ -939,19 +939,6 @@ function checkFormValidity() {
         hasValidDates = !startDate.disabled && !endDate.disabled && startDate.value && endDate.value;
     }
     
-    console.log('Form validation:', {
-        hasTemplate,
-        hasUser,
-        hasGroup,
-        hasSchedule,
-        hasValidDates,
-        selectedScheduleType,
-        customDatesCount: selectedCustomDates.length,
-        startDate: document.getElementById('start_date')?.value,
-        endDate: document.getElementById('end_date')?.value,
-        startDateDisabled: document.getElementById('start_date')?.disabled,
-        endDateDisabled: document.getElementById('end_date')?.disabled
-    });
     
     document.getElementById('submit_btn').disabled = !(hasTemplate && (hasUser || hasGroup) && hasSchedule && hasValidDates);
 }

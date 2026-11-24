@@ -1156,12 +1156,10 @@ function hideRejectModal() {
 }
 
 function showStatusModal() {
-    console.log('Tentando abrir modal de status');
     const modal = document.getElementById('statusModal');
     if (modal) {
         modal.classList.remove('hidden');
         document.body.style.overflow = 'hidden';
-        console.log('Modal de status aberto');
     } else {
         console.error('Modal statusModal não encontrado');
     }

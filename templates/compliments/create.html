@@ -415,7 +415,6 @@ function validateForm() {
     const rating = document.getElementById('ratingInput').value;
     const comment = document.getElementById('comment').value.trim();
     
-    console.log('Validation:', {targetType, targetId, rating, comment}); // Debug
     
     const isValid = targetType && targetId && rating && comment;
     const submitBtn = document.getElementById('submitBtn');

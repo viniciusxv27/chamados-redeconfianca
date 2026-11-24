@@ -312,7 +312,6 @@ function performSearch(query) {
     if (query.length < 2) return;
     
     // Implementar busca conforme necessário
-    console.log('Searching for:', query);
 }
 
 // Copy to clipboard
@@ -367,14 +366,12 @@ function initializeNotificationSystem() {
 async function initializePushNotifications() {
     // Verificar se o serviço está disponível
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-        console.log('Push notifications não suportadas neste navegador');
         return;
     }
     
     try {
         // Registrar service worker
         const registration = await navigator.serviceWorker.register('/sw.js');
-        console.log('Service Worker registrado com sucesso');
         
         // Aguardar o service worker estar pronto
         await navigator.serviceWorker.ready;
@@ -384,7 +381,6 @@ async function initializePushNotifications() {
                      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         
         if (isIOS) {
-            console.log('iOS detectado - usando gestor específico para iOS');
             // O iOSNotificationManager será inicializado automaticamente
             
             // Verificar se o app está em standalone mode (adicionado à tela inicial)
@@ -392,7 +388,6 @@ async function initializePushNotifications() {
                                window.matchMedia('(display-mode: standalone)').matches;
             
             if (!isStandalone) {
-                console.log('App não está em modo standalone - funcionalidades limitadas');
                 showIOSInstallPrompt();
                 return;
             }
@@ -402,17 +397,13 @@ async function initializePushNotifications() {
         const permission = Notification.permission;
         
         if (permission === 'granted') {
-            console.log('Permissão de notificação já foi concedida');
             
             if (isIOS) {
-                console.log('Sistema iOS detectado - aguardando ação do usuário para ativar notificações');
                 // Para iOS, não fazer nada automático - aguardar ação do usuário
             } else {
                 // Para outros navegadores, verificar se já existe subscription mas não criar automaticamente
-                console.log('Sistema não-iOS detectado - aguardando ação do usuário para ativar notificações');
             }
         } else {
-            console.log('Permissão de notificação não concedida - aguardando ação do usuário');
         }
         
     } catch (error) {
@@ -426,7 +417,6 @@ async function subscribeToNotifications(registration) {
         // Verificar se já existe uma subscrição ativa
         const existingSubscription = await registration.pushManager.getSubscription();
         if (existingSubscription) {
-            console.log('Já existe uma subscrição ativa para push notifications');
             return;
         }
         
@@ -460,7 +450,6 @@ async function subscribeToNotifications(registration) {
         const subscribeData = await subscribeResponse.json();
         
         if (subscribeData.success) {
-            console.log('Subscrição realizada com sucesso');
             showNotificationSuccess();
         } else {
             throw new Error(subscribeData.error);
@@ -557,7 +546,6 @@ async function updateUnreadCount() {
             updateNotificationBadge(currentUnreadCount);
         }
     } catch (error) {
-        console.log('Erro ao carregar contador de notificações:', error);
     }
 }
 
@@ -573,7 +561,6 @@ async function loadRecentNotifications() {
             updateNotificationBadge(currentUnreadCount);
         }
     } catch (error) {
-        console.log('Erro ao carregar notificações:', error);
     }
 }
 
@@ -671,7 +658,6 @@ async function handleNotificationClick(notificationId, actionUrl) {
         }
         
     } catch (error) {
-        console.log('Erro ao processar notificação:', error);
     }
 }
 
@@ -693,7 +679,6 @@ async function markAllNotificationsAsRead() {
             showNotification('Todas as notificações foram marcadas como lidas', 'success');
         }
     } catch (error) {
-        console.log('Erro ao marcar notificações como lidas:', error);
     }
 }
 

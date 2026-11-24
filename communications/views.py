@@ -248,7 +248,6 @@ def communication_react(request, communication_id):
         data = json.loads(request.body)
         reaction = data.get('reaction')
         
-        print(f"DEBUG: User {request.user.id} reacting '{reaction}' to communication {communication_id}")
         
         if reaction not in ['like']:
             return JsonResponse({'success': False, 'error': 'Reação inválida'})
@@ -271,7 +270,6 @@ def communication_react(request, communication_id):
         # Retornar nova contagem
         count = reaction_field.count()
         
-        print(f"DEBUG: Reaction {reaction} {'added' if added else 'removed'}, new count: {count}")
         
         return JsonResponse({
             'success': True,
@@ -281,7 +279,6 @@ def communication_react(request, communication_id):
         })
         
     except Exception as e:
-        print(f"DEBUG: Error in communication_react: {str(e)}")
         return JsonResponse({'success': False, 'error': str(e)})
 
 
@@ -678,9 +675,7 @@ def create_communication_view(request):
                         group = CommunicationGroup.objects.get(id=group_id)
                         group_members = group.members.all()
                         all_recipients.update(group_members)
-                        print(f"DEBUG: Adicionando {group_members.count()} membros do grupo '{group.name}'")
                     except CommunicationGroup.DoesNotExist:
-                        print(f"DEBUG: Grupo {group_id} não encontrado")
                         continue
                 
                 # Adicionar todos os destinatários únicos dos grupos
@@ -688,7 +683,6 @@ def create_communication_view(request):
                     communication.recipients.add(*all_recipients)
                     communication.send_to_all = False
                     communication.save()
-                    print(f"DEBUG: Total de destinatários únicos adicionados: {len(all_recipients)}")
             
             elif custom_group_id:
                 # Se foi selecionado um grupo personalizado (compatibilidade), adicionar apenas os membros do grupo
@@ -902,18 +896,14 @@ def update_communication_status(request, communication_id):
         communication = get_object_or_404(Communication, id=communication_id)
         user = request.user
         
-        print(f"DEBUG: Headers: {dict(request.headers)}")
-        print(f"DEBUG: Updating status for communication {communication_id} by user {user.id}")
         
         # Check if it's an AJAX request
         if request.content_type == 'application/json':
             import json
             data = json.loads(request.body)
             status = data.get('status')
-            print(f"DEBUG: AJAX request with status: {status}")
         else:
             status = request.POST.get('status')
-            print(f"DEBUG: Form request with status: {status}")
         
         if status in ['ESTOU_CIENTE', 'ESTOU_COM_DUVIDA']:
             comm_read, created = CommunicationRead.objects.get_or_create(
@@ -924,7 +914,6 @@ def update_communication_status(request, communication_id):
             comm_read.status = status
             comm_read.save()
             
-            print(f"DEBUG: Status updated successfully to {status}")
             
             # If it's an AJAX request, return JSON
             if request.content_type == 'application/json':
@@ -936,7 +925,6 @@ def update_communication_status(request, communication_id):
             
             messages.success(request, f'Status atualizado: {comm_read.get_status_display()}')
         else:
-            print(f"DEBUG: Invalid status: {status}")
             # If it's an AJAX request, return JSON error
             if request.content_type == 'application/json':
                 return JsonResponse({'success': False, 'error': 'Status inválido.'})

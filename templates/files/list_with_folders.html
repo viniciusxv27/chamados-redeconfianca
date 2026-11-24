@@ -513,7 +513,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (card.querySelector('a[href*="file_download"]')) {
                 fileCards.push(card);
                 card.dataset.cardType = 'file';
-                console.log('📄 Found file card with download link');
             }
         });
     });
@@ -527,12 +526,10 @@ document.addEventListener('DOMContentLoaded', function() {
             if (card.querySelector('a[href*="?folder="]')) {
                 folderCards.push(card);
                 card.dataset.cardType = 'folder';
-                console.log('📁 Found folder card');
             }
         });
     });
     
-    console.log(`📊 Cards found - Files: ${fileCards.length}, Folders: ${folderCards.length}`);
     
     const allCards = [...fileCards, ...folderCards];
     
@@ -545,7 +542,6 @@ document.addEventListener('DOMContentLoaded', function() {
             card.style.cursor = 'grab';
             card.dataset.fileId = fileId;
             card.dataset.cardType = 'file';
-            console.log(`✅ File ${fileId} made draggable`);
             
             card.addEventListener('dragstart', function(e) {
                 draggedFile = fileId;
@@ -553,7 +549,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 this.style.cursor = 'grabbing';
                 
                 document.body.classList.add('dragging-file');
-                console.log('🎯 Drag started for file:', fileId);
                 
                 // Destacar todas as pastas como possíveis destinos
                 folderCards.forEach(folderCard => {
@@ -571,7 +566,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 folderCards.forEach(folderCard => {
                     folderCard.classList.remove('drop-target', 'border-2', 'border-blue-400', 'bg-blue-50');
                 });
-                console.log('🏁 Drag ended');
             });
         }
     });
@@ -583,7 +577,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (folderId) {
             card.dataset.folderId = folderId;
             card.dataset.cardType = 'folder';
-            console.log(`📁 Folder ${folderId} configured as drop target`);
             
             card.addEventListener('dragover', function(e) {
                 e.preventDefault();
@@ -608,7 +601,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 this.classList.remove('border-2', 'border-blue-400', 'bg-blue-50');
                 
                 if (draggedFile) {
-                    console.log('💫 File dropped on folder:', draggedFile, 'to', folderId);
                     moveFileToFolder(draggedFile, folderId);
                 }
             });
@@ -620,11 +612,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const downloadLink = card.querySelector('a[href*="file_download"]');
         if (downloadLink) {
             const href = downloadLink.getAttribute('href');
-            console.log('Found download link:', href);
             // Padrão: /files/file_download/<id>/
             const match = href.match(/file_download\/(\d+)/);
             if (match) {
-                console.log('Extracted file ID:', match[1]);
                 return match[1];
             }
         }
@@ -636,10 +626,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const folderLink = card.querySelector('a[href*="?folder="]');
         if (folderLink) {
             const href = folderLink.getAttribute('href');
-            console.log('Found folder link:', href);
             const match = href.match(/[?&]folder=(\d+)/);
             if (match) {
-                console.log('Extracted folder ID:', match[1]);
                 return match[1];
             }
         }
@@ -647,7 +635,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     function moveFileToFolder(fileId, folderId) {
-        console.log('Moving file', fileId, 'to folder', folderId);
         
         // Mostrar loading
         const loadingDiv = document.createElement('div');

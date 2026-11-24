@@ -69,6 +69,8 @@ def e_gestor(user):
 
 
 CHAVE_GESTOR = 'sap.gestor'
+# Liberação individual da Visão SAP (rede inteira), marcada pelo SUPERADMIN em /sap/gestores/.
+CHAVE_ACESSO = 'sap'
 
 
 def pode_escolher_gestores(user):

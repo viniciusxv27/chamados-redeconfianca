@@ -156,7 +156,6 @@ function getCsrfToken() {
     const csrfInput = document.querySelector('[name=csrfmiddlewaretoken]');
     if (csrfInput && csrfInput.value && csrfInput.value.trim() !== '') {
         const token = csrfInput.value.trim();
-        console.log('CSRF token from input:', token, 'Length:', token.length);
         return token;
     }
     
@@ -179,7 +178,6 @@ function getCsrfToken() {
     const cookieToken = getCookie('csrftoken');
     if (cookieToken && cookieToken.trim() !== '') {
         const token = cookieToken.trim();
-        console.log('CSRF token from cookie:', token, 'Length:', token.length);
         return token;
     }
     

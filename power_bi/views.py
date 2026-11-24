@@ -42,7 +42,6 @@ def _is_gerentes_group_user(user):
 
         gerente_group = CommunicationGroup.objects.filter(name__icontains='GERENTES').first()
         if gerente_group:
-            print(f"[is_user_gerente] Verificando se {user.get_full_name()} esta no grupo GERENTES")
             return user in gerente_group.members.all()
     except Exception:
         pass

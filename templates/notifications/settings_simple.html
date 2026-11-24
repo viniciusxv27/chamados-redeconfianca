@@ -365,7 +365,6 @@ document.addEventListener('DOMContentLoaded', function() {
             updateStatusSilent('granted');
             
         } catch (error) {
-            console.log('Status das notificações verificado silenciosamente');
             updateStatusSilent('error');
         }
     }
@@ -519,9 +518,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             // Solicitar permissão
-            console.log('Solicitando permissão...');
             const permission = await Notification.requestPermission();
-            console.log('Permissão:', permission);
             
             if (permission !== 'granted') {
                 if (permission === 'denied') {
@@ -531,19 +528,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
             
-            console.log('Registrando service worker...');
             
             // Registrar service worker
             const registration = await navigator.serviceWorker.register('/sw.js', {
                 scope: '/'
             });
             
-            console.log('Service worker registrado:', registration);
             
             // Aguardar o service worker estar ativo
             await waitForServiceWorker(registration);
             
-            console.log('Service worker ativo, criando subscription...');
             
             // Verificar se já existe uma subscription
             let subscription = await registration.pushManager.getSubscription();
@@ -556,7 +550,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
             }
             
-            console.log('Subscription obtida:', subscription);
             
             // Obter CSRF token
             const csrfToken = getCSRFToken();

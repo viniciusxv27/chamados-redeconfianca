@@ -1475,7 +1475,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add touch support for mobile drag & drop
     if ('ontouchstart' in window) {
         // Add mobile drag & drop support here if needed
-        console.log('Mobile drag & drop could be implemented here');
     }
     
     // Initialize column counts
@@ -1599,19 +1598,16 @@ function closeSubtaskModalGlobal() {
 }
 
 function openSubtaskModal(subtaskId) {
-    console.log('Abrindo modal da subtarefa:', subtaskId);
     
     // Fazer requisição para obter os detalhes da subtarefa
     fetch(`/projects/activity/${subtaskId}/details/`)
         .then(response => {
-            console.log('Resposta recebida:', response.status);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             return response.json();
         })
         .then(data => {
-            console.log('Dados recebidos:', data);
             if (data.success) {
                 const subtask = data.subtask;
                 displaySubtaskDetails(subtask);
@@ -1634,7 +1630,6 @@ function displaySubtaskDetails(subtask) {
         return;
     }
     
-    console.log('Exibindo detalhes da subtarefa:', subtask);
     
     // Formatar data
     let deadlineFormatted = 'Não definido';
@@ -1766,7 +1761,6 @@ function closeSubtaskDetailModal() {
 
 // Função de teste para verificar se o modal abre
 function testSubtaskModal() {
-    console.log('Testando modal...');
     const mockSubtask = {
         title: 'Teste de Subtarefa',
         description: 'Esta é uma subtarefa de teste',

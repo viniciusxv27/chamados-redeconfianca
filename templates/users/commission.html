@@ -593,9 +593,6 @@ const mesesLabels = {
 };
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Inicializando gráficos...');
-    console.log('chartsData:', chartsData);
-    console.log('pilaresData:', pilaresData);
     initCharts();
     animateProgressCircles();
 });
@@ -613,7 +610,6 @@ function initCharts() {
     
     // Gráfico de Linha - Evolução dos Atingimentos
     const ctxEvolucao = document.getElementById('chartEvolucao');
-    console.log('ctxEvolucao:', ctxEvolucao);
     if (ctxEvolucao && pilaresData.length > 0) {
         const datasets = pilaresData.map((pilar, index) => ({
             label: pilar.nome,

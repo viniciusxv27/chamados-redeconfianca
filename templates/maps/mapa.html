@@ -335,7 +335,6 @@ function mpIniciar() {
     };
 
     function usarFonte(indice) {
-        console.log('[mapa] fonte ->', indice, (FONTES[indice] || {}).nome || 'acabaram');
         if (indice >= FONTES.length) {
             avisarFonte('<i class="fas fa-triangle-exclamation mr-1"></i>O mapa base não '
                       + 'carregou nesta rede — os pontos continuam marcados e a lista ao '

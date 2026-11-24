@@ -10,7 +10,6 @@ class iOSNotificationManager {
         this.supportsPWA = this.detectPWASupport();
         
         if (this.isIOS) {
-            console.log('iOS detected, initializing iOS notification manager');
             this.init();
         }
     }
@@ -53,7 +52,6 @@ class iOSNotificationManager {
             const majorVersion = parseInt(match[1]);
             const minorVersion = parseInt(match[2]);
             
-            console.log(`iOS Version: ${majorVersion}.${minorVersion}`);
             
             // Push notifications são suportadas no iOS 16.4+
             this.supportsPushNotifications = majorVersion > 16 || 
@@ -76,7 +74,6 @@ class iOSNotificationManager {
         
         // Listen for app installation completion
         window.addEventListener('appinstalled', () => {
-            console.log('PWA was installed');
             this.hideInstallBanner();
             // Request notification permission after installation
             setTimeout(() => this.requestNotificationPermission(), 1000);
@@ -93,7 +90,6 @@ class iOSNotificationManager {
     
     async requestNotificationPermission() {
         if (!this.supportsPWA) {
-            console.log('PWA features not supported');
             return false;
         }
         
@@ -114,7 +110,6 @@ class iOSNotificationManager {
             }
             
             if (permission === 'granted') {
-                console.log('Notification permission granted');
                 
                 // For iOS, we need to make sure the app is added to home screen
                 if (!this.isStandalone) {
@@ -125,7 +120,6 @@ class iOSNotificationManager {
                 // Subscribe to push notifications
                 return await this.subscribeToPush(registration);
             } else {
-                console.log('Notification permission denied');
                 this.showPermissionDeniedMessage();
                 return false;
             }
@@ -168,7 +162,6 @@ class iOSNotificationManager {
             const subscribeData = await subscribeResponse.json();
             
             if (subscribeData.success) {
-                console.log('Successfully subscribed to push notifications');
                 this.showSuccessMessage();
                 return true;
             } else {
@@ -345,7 +338,6 @@ class iOSNotificationManager {
             navigator.serviceWorker.ready.then(registration => {
                 return registration.getNotifications();
             }).then(notifications => {
-                console.log(`Found ${notifications.length} pending notifications`);
             }).catch(error => {
                 console.error('Error checking pending notifications:', error);
             });

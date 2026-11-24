@@ -607,7 +607,6 @@
     
     function checkSubscriptionStatus() {
         checkAttempts++;
-        console.log('Verificando status de inscrição... Tentativa:', checkAttempts);
         
         const banner = document.getElementById('subscriptionBanner');
         
@@ -616,27 +615,21 @@
             try {
                 // optedIn é uma propriedade booleana, não uma Promise
                 const isSubscribed = OneSignal.User.PushSubscription.optedIn;
-                console.log('OneSignal optedIn:', isSubscribed);
                 
                 if (!isSubscribed && banner) {
                     banner.classList.remove('hidden');
-                    console.log('Banner exibido - usuário não inscrito');
                 } else if (isSubscribed && banner) {
                     banner.classList.add('hidden');
-                    console.log('Banner oculto - usuário já inscrito');
                 }
             } catch(err) {
-                console.log('Erro ao verificar optedIn:', err);
                 // Mostrar banner em caso de erro
                 if (banner) banner.classList.remove('hidden');
             }
         } else if (checkAttempts < maxAttempts) {
             // Tentar novamente após 1 segundo se OneSignal ainda não carregou
-            console.log('OneSignal ainda não carregou, tentando novamente...');
             setTimeout(checkSubscriptionStatus, 1000);
         } else {
             // Após máximo de tentativas, mostrar banner por padrão
-            console.log('Máximo de tentativas atingido, mostrando banner');
             if (banner) banner.classList.remove('hidden');
         }
     }
@@ -646,12 +639,10 @@
     
     // Função para solicitar permissão
     function requestPushPermissionLocal() {
-        console.log('Solicitando permissão de notificação...');
         
         if (typeof OneSignal !== 'undefined' && OneSignal.Slidedown) {
             OneSignal.Slidedown.promptPush()
                 .then(function() {
-                    console.log('Permissão solicitada via OneSignal');
                     showToast('Permissão solicitada! Verifique o popup do navegador.', 'info');
                     // Esconder banner após alguns segundos
                     setTimeout(function() {
@@ -671,7 +662,6 @@
             // Fallback para API nativa do navegador
             if ('Notification' in window) {
                 Notification.requestPermission().then(function(permission) {
-                    console.log('Permissão nativa:', permission);
                     if (permission === 'granted') {
                         showToast('Notificações ativadas!', 'success');
                         document.getElementById('subscriptionBanner').classList.add('hidden');

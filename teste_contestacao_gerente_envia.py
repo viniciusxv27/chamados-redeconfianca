@@ -294,8 +294,27 @@ t('histórico do Não: gerente fez, para a Ana', h.user_id == gerente.pk and h.e
   and h.extra_data['em_nome_do_cn'] is True and h.extra_data['prazo_cn'])
 nao(cg, f1, 'Venda do Fulano não tem o que contestar')
 nao(cg, c1, 'Carlos saiu, venda cancelada pelo cliente')
-t('Não de venda sem CN no portal não espera de acordo',
-  resp(f1).situacao_cn == 'sem_cn' and resp(c1).situacao_cn == 'sem_cn' and resp(f1).prazo_cn is None)
+t('Não de venda sem CN ativo no portal: de acordo automático, sem prazo (24/11/2026)',
+  resp(f1).situacao_cn == 'automatico' and resp(c1).situacao_cn == 'automatico' and resp(f1).prazo_cn is None)
+t('a tela diz que foi porque o CN não está ativo', 'CN não está ativo' in cg.get(LISTA).content.decode())
+# CN que existe mas não está Ativo (férias): também não espera o de acordo.
+_status_ana = ana.status
+get_user_model().objects.filter(pk=ana.pk).update(status='FERIAS')
+from contestacao import equipe as _eq
+t('CN de férias não é CN ativo', not _eq.cn_ativo(ana.pk) and _eq.cn_ativo(gerente.pk) is (gerente.status == 'ATIVO'))
+t('Não para CN de férias nasce automático', _eq.situacao_cn_inicial(ana.pk, gerente) == ('automatico', None))
+# Um Não aguardando vira automático se o CN deixa de estar ativo.
+_ra2 = resp(a2)
+t('o Não da Ana estava aguardando', _ra2.situacao_cn == 'aguardando')
+_eq.expirar_prazos(ids=[a2.pk])
+_ra2.refresh_from_db()
+t('CN deixou de estar ativo: o aguardando vira automático sem prazo', _ra2.situacao_cn == 'automatico'
+  and _ra2.prazo_cn is None and ultimo('cn_de_acordo_auto').notes == _eq.ROTULO_CN_INATIVO)
+get_user_model().objects.filter(pk=ana.pk).update(status=_status_ana)
+RespostaNaoContesta.objects.filter(pk=_ra2.pk).update(situacao_cn='aguardando', prazo_cn=antes + timedelta(hours=24),
+                                                      cn_respondido_em=None)
+_eq.expirar_prazos(ids=[a2.pk])
+t('CN ativo de novo e dentro do prazo: continua aguardando', resp(a2).situacao_cn == 'aguardando')
 t('gerente não responde venda de outra loja', nao(cg, d1, 'Fora da loja dele').status_code == 404)
 
 print('Envio das Sim não espera os de acordo (mas espera a loja toda respondida)')
@@ -410,9 +429,9 @@ t('histórico: "De acordo automático por prazo expirado", pelo sistema', h and 
 t('a tela sinaliza "De acordo automático por prazo expirado"', 'De acordo automático por prazo expirado' in html_ana)
 acordo(ca, a4, 'discorda', 'Agora quero discordar')
 t('depois do prazo o CN não muda mais', resp(a4).situacao_cn == 'automatico')
-t('expira uma vez só', ContestationHistory.objects.filter(action='cn_de_acordo_auto').count() == 1)
+t('expira uma vez só', ContestationHistory.objects.filter(action='cn_de_acordo_auto', extra_data__exclusion_id=a4.pk).count() == 1)
 cg.get(LISTA)
-t('outra tela não duplica o automático', ContestationHistory.objects.filter(action='cn_de_acordo_auto').count() == 1)
+t('outra tela não duplica o automático', ContestationHistory.objects.filter(action='cn_de_acordo_auto', extra_data__exclusion_id=a4.pk).count() == 1)
 est = loja_estado()
 ana_p = next(p for p in est['participantes'] if p['vendedor'] == 'ANA VENDEDORA')
 t('estado da Ana: 1 de acordo, 1 automático, 1 mantido', (ana_p['cn_de_acordo'], ana_p['cn_automatico'],

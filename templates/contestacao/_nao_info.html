@@ -35,7 +35,7 @@ expirado". Discordância volta para o gerente: contesta (Sim) ou mantém o Não.
     <div class="mt-1 text-emerald-800" data-acordo="de_acordo"><i class="fas fa-circle-check mr-1"></i>CN de acordo em {{ resp.cn_respondido_em|date:"d/m H:i" }}</div>
     {% elif resp.situacao_cn == 'automatico' %}
     <div class="mt-1" data-acordo="automatico">
-        <span class="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 font-semibold text-slate-700"><i class="fas fa-clock-rotate-left"></i>De acordo automático por prazo expirado</span>
+        <span class="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">{% if resp.prazo_cn %}<i class="fas fa-clock-rotate-left"></i>De acordo automático por prazo expirado{% else %}<i class="fas fa-user-slash"></i>De acordo automático: CN não está ativo{% endif %}</span>
         <span class="text-gray-500">({{ resp.cn_respondido_em|date:"d/m H:i" }})</span>
     </div>
     {% elif resp.situacao_cn == 'discorda' %}

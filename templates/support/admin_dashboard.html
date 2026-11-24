@@ -755,12 +755,10 @@ function handleDragStart(e) {
     this.classList.add('opacity-50', 'shadow-lg');
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/html', this.innerHTML);
-    console.log('[Drag] Iniciado:', this.dataset.ticketId);
 }
 
 function handleDragEnd(e) {
     this.classList.remove('opacity-50', 'shadow-lg');
-    console.log('[Drag] Finalizado:', this.dataset.ticketId);
     
     // Resetar estado de isDragging após um pequeno delay
     setTimeout(() => {
@@ -806,7 +804,6 @@ function handleDrop(e) {
     const oldStatus = draggedElement.dataset.ticketStatus;
     const newStatus = this.dataset.status;
     
-    console.log(`[Drop] Chat ${chatId}: ${oldStatus} → ${newStatus}`);
     
     if (oldStatus !== newStatus) {
         // Enviar para backend
@@ -821,7 +818,6 @@ function handleDrop(e) {
 }
 
 function updateChatStatusViaKanban(chatId, newStatus) {
-    console.log(`[Update] Atualizando chat ${chatId} para status ${newStatus}`);
     
     const formData = new FormData();
     formData.append('status', newStatus);
@@ -834,7 +830,6 @@ function updateChatStatusViaKanban(chatId, newStatus) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            console.log('[Update] Status atualizado com sucesso:', data.chat);
             showToast(`Ticket movido para ${getStatusLabel(newStatus)}`, 'success');
             
             // Recarregar contadores
@@ -877,7 +872,6 @@ function requestNotificationPermission() {
     if ('Notification' in window) {
         if (Notification.permission === 'default') {
             Notification.requestPermission().then(permission => {
-                console.log('[Notifications] Permissão:', permission);
                 if (permission === 'granted') {
                     showToast('Notificações ativadas!', 'success');
                 }
@@ -930,9 +924,6 @@ let dashboardPollInterval = null;
 let isPollingRequestInFlight = false;
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('=== Dashboard de Suporte Carregado ===');
-    console.log('Usuário é agente:', isCurrentUserAgent);
-    console.log('CSRF Token disponível:', getCsrfToken() ? 'Sim' : 'Não');
     
     // Solicitar permissão para notificações do navegador
     requestNotificationPermission();
@@ -941,7 +932,6 @@ document.addEventListener('DOMContentLoaded', function() {
     setupDropZones();
     
     // Polling em tempo real para atualizações (a cada 3 segundos)
-    console.log('[Dashboard] Iniciando polling em tempo real');
     startDashboardPolling();
     
     // Parar piscada do título quando a página receber foco
@@ -984,7 +974,6 @@ function pollForUpdates() {
             return response.json();
         })
         .then(data => {
-            console.log('[Polling] Resposta recebida:', data);
             if (data.success) {
                 lastCheckTimestamp = data.timestamp;
                 
@@ -994,13 +983,11 @@ function pollForUpdates() {
                     
                     // Atualizar contadores
                     if (data.stats) {
-                        console.log('[Polling] Atualizando contadores:', data.stats);
                         updateStatCounters(data.stats);
                     }
                     
                     // Notificação para novos tickets
                     if (data.new_tickets && data.new_tickets.length > 0) {
-                        console.log('[Polling] Novas atualizações detectadas:', data.new_tickets.length, 'novos tickets');
                         const ticketWord = data.new_tickets.length === 1 ? 'ticket' : 'tickets';
                         showToast(`🔔 ${data.new_tickets.length} novo(s) ${ticketWord} recebido(s)!`, 'success');
                         
@@ -1037,7 +1024,6 @@ function pollForUpdates() {
                     
                     // Notificação para novas mensagens em tickets atribuídos ao agente
                     if (data.new_messages && data.new_messages.length > 0) {
-                        console.log('[Polling] Novas mensagens detectadas:', data.new_messages.length);
                         data.new_messages.forEach(msg => {
                             showToast(`💬 ${msg.user_name}: ${msg.message}`, 'info', 5000);
                             
@@ -1063,7 +1049,6 @@ function pollForUpdates() {
 
                     // Notificação para tickets transferidos para o agente atual
                     if (data.new_transfers && data.new_transfers.length > 0) {
-                        console.log('[Polling] Transferências recebidas:', data.new_transfers.length);
 
                         data.new_transfers.forEach(transfer => {
                             showToast(`🔄 Ticket transferido para você: ${transfer.chat_title}`, 'success', 6000);
@@ -1182,20 +1167,15 @@ function updateStatCounters(stats) {
 }
 
 function loadSupportTickets() {
-    console.log('[LoadTickets] Iniciando carregamento de tickets...');
     fetch('/projects/support/admin/?format=json')
         .then(response => {
-            console.log('[LoadTickets] Response status:', response.status);
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
             }
             return response.json();
         })
         .then(data => {
-            console.log('[LoadTickets] Dados recebidos:', data);
-            console.log('[LoadTickets] Número de tickets:', data.recent_chats ? data.recent_chats.length : 0);
             if (data.recent_chats && data.recent_chats.length > 0) {
-                console.log('[LoadTickets] Chamando renderTickets com', data.recent_chats.length, 'tickets');
                 renderTickets(data.recent_chats);
             } else {
                 console.warn('[LoadTickets] Nenhum ticket encontrado');
@@ -1204,13 +1184,11 @@ function loadSupportTickets() {
                     const container = document.getElementById(id);
                     if (container) {
                         container.innerHTML = '<div class="text-center text-gray-500 py-4 text-sm">Nenhum ticket</div>';
-                        console.log('[LoadTickets] Container', id, 'limpo');
                     }
                 });
             }
             // Atualizar contadores com stats do backend (valores corretos do banco)
             if (data.stats) {
-                console.log('[LoadTickets] Atualizando contadores com stats do backend:', data.stats);
                 updateStatCounters(data.stats);
                 applyKanbanFilter();
             }
@@ -1222,7 +1200,6 @@ function loadSupportTickets() {
 }
 
 function renderTickets(tickets) {
-    console.log('renderTickets chamado com', tickets.length, 'tickets');
     allTicketsData = tickets;
     const kanbanTickets = getKanbanFilteredTickets(tickets);
     
@@ -1234,7 +1211,6 @@ function renderTickets(tickets) {
         'FECHADO': document.getElementById('closed-tickets')
     };
     
-    console.log('Containers:', containers);
     
     // Limpar containers
     Object.values(containers).forEach(container => {
@@ -1242,12 +1218,10 @@ function renderTickets(tickets) {
     });
     
     kanbanTickets.forEach(ticket => {
-        console.log('Processando ticket:', ticket.id, 'Status:', ticket.status);
         const container = containers[ticket.status];
         if (container) {
             const ticketElement = createTicketElement(ticket);
             container.appendChild(ticketElement);
-            console.log('Ticket', ticket.id, 'adicionado ao container', ticket.status);
         } else {
             console.warn('Container não encontrado para status:', ticket.status);
         }
@@ -1270,7 +1244,6 @@ function renderTickets(tickets) {
 }
 
 function createTicketElement(ticket) {
-    console.log('createTicketElement para ticket:', ticket);
     
     const div = document.createElement('div');
     div.className = 'bg-white rounded-md p-3 mb-2 border border-gray-200 cursor-move transition-all duration-200 hover:shadow-md hover:border-blue-400';
@@ -1300,7 +1273,6 @@ function createTicketElement(ticket) {
     // Usar can_assume calculado pelo backend (considera múltiplos agentes na categoria)
     const canAssign = ticket.can_assume || false;
     
-    console.log('Ticket', ticket.id, '- can_assume:', ticket.can_assume, 'canAssign:', canAssign, 'assigned_to:', ticket.assigned_to);
     
     const canDelete = {% if is_superadmin or is_supervisor_or_higher %}true{% else %}false{% endif %};
     
@@ -2242,35 +2214,26 @@ function handleFileUpload(chatId, input) {
 window.pastedImageFile = window.pastedImageFile || null;
 
 function handlePaste(event, chatId) {
-    console.log('handlePaste chamado para chat:', chatId);
     
     const clipboardData = event.clipboardData || event.originalEvent?.clipboardData;
     if (!clipboardData) {
-        console.log('Sem clipboardData');
         return;
     }
     
     const items = clipboardData.items;
-    console.log('Items no clipboard:', items.length);
     
     for (let item of items) {
-        console.log('Item type:', item.type);
         if (item.type.indexOf('image') !== -1) {
-            console.log('Imagem detectada!');
             event.preventDefault();
             
             const blob = item.getAsFile();
-            console.log('Blob:', blob);
             const reader = new FileReader();
             
             reader.onload = function(e) {
-                console.log('FileReader onload');
                 // Mostrar preview
                 const preview = document.getElementById(`pastePreview-${chatId}`);
                 const img = document.getElementById(`pasteImage-${chatId}`);
                 
-                console.log('Preview element:', preview);
-                console.log('Img element:', img);
                 
                 if (preview && img) {
                     img.src = e.target.result;
@@ -2281,7 +2244,6 @@ function handlePaste(event, chatId) {
                         type: blob.type
                     });
                     
-                    console.log('pastedImageFile criado:', window.pastedImageFile);
                     showToast('Imagem colada! Clique em Enviar para anexar.', 'info');
                 } else {
                     console.error('Elementos de preview não encontrados');
@@ -2343,7 +2305,6 @@ function closeChat(chatId) {
 
 // Funções para os modais de administração
 function openCategoriesModal() {
-    console.log('Abrindo modal de categorias...');
     const modal = document.getElementById('categoriesModal');
     if (!modal) {
         console.error('Modal de categorias não encontrado!');
@@ -2555,7 +2516,6 @@ function loadSectorsForCategories() {
 }
 
 function loadCategories() {
-    console.log('loadCategories() chamado');
     const container = document.getElementById('categoriesList');
     
     if (!container) {
@@ -2567,14 +2527,12 @@ function loadCategories() {
     
     fetch('/projects/support/api/categories/')
         .then(response => {
-            console.log('Response status:', response.status);
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
             }
             return response.json();
         })
         .then(data => {
-            console.log('Categories data:', data);
             
             if (data.success && data.categories && data.categories.length > 0) {
                 container.innerHTML = '';
@@ -2607,7 +2565,6 @@ function loadCategories() {
                     `;
                     container.appendChild(div);
                 });
-                console.log(`${data.categories.length} categorias carregadas`);
             } else if (data.success && (!data.categories || data.categories.length === 0)) {
                 container.innerHTML = '<div class="text-center text-gray-500 py-4">Nenhuma categoria encontrada. Crie uma nova categoria no formulário ao lado.</div>';
             } else {

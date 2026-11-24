@@ -232,7 +232,6 @@ function cancelRedemption(redemptionId) {
             return;
         }
         
-        console.log('Cancelando resgate ID:', redemptionId);
         
         fetch(`/prizes/redemptions/${redemptionId}/cancel/`, {
             method: 'POST',
@@ -242,11 +241,9 @@ function cancelRedemption(redemptionId) {
             },
         })
         .then(response => {
-            console.log('Resposta recebida:', response.status);
             return response.json();
         })
         .then(data => {
-            console.log('Dados recebidos:', data);
             if (data.success) {
                 alert(data.message || 'Resgate cancelado com sucesso!');
                 location.reload();

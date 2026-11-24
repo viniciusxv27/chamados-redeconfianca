@@ -1738,7 +1738,6 @@
                 mobileMenuToggle.addEventListener('click', function(e) {
                     e.preventDefault();
                     e.stopPropagation();
-                    console.log('Mobile menu toggle clicked (sidebar button)');
                     openMobileMenu();
                 });
             }
@@ -1748,21 +1747,16 @@
                 headerMobileMenuToggle.addEventListener('click', function(e) {
                     e.preventDefault();
                     e.stopPropagation();
-                    console.log('Mobile menu toggle clicked (header button)');
                     openMobileMenu();
                 });
                 
                 // Adicionar suporte para touch em dispositivos móveis
                 headerMobileMenuToggle.addEventListener('touchstart', function(e) {
                     e.preventDefault();
-                    console.log('Mobile menu toggle touched');
                     openMobileMenu();
                 });
                 
                 // Verificar se o botão está visível
-                console.log('Header mobile toggle button found and configured:', headerMobileMenuToggle);
-                console.log('Button visibility:', getComputedStyle(headerMobileMenuToggle).display);
-                console.log('Button dimensions:', headerMobileMenuToggle.getBoundingClientRect());
             } else {
                 console.warn('Header mobile menu toggle button not found!');
             }
@@ -1869,22 +1863,10 @@
             
             // Debug function para verificar elementos do menu
             function debugMobileMenu() {
-                console.log('=== Mobile Menu Debug ===');
-                console.log('Screen width:', window.innerWidth);
-                console.log('Is mobile:', isMobile());
-                console.log('Sidebar element:', sidebar);
-                console.log('Mobile overlay element:', mobileOverlay);
-                console.log('Header mobile toggle element:', headerMobileMenuToggle);
-                console.log('Main content element:', mainContent);
                 
                 if (headerMobileMenuToggle) {
                     const styles = getComputedStyle(headerMobileMenuToggle);
-                    console.log('Header toggle display:', styles.display);
-                    console.log('Header toggle visibility:', styles.visibility);
-                    console.log('Header toggle opacity:', styles.opacity);
-                    console.log('Header toggle position:', headerMobileMenuToggle.getBoundingClientRect());
                 }
-                console.log('========================');
             }
             
             // Executar debug após um breve delay
@@ -2349,9 +2331,7 @@
             window.addEventListener('load', function() {
                 navigator.serviceWorker.register('/sw.js')
                     .then(function(registration) {
-                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
                     }, function(err) {
-                        console.log('ServiceWorker registration failed: ', err);
                     });
             });
         }
@@ -2427,7 +2407,6 @@
                                         message: "Você receberá atualizações importantes do sistema."
                                     }
                                 });
-                                console.log('OneSignal initialized successfully');
                                 
                                 // =====================================================
                                 // VINCULAÇÃO DO USUÁRIO LOGADO COM ONESIGNAL
@@ -2438,12 +2417,10 @@
                                 try {
                                     // Definir External User ID (ID único do usuário no sistema)
                                     await OneSignal.login("{{ user.id }}");
-                                    console.log('OneSignal: External User ID set to {{ user.id }}');
                                     
                                     // Definir Email do usuário para notificações por email e identificação
                                     {% if user.email %}
                                     await OneSignal.User.addEmail("{{ user.email }}");
-                                    console.log('OneSignal: Email set to {{ user.email }}');
                                     {% endif %}
                                     
                                     // Definir Telefone do usuário (se disponível)
@@ -2453,7 +2430,6 @@
                                     if (phoneNumber.length >= 10) {
                                         const formattedPhone = phoneNumber.startsWith('55') ? '+' + phoneNumber : '+55' + phoneNumber;
                                         await OneSignal.User.addSms(formattedPhone);
-                                        console.log('OneSignal: Phone set to', formattedPhone);
                                     }
                                     {% endif %}
                                     
@@ -2466,7 +2442,6 @@
                                         {% if user.sector %}'sector_id': '{{ user.sector.id }}',{% endif %}
                                         {% if user.sector %}'sector_name': '{{ user.sector.name }}',{% endif %}
                                     });
-                                    console.log('OneSignal: User tags set');
                                     
                                     // Registrar player_id no backend quando inscrito
                                     const subscription = OneSignal.User.PushSubscription;
@@ -2476,7 +2451,6 @@
                                     
                                     // Escutar mudanças na inscrição para registrar no backend
                                     OneSignal.User.PushSubscription.addEventListener('change', function(event) {
-                                        console.log('OneSignal subscription changed:', event);
                                         if (event.current && event.current.id) {
                                             registerPlayerIdInBackend(event.current.id);
                                         }
@@ -2504,7 +2478,6 @@
                                             })
                                         });
                                         const result = await response.json();
-                                        console.log('OneSignal: Player registered in backend:', result);
                                     } catch(e) {
                                         console.error('OneSignal: Error registering player:', e);
                                     }
@@ -2514,7 +2487,6 @@
                                 window.requestPushPermission = function() {
                                     OneSignal.Slidedown.promptPush()
                                         .then(function() {
-                                            console.log('OneSignal permission requested');
                                         })
                                         .catch(function(err) {
                                             console.error('OneSignal permission request failed:', err);
@@ -2533,26 +2505,20 @@
                                         const isSubscribed = OneSignal.User.PushSubscription.optedIn;
                                         const browserPermission = Notification.permission;
                                         
-                                        console.log('Push subscription status:', isSubscribed);
-                                        console.log('Browser permission:', browserPermission);
                                         
                                         // Se o navegador já permitiu mas OneSignal não está inscrito, fazer opt-in automático
                                         if (browserPermission === 'granted' && !isSubscribed) {
-                                            console.log('Browser allowed but OneSignal not subscribed, opting in...');
                                             await OneSignal.User.PushSubscription.optIn();
                                             const subscription = OneSignal.User.PushSubscription;
                                             if (subscription && subscription.id) {
                                                 registerPlayerIdInBackend(subscription.id);
                                             }
-                                            console.log('Auto opt-in completed');
                                         } else if (!isSubscribed && browserPermission !== 'denied') {
                                             // Mostrar banner se não está inscrito e não foi bloqueado
                                             showPushBanner();
                                         } else if (browserPermission === 'denied') {
-                                            console.log('Notifications are blocked in browser settings');
                                         }
                                     } catch(e) {
-                                        console.log('Error checking subscription:', e);
                                         showPushBanner();
                                     }
                                 }, 5000);
@@ -2604,12 +2570,10 @@
                                         // Tentar usar o prompt nativo do navegador diretamente
                                         // Isso é mais confiável que o slidedown do OneSignal
                                         const permission = await Notification.requestPermission();
-                                        console.log('Native notification permission:', permission);
                                         
                                         if (permission === 'granted') {
                                             // Permissão concedida, agora registrar no OneSignal
                                             await OneSignal.User.PushSubscription.optIn();
-                                            console.log('OneSignal opted in successfully');
                                             
                                             // Verificar e registrar
                                             const subscription = OneSignal.User.PushSubscription;
@@ -2640,7 +2604,6 @@
                                 
                                 // Escutar mudanças no status de inscrição
                                 OneSignal.User.PushSubscription.addEventListener('change', function(event) {
-                                    console.log('Push subscription changed:', event);
                                     if (event.current.optedIn) {
                                         dismissPushBanner();
                                     }
@@ -2649,11 +2612,9 @@
                         };
                         document.head.appendChild(onesignalScript);
                     } else {
-                        console.log('OneSignal not configured');
                     }
                 })
                 .catch(error => {
-                    console.log('Could not load OneSignal config:', error);
                 });
         })();
     </script>
@@ -3383,16 +3344,10 @@
     </script>
     
     <script>
-        console.log('=== INÍCIO DO SCRIPT PRINCIPAL ===');
-        console.log('Verificando funções:', {
-            switchTab: typeof window.switchTab,
-            toggleChatExpand: typeof window.toggleChatExpand
-        });
         
         // Dados pré-carregados do backend
         try {
             window.userSupportSectors = {{ user_support_sectors_json|safe }};
-            console.log('Setores pré-carregados do backend:', window.userSupportSectors);
         } catch(e) {
             console.error('Erro ao carregar setores:', e);
             window.userSupportSectors = [];
@@ -3405,7 +3360,6 @@
         let selectedFile = null;
         window.pastedImageFile = window.pastedImageFile || null;
         
-        console.log('=== DEFININDO FUNÇÕES GLOBAIS ===');
         
         // ============ FUNÇÕES DE ARQUIVO ============
         window.handleFileSelect = function(input) {
@@ -3448,34 +3402,25 @@
         };
         
         window.handlePasteInChat = function(event) {
-            console.log('handlePasteInChat chamado');
             
             const clipboardData = event.clipboardData || event.originalEvent?.clipboardData;
             if (!clipboardData) {
-                console.log('Sem clipboardData');
                 return;
             }
             
             const items = clipboardData.items;
-            console.log('Items no clipboard:', items.length);
             
             for (let item of items) {
-                console.log('Item type:', item.type);
                 if (item.type.indexOf('image') !== -1) {
-                    console.log('Imagem detectada!');
                     event.preventDefault();
                     
                     const blob = item.getAsFile();
-                    console.log('Blob:', blob);
                     const reader = new FileReader();
                     
                     reader.onload = function(e) {
-                        console.log('FileReader onload');
                         const preview = document.getElementById('pastedImagePreviewContainer');
                         const img = document.getElementById('pastedImagePreview');
                         
-                        console.log('Preview element:', preview);
-                        console.log('Img element:', img);
                         
                         if (preview && img) {
                             img.src = e.target.result;
@@ -3489,7 +3434,6 @@
                                 type: blob.type
                             });
                             
-                            console.log('pastedImageFile criado:', window.pastedImageFile);
                             showToastNotification('Imagem colada! Clique em Enviar para anexar.', 'info');
                         } else {
                             console.error('Elementos de preview não encontrados');
@@ -3529,7 +3473,6 @@
         
         // ============ FUNÇÕES DE POLLING TEMPO REAL ============
         function startPolling(chatId) {
-            console.log('[Polling] Iniciando polling para chat:', chatId);
             stopPolling();
             
             // Primeira chamada imediata
@@ -3539,12 +3482,10 @@
                 pollChatUpdates(chatId);
             }, 3000); // A cada 3 segundos
             
-            console.log('[Polling] Polling ativo a cada 3 segundos');
         }
         
         function stopPolling() {
             if (pollingInterval) {
-                console.log('[Polling] Parando polling');
                 clearInterval(pollingInterval);
                 pollingInterval = null;
             }
@@ -3552,7 +3493,6 @@
         
         function pollChatUpdates(chatId) {
             if (!chatId || !currentChatId) {
-                console.log('[Polling] Chat não está ativo, ignorando');
                 return;
             }
             
@@ -3675,15 +3615,11 @@
         
         // Global functions for support chat (called from onclick)
         window.toggleSupportChat = function() {
-            console.log('toggleSupportChat called'); // Debug log
             
             // Força buscar o elemento na hora da execução
             const chatWindow = document.getElementById('supportChatWindow');
-            console.log('Chat window element:', chatWindow); // Debug log
             
             if (chatWindow) {
-                console.log('Chat window found'); // Debug log
-                console.log('Current display:', chatWindow.style.display); // Debug log
                 
                 // Usar apenas display ao invés de classes
                 if (chatWindow.style.display === 'none' || chatWindow.style.display === '') {
@@ -3694,21 +3630,17 @@
                     }
                     
                     chatWindow.style.display = 'flex';
-                    console.log('Chat window opened'); // Debug log
                     // Verificar se os setores precisam ser carregados (só se não estiverem no HTML)
                     const sectorSelect = document.getElementById('supportChatSector');
                     const currentOptions = sectorSelect ? sectorSelect.querySelectorAll('option:not([value=""])') : [];
                     if (currentOptions.length === 0) {
-                        console.log('Setores não encontrados no HTML, tentando carregar...');
                         if (typeof window.loadSectors === 'function') {
                             window.loadSectors();
                         }
                     } else {
-                        console.log('Setores já estão carregados:', currentOptions.length);
                     }
                 } else {
                     chatWindow.style.display = 'none';
-                    console.log('Chat window closed'); // Debug log
                     stopPolling();
                 }
             } else {
@@ -3716,16 +3648,13 @@
                 
                 // Debug: mostrar todos os elementos com ID
                 const allIds = Array.from(document.querySelectorAll('[id]')).map(el => el.id);
-                console.log('All IDs on page:', allIds.filter(id => id.includes('Chat') || id.includes('chat')));
             }
         };
 
         window.closeSupportChat = function() {
-            console.log('closeSupportChat called'); // Debug log
             const chatWindow = document.getElementById('supportChatWindow');
             if (chatWindow) {
                 chatWindow.style.display = 'none';
-                console.log('Chat window closed'); // Debug log
                 stopPolling();
             } else {
                 console.error('Chat window not found'); // Debug log
@@ -3733,11 +3662,9 @@
         };
 
         window.minimizeSupportChat = function() {
-            console.log('minimizeSupportChat called'); // Debug log
             const chatWindow = document.getElementById('supportChatWindow');
             if (chatWindow) {
                 chatWindow.style.display = 'none';
-                console.log('Chat window minimized'); // Debug log
                 stopPolling();
             } else {
                 console.error('Chat window not found'); // Debug log
@@ -3753,11 +3680,9 @@
                 body: formData
             })
             .then(response => {
-                console.log('Create chat response:', response.status);
                 return response.json();
             })
             .then(data => {
-                console.log('Create chat data:', data);
                 if (data.success) {
                     // Clear form
                     formElement.reset();
@@ -4145,19 +4070,13 @@
 
         // Debug function to test chat functionality
         window.testSupportChat = function() {
-            console.log('Testing support chat functions...');
             const chatToggle = document.getElementById('supportChatToggle');
             const chatWindow = document.getElementById('supportChatWindow');
             
-            console.log('Chat toggle button:', chatToggle);
-            console.log('Chat window:', chatWindow);
-            console.log('toggleSupportChat function:', typeof window.toggleSupportChat);
             
             if (chatToggle && chatWindow) {
-                console.log('All elements found - chat should work!');
                 // Testar diretamente
                 chatWindow.style.display = chatWindow.style.display === 'none' ? 'flex' : 'none';
-                console.log('Toggled display to:', chatWindow.style.display);
             } else {
                 console.error('Missing elements - check HTML structure');
                 if (!chatToggle) console.error('Chat toggle button not found');
@@ -4171,7 +4090,6 @@
             if (chatWindow) {
                 const isVisible = chatWindow.style.display === 'flex';
                 chatWindow.style.display = isVisible ? 'none' : 'flex';
-                console.log('Force toggled to:', chatWindow.style.display);
             } else {
                 alert('Chat window not found!');
             }
@@ -4179,7 +4097,6 @@
 
         // Support Chat Widget JavaScript
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOMContentLoaded - Initializing support chat');
             
             const chatToggle = document.getElementById('supportChatToggle');
             const chatWindow = document.getElementById('supportChatWindow');
@@ -4194,16 +4111,6 @@
             const activeChatView = document.getElementById('activeChatView');
             const backToChatList = document.getElementById('backToChatList');
 
-            console.log('Elements found:', {
-                chatToggle: !!chatToggle,
-                chatWindow: !!chatWindow,
-                newChatTab: !!newChatTab,
-                myChatTab: !!myChatTab,
-                transferChatTab: !!transferChatTab,
-                newChatForm: !!newChatForm,
-                myChatsList: !!myChatsList,
-                transferRequestsView: !!transferRequestsView
-            });
 
             // currentChatId já declarado no escopo global
             let isMinimized = false;
@@ -4242,17 +4149,13 @@
             // Tab switching
             if (newChatTab) {
                 newChatTab.addEventListener('click', function() {
-                    console.log('New Chat tab clicked');
                     window.switchTab('new');
                 });
             }
 
             if (myChatTab) {
                 myChatTab.addEventListener('click', function() {
-                    console.log('=== My Chats tab clicked ===');
-                    console.log('Chamando window.switchTab(my)');
                     window.switchTab('my');
-                    console.log('Chamando window.loadMyChats()');
                     window.loadMyChats();
                 });
             } else {
@@ -4261,7 +4164,6 @@
 
             if (transferChatTab) {
                 transferChatTab.addEventListener('click', function() {
-                    console.log('Transfer tab clicked');
                     window.switchTab('transfer');
                 });
             }
@@ -4329,19 +4231,12 @@
             document.getElementById('createSupportChatForm').addEventListener('submit', function(e) {
                 e.preventDefault();
                 
-                console.log('Form submitted');
                 
                 const sectorSelect = document.getElementById('supportChatSector');
                 const categorySelect = document.getElementById('supportChatCategory');
                 const messageInput = document.getElementById('supportChatMessage');
                 const cpfInput = document.getElementById('supportClientCpf');
                 
-                console.log('Form values:', {
-                    sector: sectorSelect.value,
-                    category: categorySelect.value,
-                    message: messageInput.value,
-                    client_cpf: cpfInput ? cpfInput.value : ''
-                });
 
                 // Validar CPF no frontend quando a categoria exigir
                 const selectedCategory = categorySelect.options[categorySelect.selectedIndex];
@@ -4376,14 +4271,11 @@
 
             // Load my chats
             window.loadMyChats = function() {
-                console.log('loadMyChats() called');
                 fetch('/projects/support/chats/')
                 .then(response => {
-                    console.log('My chats response:', response.status);
                     return response.json();
                 })
                 .then(data => {
-                    console.log('My chats data:', data);
                     if (data.success) {
                         const chatList = document.getElementById('supportChatList');
                         chatList.innerHTML = '';
@@ -4419,7 +4311,6 @@
                             chatItem.addEventListener('click', () => window.openChat(chat.id));
                             chatList.appendChild(chatItem);
                         });
-                        console.log('Chats loaded:', data.chats.length);
                     } else {
                         console.error('Error in response:', data);
                     }
@@ -4452,17 +4343,14 @@
 
             // Open specific chat
             window.openChat = function(chatId) {
-                console.log('openChat() called with chatId:', chatId);
                 currentChatId = chatId;
                 lastMessageId = 0;
                 
                 fetch(`/projects/support/chat/${chatId}/`)
                 .then(response => {
-                    console.log('Chat response:', response.status);
                     return response.json();
                 })
                 .then(data => {
-                    console.log('Chat data:', data);
                     if (data.success) {
                         // Update chat header
                         document.getElementById('activeChatTitle').textContent = data.chat.title;
@@ -4509,7 +4397,6 @@
                         // Iniciar polling para tempo real
                         startPolling(chatId);
                         
-                        console.log('Chat loaded successfully');
                     } else {
                         console.error('Error in chat response:', data);
                     }
@@ -4538,8 +4425,6 @@
                 sendMessageForm.addEventListener('submit', function(e) {
                     e.preventDefault();
                     
-                    console.log('[Envio] Formulário submetido');
-                    console.log('[Envio] currentChatId:', currentChatId);
                     
                     if (!currentChatId) {
                         console.error('[Envio] Nenhum chat ativo');
@@ -4549,13 +4434,9 @@
                     const messageInput = document.getElementById('messageInput');
                     const message = messageInput.value.trim();
                     
-                    console.log('[Envio] Mensagem:', message);
-                    console.log('[Envio] Arquivo:', selectedFile);
-                    console.log('[Envio] Imagem colada:', window.pastedImageFile);
                     
                     // Se não tem mensagem nem arquivo nem imagem colada, não enviar
                     if (!message && !selectedFile && !window.pastedImageFile) {
-                        console.log('[Envio] Nada para enviar');
                         return;
                     }
                     
@@ -4574,18 +4455,15 @@
                         url = `/projects/support/chat/${currentChatId}/upload/`;
                     }
 
-                    console.log('[Envio] URL:', url);
 
                     fetch(url, {
                         method: 'POST',
                         body: formData
                     })
                     .then(response => {
-                        console.log('[Envio] Resposta status:', response.status);
                         return response.json();
                     })
                     .then(data => {
-                        console.log('[Envio] Resposta data:', data);
                         if (data.success) {
                             // Add message to chat
                             const messagesContainer = document.getElementById('activeChatMessages');
@@ -4604,7 +4482,6 @@
                             if (window.clearFilePreview) window.clearFilePreview();
                             if (window.clearPastedImage) window.clearPastedImage();
                             
-                            console.log('[Envio] Mensagem enviada com sucesso');
                         } else {
                             console.error('[Envio] Erro no envio:', data.error);
                             alert('Erro ao enviar mensagem: ' + data.error);
@@ -4622,9 +4499,7 @@
 
         // Load available sectors (now pre-loaded from backend)
         window.loadSectors = function() {
-            console.log('loadSectors() called');
             const sectorSelect = document.getElementById('supportChatSector');
-            console.log('sectorSelect element:', sectorSelect);
             
             if (!sectorSelect) {
                 console.error('Elemento supportChatSector não encontrado!');
@@ -4633,10 +4508,8 @@
             
             // Setores já estão pré-carregados no template, mas podemos verificar se precisam ser atualizados
             if (window.userSupportSectors && window.userSupportSectors.length > 0) {
-                console.log('Usando setores pré-carregados:', window.userSupportSectors.length);
                 // Os setores já estão no HTML, apenas verificamos
                 const currentOptions = sectorSelect.querySelectorAll('option:not([value=""])');
-                console.log('Opções atuais no select:', currentOptions.length);
                 
                 if (currentOptions.length === 0) {
                     // Se por algum motivo não estiver no HTML, adiciona via JS
@@ -4646,18 +4519,15 @@
                         option.textContent = sector.name;
                         sectorSelect.appendChild(option);
                     });
-                    console.log('Setores adicionados via JS:', window.userSupportSectors.length);
                 }
             } else {
                 console.warn('Nenhum setor pré-carregado, tentando buscar da API');
                 // Fallback: tentar buscar da API
                 fetch('/projects/support/sectors/')
                     .then(response => {
-                        console.log('API Response received:', response.status);
                         return response.json();
                     })
                     .then(data => {
-                        console.log('API Data received:', data);
                         if (data.success) {
                             sectorSelect.innerHTML = '<option value="">Selecione o setor</option>';
                             
@@ -4667,7 +4537,6 @@
                                 option.textContent = sector.name;
                                 sectorSelect.appendChild(option);
                             });
-                            console.log('Setores carregados da API:', data.sectors.length);
                         } else {
                             console.error('Erro na resposta da API:', data);
                         }
@@ -4680,7 +4549,6 @@
 
         // Load categories based on selected sector
         window.loadSectorCategories = function(sectorId) {
-            console.log('loadSectorCategories() called with sectorId:', sectorId);
             const categoryDiv = document.getElementById('categoryDiv');
             const categorySelect = document.getElementById('supportChatCategory');
             const cpfDiv = document.getElementById('supportCpfDiv');
@@ -4705,7 +4573,6 @@
                 return;
             }
             
-            console.log('Buscando categorias para setor:', sectorId);
             
             // Resetar o estilo do queueInfoDiv para o padrão
             if (queueInfoDiv) {
@@ -4719,7 +4586,6 @@
             fetch(`/projects/support/queue-status/?sector_id=${sectorId}`)
                 .then(response => response.json())
                 .then(data => {
-                    console.log('Queue status response:', data);
                     if (data.success && queueInfoDiv && queueInfoText) {
                         // Sempre mostrar a fila, mesmo se não houver dados
                         if (data.queue && data.queue.length > 0) {
@@ -4754,14 +4620,12 @@
             
             fetch(`/projects/support/sectors/${sectorId}/categories/`)
                 .then(response => {
-                    console.log('Categories response received:', response.status);
                     if (!response.ok) {
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }
                     return response.json();
                 })
                 .then(data => {
-                    console.log('Categories data received:', data);
                     if (data.success) {
                         categorySelect.innerHTML = '<option value="">Selecione o assunto</option>';
                         
@@ -4775,7 +4639,6 @@
                             });
                             
                             categoryDiv.classList.remove('hidden');
-                            console.log('Categorias carregadas:', data.categories.length);
                         } else {
                             console.warn('Nenhuma categoria encontrada para este setor');
                             categoryDiv.classList.add('hidden');
@@ -4879,13 +4742,6 @@
         }
         
         // Debug: Log available global functions
-        console.log('Support Chat Functions Loaded:', {
-            toggleSupportChat: typeof window.toggleSupportChat,
-            loadSectors: typeof window.loadSectors,
-            loadSectorCategories: typeof window.loadSectorCategories,
-            loadMyChats: typeof window.loadMyChats,
-            openChat: typeof window.openChat
-        });
     </script>
     {% include 'feedback/_reminder_popup.html' %}
     {% include 'portal_popups/_popup_gate.html' %}

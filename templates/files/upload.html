@@ -267,7 +267,6 @@ function loadSectorsForUpload() {
     sectorSelect.innerHTML = '<option value="">Carregando setores...</option>';
     sectorSelect.disabled = true;
     
-    console.log('Carregando setores para upload...');
     
     fetch('{% url "files:get_sectors" %}', {
         method: 'GET',
@@ -277,14 +276,12 @@ function loadSectorsForUpload() {
         }
     })
     .then(response => {
-        console.log('Response status:', response.status);
         if (!response.ok) {
             throw new Error('Network response was not ok');
         }
         return response.json();
     })
     .then(data => {
-        console.log('Setores recebidos para upload:', data);
         sectorSelect.innerHTML = '<option value="">Selecione um setor</option>';
         
         if (data.sectors && data.sectors.length > 0) {
@@ -314,7 +311,6 @@ function loadGroupsForUpload() {
     groupSelect.innerHTML = '<option value="">Carregando grupos...</option>';
     groupSelect.disabled = true;
     
-    console.log('Carregando grupos para upload...');
     
     fetch('{% url "files:get_sectors" %}', {
         method: 'GET',
@@ -324,14 +320,12 @@ function loadGroupsForUpload() {
         }
     })
     .then(response => {
-        console.log('Response status:', response.status);
         if (!response.ok) {
             throw new Error('Network response was not ok');
         }
         return response.json();
     })
     .then(data => {
-        console.log('Grupos recebidos para upload:', data);
         groupSelect.innerHTML = '<option value="">Selecione um grupo</option>';
         
         if (data.groups && data.groups.length > 0) {

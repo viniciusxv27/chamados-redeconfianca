@@ -1310,7 +1310,29 @@ window.applyDraftFileToInputs = function(id, file) {
     window.pendingFiles[id] = file;
 };
 
+// Carrinho esvaziado para todos em 24/11/2026 (manage.py limpar_carrinhos_contestacao). Mudar esta data faz
+// cada navegador apagar o carrinho local (localStorage + anexos no IndexedDB) na próxima vez que abrir a tela;
+// sem isso ele mandaria tudo de volta ao servidor.
+window.contestationCartCleanedAt = '2026-11-24';
+
 window.restorePendingDraft = async function() {
+    try {
+        const chaveLimpeza = 'contestacao_carrinho_limpo_{{ request.user.id }}';
+        if (localStorage.getItem(chaveLimpeza) !== window.contestationCartCleanedAt) {
+            localStorage.removeItem(window.contestationStorageKey);
+            try {
+                const db = await window.openDraftDb();
+                await new Promise((resolve) => {
+                    const tx = db.transaction(window.contestationDraftStore, 'readwrite');
+                    tx.objectStore(window.contestationDraftStore).clear();
+                    tx.oncomplete = resolve;
+                    tx.onerror = resolve;
+                });
+                db.close();
+            } catch (_) {}
+            localStorage.setItem(chaveLimpeza, window.contestationCartCleanedAt);
+        }
+    } catch (_) {}
     const raw = localStorage.getItem(window.contestationStorageKey);
     if (raw) {
         try {

@@ -14,6 +14,9 @@ from .models import (
     ProjectSectorAccess
 )
 from users.models import Sector, User
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Categorias de atividades
 ACTIVITY_CATEGORIES = [
@@ -894,8 +897,7 @@ def subtask_detail_api(request, activity_id):
         return JsonResponse({'error': 'Subtarefa não encontrada'}, status=404)
     except Exception as e:
         import traceback
-        print(f"Erro na view subtask_detail_api: {str(e)}")
-        print(traceback.format_exc())
+        logger.warning(f"Erro na view subtask_detail_api: {str(e)}")
         return JsonResponse({'error': f'Erro interno: {str(e)}'}, status=500)
 
 

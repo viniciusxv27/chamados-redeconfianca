@@ -29,6 +29,9 @@ from users.models import User, Sector, SystemConfig, CommissionSpreadsheetVersio
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -269,7 +272,6 @@ def is_user_gerente(user):
     try:
         gerente_group = CommunicationGroup.objects.filter(name__icontains="GERENTES").first()
         if gerente_group:
-            print(f"[is_user_gerente] Verificando se {user.get_full_name()} está no grupo GERENTES")
             return user in gerente_group.members.all()
     except:
         pass
@@ -519,7 +521,6 @@ def download_excel_file(excel_url, cache_key_prefix="excel"):
     if conteudo is None:
         reserva = memoria.get(chave_reserva)
         if _e_planilha(reserva):
-            print(f"[download_excel_file] OneDrive falhou ({last_error}); usando a última cópia boa")
             return BytesIO(reserva), None
         return None, f'Erro ao baixar planilha. Último erro: {last_error}'
 
@@ -733,7 +734,6 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None, urls=No
     # Verificar cache
     cached_data = cache.get(cache_key)
     if cached_data:
-        print(f"[fetch_metas_por_pilar] Usando cache para {scope_suffix} ({reference_suffix})")
         return cached_data
     
     # Inicializar metas
@@ -808,8 +808,6 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None, urls=No
     user_name_normalized = normalize_text(user_name)
     user_sector_normalized = normalize_sector(user_sector) if user_sector else ""
     
-    print(f"[fetch_metas_por_pilar] user_name={user_name}, is_gerente={is_gerente}, user_sector={user_sector}")
-    print(f"[fetch_metas_por_pilar] user_sector_normalized={user_sector_normalized}")
     
     # Obter URLs dinâmicas
     if urls is None:
@@ -819,17 +817,14 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None, urls=No
         # Baixar planilha BASE_PAGAMENTO (apenas para dados de pagamento)
         excel_file, error = download_excel_file(urls['base_pagamento'], "base_pagamento")
         if error:
-            print(f"[fetch_metas_por_pilar] Erro ao baixar planilha BASE_PAGAMENTO: {error}")
             return metas
         
         # Ler a sheet "Planilha1" da BASE_PAGAMENTO
         try:
             excel_file.seek(0)
             df = pd.read_excel(excel_file, sheet_name='Planilha1', engine='openpyxl')
-            print(f"[fetch_metas_por_pilar] Colunas da BASE_PAGAMENTO: {list(df.columns)}")
-            print(f"[fetch_metas_por_pilar] Total de linhas: {len(df)}")
         except Exception as e:
-            print(f"[fetch_metas_por_pilar] Erro ao ler planilha: {e}")
+            logger.warning(f"[fetch_metas_por_pilar] Erro ao ler planilha: {e}")
             return metas
         
         # Encontrar colunas necessárias
@@ -849,30 +844,24 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None, urls=No
             elif col_upper == 'VENDEDOR':
                 vendedor_col = col
         
-        print(f"[fetch_metas_por_pilar] filial_col={filial_col}, receita_col={receita_col}, pilar_col={pilar_col}, vendedor_col={vendedor_col}")
         
         if receita_col is None or pilar_col is None:
-            print(f"[fetch_metas_por_pilar] ERRO: Colunas obrigatórias não encontradas")
             return metas
         
         # Debug: mostrar valores únicos de filial e pilar
         if filial_col:
             filiais_unicas = df[filial_col].dropna().unique()[:15]
-            print(f"[fetch_metas_por_pilar] Filiais na planilha (amostra): {list(filiais_unicas)}")
         
         pilares_unicos = df[pilar_col].dropna().unique()
-        print(f"[fetch_metas_por_pilar] Pilares na planilha: {list(pilares_unicos)}")
         
         # Debug: Filtrar apenas por filial EXATA "SERRA SEDE" e contar
         df_serra = df[df[filial_col].astype(str).str.strip().str.upper() == 'SERRA SEDE']
-        print(f"[DEBUG] Linhas com Filial EXATA 'SERRA SEDE': {len(df_serra)}")
         
         # Contar e somar por pilar apenas para SERRA SEDE exato
         for pilar_nome in df_serra[pilar_col].dropna().unique():
             df_pilar = df_serra[df_serra[pilar_col] == pilar_nome]
             soma = df_pilar[receita_col].sum()
             count = len(df_pilar)
-            print(f"[DEBUG SERRA SEDE] Pilar={pilar_nome}, Qtd={count}, Soma Receita={soma}")
         
         # Processar cada linha - USAR COMPARAÇÃO EXATA para filial
         for idx, row in df.iterrows():
@@ -914,14 +903,11 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None, urls=No
         try:
             excel_file_exclusao, error_exclusao = download_excel_file(urls['base_exclusao'], "base_exclusao")
             if error_exclusao:
-                print(f"[fetch_metas_por_pilar] Erro ao baixar planilha BASE_EXCLUSAO: {error_exclusao}")
                 # Continuar sem dados de exclusão
                 df_exclusao = None
             else:
                 excel_file_exclusao.seek(0)
                 df_exclusao = pd.read_excel(excel_file_exclusao, sheet_name='Planilha1', engine='openpyxl')
-                print(f"[fetch_metas_por_pilar] Colunas da BASE_EXCLUSAO: {list(df_exclusao.columns)}")
-                print(f"[fetch_metas_por_pilar] Total de linhas EXCLUSÃO: {len(df_exclusao)}")
             
             if df_exclusao is not None:
                 # Encontrar colunas na planilha de exclusão
@@ -938,7 +924,6 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None, urls=No
                     elif col_upper == 'PILAR':
                         pilar_col_exc = col
                 
-                print(f"[fetch_metas_por_pilar] EXCLUSÃO - filial_col={filial_col_exc}, receita_col={receita_col_exc}, pilar_col={pilar_col_exc}")
             else:
                 filial_col_exc = None
                 receita_col_exc = None
@@ -956,15 +941,12 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None, urls=No
                 # Debug: mostrar informações baseado no tipo de usuário
                 if is_gerente:
                     df_exc_filtrado = df_exclusao[df_exclusao[filial_col_exc].astype(str).str.strip().str.upper() == user_sector_normalized]
-                    print(f"[DEBUG EXCLUSÃO GERENTE] Filtrando por Filial='{user_sector_normalized}': {len(df_exc_filtrado)} linhas")
                 else:
                     if vendedor_col_exc:
                         df_exc_filtrado = df_exclusao[
                             df_exclusao[vendedor_col_exc].apply(lambda v: person_name_matches_exact(v, user_name))
                         ]
-                        print(f"[DEBUG EXCLUSÃO CN] Filtrando por Vendedor EXATO '{normalize_person_name(user_name)}': {len(df_exc_filtrado)} linhas")
                     else:
-                        print(f"[DEBUG EXCLUSÃO CN] ERRO: Coluna 'Vendedor' não encontrada!")
                         df_exc_filtrado = pd.DataFrame()
                 
                 # Mostrar soma por pilar no filtro
@@ -974,7 +956,6 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None, urls=No
                         soma = df_pilar[receita_col_exc].sum()
                         count = len(df_pilar)
                         tipo = "GERENTE" if is_gerente else "CN"
-                        print(f"[DEBUG EXCLUSÃO {tipo}] Pilar={pilar_nome}, Qtd={count}, Soma Receita={soma}")
                 
                 # Processar cada linha da sheet de exclusão
                 for idx, row in df_exclusao.iterrows():
@@ -1008,10 +989,10 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None, urls=No
                                 except (ValueError, TypeError):
                                     pass
             else:
-                print(f"[fetch_metas_por_pilar] AVISO: Colunas obrigatórias não encontradas na planilha EXCLUSÃO ou planilha não disponível")
+                pass
                 
         except Exception as e:
-            print(f"[fetch_metas_por_pilar] Erro ao processar planilha EXCLUSÃO: {e}")
+            logger.warning(f"[fetch_metas_por_pilar] Erro ao processar planilha EXCLUSÃO: {e}")
         
         # Calcular totais
         total_geral_pago = 0
@@ -1024,8 +1005,6 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None, urls=No
             # Total = Pago + Exclusão
             metas[pilar_key]['total'] = pago + exclusao
         
-        print(f"[fetch_metas_por_pilar] RESULTADO FINAL: {metas}")
-        print(f"[fetch_metas_por_pilar] Total geral pago: {total_geral_pago}, Total geral exclusão: {total_geral_exclusao}")
         
         # Salvar no cache por 5 minutos
         cache.set(cache_key, metas, 300)
@@ -1033,7 +1012,7 @@ def fetch_metas_por_pilar(user_name, is_gerente=False, user_sector=None, urls=No
         return metas
         
     except Exception as e:
-        print(f"[fetch_metas_por_pilar] Erro geral: {e}")
+        logger.warning(f"[fetch_metas_por_pilar] Erro geral: {e}")
         import traceback
         traceback.print_exc()
         return metas
@@ -1051,7 +1030,6 @@ def fetch_metas_por_pilar_coordenador(coordenador_nome, urls=None, cache_suffix=
     # Verificar cache
     cached_data = cache.get(cache_key)
     if cached_data:
-        print(f"[fetch_metas_por_pilar_coordenador] Usando cache para {coordenador_nome}")
         return cached_data
     
     # Inicializar metas
@@ -1100,7 +1078,6 @@ def fetch_metas_por_pilar_coordenador(coordenador_nome, urls=None, cache_suffix=
     
     coord_first_name = get_first_name(coordenador_nome)
     
-    print(f"[fetch_metas_por_pilar_coordenador] Buscando dados para coordenador: {coordenador_nome} (primeiro nome: {coord_first_name})")
     
     # Obter URLs dinâmicas
     if urls is None:
@@ -1110,17 +1087,14 @@ def fetch_metas_por_pilar_coordenador(coordenador_nome, urls=None, cache_suffix=
         # Baixar planilha BASE_PAGAMENTO
         excel_file, error = download_excel_file(urls['base_pagamento'], "base_pagamento_coord")
         if error:
-            print(f"[fetch_metas_por_pilar_coordenador] Erro ao baixar planilha BASE_PAGAMENTO: {error}")
             return metas
         
         # Ler a sheet "Planilha1" da BASE_PAGAMENTO
         try:
             excel_file.seek(0)
             df = pd.read_excel(excel_file, sheet_name='Planilha1', engine='openpyxl')
-            print(f"[fetch_metas_por_pilar_coordenador] Colunas da BASE_PAGAMENTO: {list(df.columns)}")
-            print(f"[fetch_metas_por_pilar_coordenador] Total de linhas: {len(df)}")
         except Exception as e:
-            print(f"[fetch_metas_por_pilar_coordenador] Erro ao ler planilha: {e}")
+            logger.warning(f"[fetch_metas_por_pilar_coordenador] Erro ao ler planilha: {e}")
             return metas
         
         # Encontrar colunas necessárias
@@ -1137,19 +1111,15 @@ def fetch_metas_por_pilar_coordenador(coordenador_nome, urls=None, cache_suffix=
             elif col_upper == 'PILAR':
                 pilar_col = col
         
-        print(f"[fetch_metas_por_pilar_coordenador] coord_col={coord_col}, receita_col={receita_col}, pilar_col={pilar_col}")
         
         if coord_col is None:
-            print(f"[fetch_metas_por_pilar_coordenador] ERRO: Coluna COORDENACAO não encontrada")
             return metas
         
         if receita_col is None or pilar_col is None:
-            print(f"[fetch_metas_por_pilar_coordenador] ERRO: Colunas obrigatórias não encontradas")
             return metas
         
         # Debug: mostrar valores únicos de coordenação
         coords_unicas = df[coord_col].dropna().unique()[:10]
-        print(f"[fetch_metas_por_pilar_coordenador] Valores de COORDENACAO (amostra): {list(coords_unicas)}")
         
         # Processar cada linha - filtrar por primeiro nome do coordenador
         for idx, row in df.iterrows():
@@ -1184,12 +1154,10 @@ def fetch_metas_por_pilar_coordenador(coordenador_nome, urls=None, cache_suffix=
         try:
             excel_file_exclusao, error_exclusao = download_excel_file(urls['base_exclusao'], "base_exclusao_coord")
             if error_exclusao:
-                print(f"[fetch_metas_por_pilar_coordenador] Erro ao baixar planilha BASE_EXCLUSAO: {error_exclusao}")
                 df_exclusao = None
             else:
                 excel_file_exclusao.seek(0)
                 df_exclusao = pd.read_excel(excel_file_exclusao, sheet_name='Planilha1', engine='openpyxl')
-                print(f"[fetch_metas_por_pilar_coordenador] Colunas da BASE_EXCLUSAO: {list(df_exclusao.columns)}")
             
             if df_exclusao is not None:
                 # Encontrar colunas na planilha de exclusão
@@ -1233,10 +1201,10 @@ def fetch_metas_por_pilar_coordenador(coordenador_nome, urls=None, cache_suffix=
                                     except (ValueError, TypeError):
                                         pass
                 else:
-                    print(f"[fetch_metas_por_pilar_coordenador] AVISO: Colunas obrigatórias não encontradas na planilha EXCLUSÃO")
+                    pass
                     
         except Exception as e:
-            print(f"[fetch_metas_por_pilar_coordenador] Erro ao processar planilha EXCLUSÃO: {e}")
+            logger.warning(f"[fetch_metas_por_pilar_coordenador] Erro ao processar planilha EXCLUSÃO: {e}")
         
         # Calcular totais
         total_geral_pago = 0
@@ -1248,8 +1216,6 @@ def fetch_metas_por_pilar_coordenador(coordenador_nome, urls=None, cache_suffix=
             total_geral_exclusao += exclusao
             metas[pilar_key]['total'] = pago + exclusao
         
-        print(f"[fetch_metas_por_pilar_coordenador] RESULTADO FINAL: {metas}")
-        print(f"[fetch_metas_por_pilar_coordenador] Total geral pago: {total_geral_pago}, Total geral exclusão: {total_geral_exclusao}")
         
         # Salvar no cache por 5 minutos
         cache.set(cache_key, metas, 300)
@@ -1257,7 +1223,7 @@ def fetch_metas_por_pilar_coordenador(coordenador_nome, urls=None, cache_suffix=
         return metas
         
     except Exception as e:
-        print(f"[fetch_metas_por_pilar_coordenador] Erro geral: {e}")
+        logger.warning(f"[fetch_metas_por_pilar_coordenador] Erro geral: {e}")
         import traceback
         traceback.print_exc()
         return metas
@@ -1573,19 +1539,16 @@ def fetch_iq_data(user_name, excel_url=None, cache_suffix=None):
         # Baixar planilha de comissão
         excel_file, error = download_excel_file(excel_url, "comissao_iq")
         if error:
-            print(f"[fetch_iq_data] Erro ao baixar planilha: {error}")
             return iq_result
         
         # Ler sheet ÍNDICE DE QUALIDADE com primeira linha como cabeçalho
         try:
             excel_file.seek(0)
             df = pd.read_excel(excel_file, sheet_name='ÍNDICE DE QUALIDADE', header=0, engine='openpyxl')
-            print(f"[fetch_iq_data] Colunas: {list(df.columns)}")
-            print(f"[fetch_iq_data] Total linhas: {len(df)}")
             if len(df) > 0:
-                print(f"[fetch_iq_data] Primeira linha: {df.iloc[0].to_dict()}")
+                pass
         except Exception as e:
-            print(f"[fetch_iq_data] Erro ao ler sheet ÍNDICE DE QUALIDADE: {e}")
+            logger.warning(f"[fetch_iq_data] Erro ao ler sheet ÍNDICE DE QUALIDADE: {e}")
             return iq_result
         
         # Encontrar colunas necessárias - IQ Móvel (coluna 9) e IQ Fixa (coluna 13)
@@ -1610,10 +1573,8 @@ def fetch_iq_data(user_name, excel_url=None, cache_suffix=None):
                 if not iq_fixa_col or ('LOJA' not in col_upper and 'PDV' not in col_upper):
                     iq_fixa_col = col
         
-        print(f"[fetch_iq_data] colaborador_col={colaborador_col}, iq_movel_col={iq_movel_col}, iq_fixa_col={iq_fixa_col}")
         
         if colaborador_col is None:
-            print(f"[fetch_iq_data] Coluna COLABORADOR não encontrada")
             return iq_result
         
         # Buscar usuário
@@ -1644,7 +1605,6 @@ def fetch_iq_data(user_name, excel_url=None, cache_suffix=None):
                         except:
                             pass
                 
-                print(f"[fetch_iq_data] Encontrado: {row_name}, IQ Móvel={iq_result['iq_movel']}, IQ Fixa={iq_result['iq_fixa']}")
                 break
         
         # Cache por 5 minutos
@@ -1653,7 +1613,7 @@ def fetch_iq_data(user_name, excel_url=None, cache_suffix=None):
         return iq_result
         
     except Exception as e:
-        print(f"[fetch_iq_data] Erro geral: {e}")
+        logger.warning(f"[fetch_iq_data] Erro geral: {e}")
         return iq_result
 
 
@@ -1955,11 +1915,9 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
         iq_data = {'iq_movel': 0, 'iq_fixa': 0}
     
     # DEBUG: Mostrar todas as colunas disponíveis
-    print(f"[DEBUG process_commission_data] Colunas disponíveis: {list(data.keys())[:30]}")  # Primeiras 30 colunas
     
     # DEBUG: Buscar colunas que contenham 'COM_' e 'SMARTPHONE' ou 'ELETRO'
     colunas_com = [col for col in data.keys() if 'COM_' in str(col).upper()]
-    print(f"[DEBUG process_commission_data] Colunas COM_: {colunas_com}")
     
     processed = {
         'info': {
@@ -2009,7 +1967,6 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
         # DEBUG: Mostrar colunas disponíveis relacionadas a ATING
         ating_cols_debug = [col for col in data.keys() if 'ATING' in str(col).upper() or '%' in str(col)]
         if not hasattr(process_commission_data, '_debug_ating_shown'):
-            print(f"[DEBUG ATING COLS] Colunas com ATING ou %: {ating_cols_debug}")
             process_commission_data._debug_ating_shown = True
         
         # Padrões para buscar pct_3 (antepenúltimo mês)
@@ -2038,9 +1995,8 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
         pct_1_raw = find_column_value(data, patterns_1)
         
         # DEBUG: Mostrar valores encontrados
-        print(f"[DEBUG Ating] {key}: pct_1={pct_1_raw}, pct_2={pct_2_raw}, pct_3={pct_3_raw} (is_gerente={is_gerente})")
         if pct_1_raw == 0 and pct_2_raw == 0 and pct_3_raw == 0:
-            print(f"[DEBUG Ating ZERO] Todas as tentativas de busca para {key} retornaram 0")
+            pass
         
         # Buscar metas (Total, Pago, Exclusão) deste pilar
         meta_key = pilar_to_meta_key.get(key, key.lower())
@@ -2100,7 +2056,6 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
     }
     
     # DEBUG: Mostrar valores de comissões encontrados
-    print(f"[DEBUG Comissões] smartphone={comissoes_valores['smartphone']}, eletronicos_a={comissoes_valores['eletronicos_a']}, eletronicos_b={comissoes_valores['eletronicos_b']}")
     
     total_comissoes = safe_float(data.get('Total Comissão'))
     if total_comissoes == 0:
@@ -2225,7 +2180,6 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
             if 'REMUNERA' in key_upper and 'FINAL' in key_upper and 'TOTAL' in key_upper:
                 remun_final_total = safe_float(data.get(key_name))
                 if remun_final_total > 0:
-                    print(f"[DEBUG] Remuneração Final Total encontrada em: '{key_name}' = {remun_final_total}")
                     break
         
         # Se não encontrou, tentar as variações fixas
@@ -2257,7 +2211,6 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
         processed['totais']['cargo_label'] = 'Gerente'
     else:
         # DEBUG: Mostrar todas as colunas disponíveis para CN
-        print(f"[DEBUG CN] Colunas disponíveis: {list(data.keys())}")
         
         processed['totais'] = {
             'comissao_cargo': safe_float(data.get('COMISSÃO_CN') or data.get('COMISSÃO CN')),
@@ -2282,7 +2235,6 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
             if 'REMUNERA' in key_upper and 'FINAL' in key_upper:
                 remun_final_cn = safe_float(data.get(key_name))
                 if remun_final_cn > 0:
-                    print(f"[DEBUG CN] Remuneração Final encontrada em: '{key_name}' = {remun_final_cn}")
                     break
         
         # Se não encontrou, tentar as variações fixas
@@ -2306,7 +2258,6 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
         })
         processed['totais']['cargo_label'] = 'CN'
         
-        print(f"[DEBUG CN] Remuneração Final Total: {processed['totais']['remuneracao_final']}")
     
     # Calcular soma (comissões + bônus + alto desempenho + hunter) para cada pilar
     pilar_keys = ['movel', 'fixa', 'smartphone', 'eletronicos', 'essenciais', 'seguro', 'sva']
@@ -2454,7 +2405,6 @@ def process_simple_commission_data(data, is_gerente=False):
     """
     # Debug: mostre todas as colunas que contêm REMUNE ou FINAL para rastrear
     rem_cols = [k for k in data.keys() if 'REMUN' in str(k).upper() or 'FINAL' in str(k).upper()]
-    print(f"[process_simple_commission_data] Colunas com REMUN/FINAL: {rem_cols}")
     
     pilares_config = [
         {'nome': 'Móvel', 'key': 'MOVEL', 'com_key': 'COM_MÓVEL', 'field': 'movel_comissao'},
@@ -2477,7 +2427,6 @@ def process_simple_commission_data(data, is_gerente=False):
             val = safe_float(data.get(key))
             if val > 0:
                 remuneracao_final = val
-                print(f"[process_simple_commission_data] Encontrada remuneração final em '{key}': {val}")
                 break
     
     # Fallback para nomes específicos
@@ -2670,7 +2619,6 @@ def process_coordenador_commission_data(data, metas_pilar=None):
         pct_1_raw = safe_float(data.get(f'%ATING_{key}_1'))
         
         # DEBUG: Mostrar valores encontrados
-        print(f"[DEBUG Ating COORD] {key}: pct_1={pct_1_raw}, pct_2={pct_2_raw}, pct_3={pct_3_raw}")
         
         # Buscar metas (Total, Pago, Exclusão) deste pilar
         meta_key = pilar_to_meta_key.get(key, key.lower())
@@ -2866,10 +2814,8 @@ def fetch_lojas_por_coordenador(coordenador_nome, excel_url=None, cache_suffix=N
                     break
         
         if coord_col is None:
-            print(f"[fetch_lojas_por_coordenador] Coluna COORDENADOR não encontrada. Colunas: {list(df.columns)}")
             return []
         
-        print(f"[fetch_lojas_por_coordenador] Usando coluna: {coord_col}")
         
         def normalize_name(name):
             if pd.isna(name):
@@ -2901,12 +2847,11 @@ def fetch_lojas_por_coordenador(coordenador_nome, excel_url=None, cache_suffix=N
                         'gerente': str(gerente).strip() if pd.notna(gerente) else '',
                     })
         
-        print(f"[fetch_lojas_por_coordenador] Encontradas {len(lojas)} lojas para coordenador '{coord_first_name}'")
         cache.set(cache_key, lojas, 300)
         return lojas
         
     except Exception as e:
-        print(f"[fetch_lojas_por_coordenador] Erro: {str(e)}")
+        logger.warning(f"[fetch_lojas_por_coordenador] Erro: {str(e)}")
         return []
 
 
@@ -2974,7 +2919,6 @@ def fetch_aparte_realized_from_vendas(urls=None, cache_suffix=None):
         excel_url = urls.get('vendas')
         excel_file, error = download_excel_file(excel_url, "vendas_aparte")
         if error:
-            print(f"[fetch_aparte_realized_from_vendas] Erro ao baixar planilha: {error}")
             return dict(empty)
 
         try:
@@ -2983,7 +2927,7 @@ def fetch_aparte_realized_from_vendas(urls=None, cache_suffix=None):
                 header=None, engine='openpyxl',
             )
         except Exception as e:
-            print(f"[fetch_aparte_realized_from_vendas] Erro ao ler aba '{SHEET_RESULTADO_COO}': {e}")
+            logger.warning(f"[fetch_aparte_realized_from_vendas] Erro ao ler aba '{SHEET_RESULTADO_COO}': {e}")
             return dict(empty)
 
         # Índices 0-based das linhas existentes na planilha.
@@ -3007,7 +2951,7 @@ def fetch_aparte_realized_from_vendas(urls=None, cache_suffix=None):
         cache.set(cache_key, result, 300)
         return result
     except Exception as e:
-        print(f"[fetch_aparte_realized_from_vendas] Erro: {e}")
+        logger.warning(f"[fetch_aparte_realized_from_vendas] Erro: {e}")
         return dict(empty)
 
 
@@ -3488,11 +3432,7 @@ def commission_cn_view(request):
             excel_url=urls['comissao'],
             cache_suffix=reference['cache_suffix'],
         )
-        print(f"[commission_dashboard] IQ Data: {iq_data}")
-        print(f"[commission_dashboard] Metas Pilar: {metas_pilar}")
         processed = process_commission_data(result['data'], is_gerente, metas_pilar, iq_data)
-        print(f"[commission_dashboard] Remuneração Final: {processed['totais'].get('remuneracao_final')}")
-        print(f"[commission_dashboard] Pilares[0] pct_1: {processed['pilares'][0].get('pct_1') if processed['pilares'] else 'N/A'}")
         context['data'] = processed
         context['charts_json'] = json.dumps(processed['charts'])
     
@@ -3580,7 +3520,6 @@ def commission_gerente_view(request):
         # Buscar metas por pilar - Gerente busca por filial, CN busca por nome
         target_name = target_user.get_full_name() or target_user.first_name
         target_sector = target_user.sector.name if hasattr(target_user, 'sector') and target_user.sector else None
-        print(f"[commission_gerente_view] target_name={target_name}, target_is_gerente={target_is_gerente}, target_sector={target_sector}")
         metas_pilar = fetch_metas_por_pilar(
             target_name,
             target_is_gerente,
@@ -3588,7 +3527,6 @@ def commission_gerente_view(request):
             urls=urls,
             cache_suffix=reference['cache_suffix'],
         )
-        print(f"[commission_gerente_view] metas_pilar retornado: {metas_pilar}")
         # Buscar dados de IQ
         iq_data = fetch_iq_data(
             target_name,
@@ -4197,8 +4135,6 @@ def api_vendas_por_pilar(request):
     user_last_name = target_user.last_name.strip().upper() if target_user.last_name else ""
     user_pdv = target_user.sector.name if hasattr(target_user, 'sector') and target_user.sector else ""
     
-    print(f"[api_vendas_por_pilar] Usuário: {user_full_name}, Pilar: {pilar}, Role: {role}")
-    print(f"[api_vendas_por_pilar] first_name: {user_first_name}, last_name: {user_last_name}, PDV: {user_pdv}")
     
     # Mapeamento de pilar - inclui variações com e sem acento
     pilar_mapping = {
@@ -4296,7 +4232,6 @@ def api_vendas_por_pilar(request):
         # Baixar planilha BASE_PAGAMENTO
         excel_file, error = download_excel_file(urls['base_pagamento'], "base_pagamento_vendas")
         if error:
-            print(f"[api_vendas_por_pilar] Erro download: {error}")
             return JsonResponse({'error': f'Erro ao baixar planilha: {error}'}, status=500)
         
         # ================== SHEET PAGO (Planilha1) ==================
@@ -4304,8 +4239,6 @@ def api_vendas_por_pilar(request):
             excel_file.seek(0)
             df_pago = pd.read_excel(excel_file, sheet_name='Planilha1', engine='openpyxl')
             colunas = list(df_pago.columns)
-            print(f"[api_vendas_por_pilar] Colunas Planilha1: {colunas}")
-            print(f"[api_vendas_por_pilar] Total linhas Planilha1: {len(df_pago)}")
         except Exception as e:
             return JsonResponse({'error': f'Erro ao ler planilha: {str(e)}'}, status=500)
         
@@ -4326,7 +4259,6 @@ def api_vendas_por_pilar(request):
             elif col_upper == 'FILIAL':
                 pdv_col = col
         
-        print(f"[api_vendas_por_pilar] pilar_col={pilar_col}, vendedor_col={vendedor_col}, coordenacao_col={coordenacao_col}, pdv_col={pdv_col}")
         
         if pilar_col is None:
             return JsonResponse({'error': 'Coluna PILAR não encontrada'}, status=500)
@@ -4335,17 +4267,14 @@ def api_vendas_por_pilar(request):
         if is_coordenador:
             if coordenacao_col is None:
                 return JsonResponse({'error': 'Coluna COORDENACAO não encontrada'}, status=500)
-            print(f"[api_vendas_por_pilar] Coordenador filtrando por COORDENACAO")
         elif is_gerente:
             if pdv_col is None:
                 return JsonResponse({'error': 'Coluna PDV não encontrada'}, status=500)
-            print(f"[api_vendas_por_pilar] Gerente filtrando por PDV: {user_pdv}")
         else:
             if vendedor_col is None:
                 return JsonResponse({'error': 'Coluna VENDEDOR não encontrada'}, status=500)
             # Debug: mostrar alguns vendedores únicos
             vendedores_unicos = df_pago[vendedor_col].dropna().unique()[:10]
-            print(f"[api_vendas_por_pilar] CN filtrando por VENDEDOR. Amostra: {list(vendedores_unicos)}")
         
         # Filtrar vendas PAGO
         for idx, row in df_pago.iterrows():
@@ -4381,18 +4310,15 @@ def api_vendas_por_pilar(request):
                         row_data[str(col)] = str(value)
                 vendas_pago.append(row_data)
         
-        print(f"[api_vendas_por_pilar] Vendas PAGO encontradas: {len(vendas_pago)}")
         
         # ================== SHEET EXCLUSÃO ==================
         try:
             excel_file_exclusao, error_exclusao = download_excel_file(urls['base_exclusao'], "base_exclusao")
             if error_exclusao:
-                print(f"[api_vendas_por_pilar] Erro ao baixar EXCLUSAO: {error_exclusao}")
                 df_exclusao = None
             else:
                 excel_file_exclusao.seek(0)
                 df_exclusao = pd.read_excel(excel_file_exclusao, sheet_name='Planilha1', engine='openpyxl')
-                print(f"[api_vendas_por_pilar] Total linhas EXCLUSAO: {len(df_exclusao)}")
             
             if df_exclusao is not None:
                 pilar_col_exc = None
@@ -4411,7 +4337,6 @@ def api_vendas_por_pilar(request):
                     elif col_upper == 'FILIAL':
                         pdv_col_exc = col
                 
-                print(f"[api_vendas_por_pilar] EXCLUSAO pilar_col={pilar_col_exc}, vendedor_col={vendedor_col_exc}, coordenacao_col={coordenacao_col_exc}, pdv_col={pdv_col_exc}")
                 
                 # Verificar se temos as colunas necessárias
                 can_process = pilar_col_exc is not None
@@ -4457,11 +4382,10 @@ def api_vendas_por_pilar(request):
                             row_data['_tipo'] = 'exclusao'
                             vendas_exclusao.append(row_data)
                 
-                print(f"[api_vendas_por_pilar] Vendas EXCLUSAO encontradas: {len(vendas_exclusao)}")
             else:
-                print(f"[api_vendas_por_pilar] df_exclusao é None, nenhuma venda de exclusão processada")
+                pass
         except Exception as e:
-            print(f"[api_vendas_por_pilar] Erro ao ler EXCLUSAO: {e}")
+            logger.warning(f"[api_vendas_por_pilar] Erro ao ler EXCLUSAO: {e}")
         
         # Calcular totais de receita
         receita_col_name = None

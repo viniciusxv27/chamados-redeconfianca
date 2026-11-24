@@ -30,8 +30,9 @@ time de conferência de venda é apenas o gerente".
   prazo expirado" (``expirar_prazos``, chamado por quem lê);
 - ``discorda``: o CN discordou, com o motivo; a venda volta para o gerente, que
   contesta (Sim — o Não sai) ou mantém o Não com uma resposta (``mantido``);
-- ``sem_cn``: venda de vendedor sem cadastro ativo no portal (ou do próprio
-  gerente): não há de quem esperar.
+- ``sem_cn``: venda do próprio gerente: não há de quem esperar.
+- 24/11/2026: CN que não está ativo (desligado, inativo, afastado, de férias ou sem cadastro) não dá de acordo:
+  o Não já nasce ``automatico`` sem prazo, e um Não aguardando vira automático se o CN deixar de estar ativo.
 
 **A resposta de cada venda** (``situacao_das_vendas``): ``contestada``, ``sim``,
 ``nao``, ``sim_incompleto`` ou ``pendente``.
@@ -42,6 +43,7 @@ from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from .models import (Contestation, ContestationCartDraft, ContestationHistory, ExclusionRecord,
@@ -54,6 +56,7 @@ MIN_JUSTIFICATIVA = 5        # "." ou "não" não explicam nada
 RESPONDIDAS = ('contestada', 'sim', 'nao')
 PRAZO_CN = timedelta(hours=24)
 ROTULO_AUTOMATICO = 'De acordo automático por prazo expirado'
+ROTULO_CN_INATIVO = 'De acordo automático: CN não está ativo no portal'
 
 ROTULO_RESPOSTA = {
     'contestada': 'Já enviada',
@@ -189,12 +192,28 @@ def pode_dar_de_acordo_no_nao(user, resposta):
                 and (resposta.prazo_cn is None or resposta.prazo_cn > timezone.now()))
 
 
+def cn_ativo(user_ou_id):
+    """O CN pode dar o de acordo: usuário ativo no portal e com situação Ativo (não inativo, afastado nem de férias)."""
+    if not user_ou_id:
+        return False
+    user = user_ou_id
+    if not hasattr(user, 'is_active'):
+        user = get_user_model().objects.filter(pk=user_ou_id).only('is_active', 'status').first()
+    return bool(user and user.is_active and (getattr(user, 'status', '') or 'ATIVO') == 'ATIVO')
+
+
 def situacao_cn_inicial(dono_id, quem_respondeu, agora=None):
-    """``(situacao_cn, prazo_cn)`` de um Não que acabou de ser dado."""
+    """``(situacao_cn, prazo_cn)`` de um Não que acabou de ser dado.
+
+    24/11/2026: o de acordo só é pedido a CN ativo; sem CN ativo no portal (desligado, inativo, afastado,
+    de férias ou sem cadastro) o de acordo já nasce automático, sem prazo.
+    """
     agora = agora or timezone.now()
-    if not dono_id or dono_id == quem_respondeu.pk:
-        # Sem CN no portal, ou o gerente respondendo a própria venda.
+    if dono_id and dono_id == quem_respondeu.pk:
+        # O gerente respondendo a própria venda.
         return RespostaNaoContesta.SEM_CN, None
+    if not cn_ativo(dono_id):
+        return RespostaNaoContesta.AUTOMATICO, None
     return RespostaNaoContesta.AGUARDANDO, agora + PRAZO_CN
 
 
@@ -206,29 +225,43 @@ def expirar_prazos(agora=None, ids=None):
     do prazo — não a da tela que percebeu.
     """
     agora = agora or timezone.now()
-    qs = RespostaNaoContesta.objects.filter(
-        situacao_cn=RespostaNaoContesta.AGUARDANDO, prazo_cn__isnull=False, prazo_cn__lte=agora)
+    # Prazo vencido, ou o CN deixou de estar ativo (24/11/2026: de acordo só de CN ativo). O "sem CN"
+    # antigo de venda sem dono no portal também vira automático; o da própria venda do gerente fica.
+    vencidas = Q(situacao_cn=RespostaNaoContesta.AGUARDANDO, prazo_cn__isnull=False, prazo_cn__lte=agora)
+    cn_inativo = (Q(situacao_cn=RespostaNaoContesta.AGUARDANDO)
+                  & (Q(cn__isnull=True) | Q(cn__is_active=False) | ~Q(cn__status='ATIVO')))
+    sem_dono = Q(situacao_cn=RespostaNaoContesta.SEM_CN, cn__isnull=True)
+    qs = RespostaNaoContesta.objects.filter(vencidas | cn_inativo | sem_dono)
     if ids is not None:
         qs = qs.filter(exclusion_id__in=ids)
     feitos = 0
     for pk in list(qs.values_list('pk', flat=True)[:2000]):
         with transaction.atomic():
-            r = (RespostaNaoContesta.objects.select_for_update(of=('self',)).select_related('exclusion')
-                 .filter(pk=pk, situacao_cn=RespostaNaoContesta.AGUARDANDO).first())
+            r = (RespostaNaoContesta.objects.select_for_update(of=('self',)).select_related('exclusion', 'cn')
+                 .filter(pk=pk, situacao_cn__in=(RespostaNaoContesta.AGUARDANDO, RespostaNaoContesta.SEM_CN))
+                 .first())
             if r is None:
                 continue
+            por_prazo = (r.situacao_cn == RespostaNaoContesta.AGUARDANDO and r.prazo_cn is not None
+                         and r.prazo_cn <= agora and cn_ativo(r.cn))
+            if r.situacao_cn == RespostaNaoContesta.SEM_CN and r.cn_id:
+                continue
+            if r.situacao_cn == RespostaNaoContesta.AGUARDANDO and not por_prazo and cn_ativo(r.cn):
+                continue
             r.situacao_cn = RespostaNaoContesta.AUTOMATICO
-            r.cn_respondido_em = r.prazo_cn
+            r.cn_respondido_em = r.prazo_cn if por_prazo else agora
+            if not por_prazo:
+                r.prazo_cn = None       # sem prazo = automático porque não havia CN ativo (a tela mostra assim)
             r.cn_respondido_por = None
-            r.save(update_fields=['situacao_cn', 'cn_respondido_em', 'cn_respondido_por', 'atualizado_em'])
+            r.save(update_fields=['situacao_cn', 'cn_respondido_em', 'cn_respondido_por', 'prazo_cn', 'atualizado_em'])
             venda = r.exclusion
             ContestationHistory.objects.create(
-                action='cn_de_acordo_auto', user=None, notes=ROTULO_AUTOMATICO,
+                action='cn_de_acordo_auto', user=None, notes=ROTULO_AUTOMATICO if por_prazo else ROTULO_CN_INATIVO,
                 extra_data={
                     'exclusion_id': venda.pk, 'lote_id': venda.sync_batch_id,
                     'filial': venda.filial, 'vendedor': venda.vendedor,
                     'para_cn_id': r.cn_id, 'prazo': r.prazo_cn.isoformat() if r.prazo_cn else '',
-                    'automatico': True,
+                    'automatico': True, 'cn_inativo': not por_prazo,
                 })
             feitos += 1
     return feitos

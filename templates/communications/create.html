@@ -1064,7 +1064,6 @@ function openCropModal() {
     
     // Aguardar carregamento da imagem
     cropImg.onload = function() {
-        console.log('Imagem carregada no modal');
         
         // Aguardar um pouco mais para garantir renderização
         setTimeout(() => {
@@ -1076,7 +1075,6 @@ function openCropModal() {
                     return;
                 }
                 
-                console.log('Inicializando Cropper...');
                 
                 // Configurações otimizadas para Safari/macOS
                 cropper = new Cropper(cropImg, {
@@ -1106,7 +1104,6 @@ function openCropModal() {
                     
                     // Callbacks para debug
                     ready: function() {
-                        console.log('✅ Cropper inicializado com sucesso');
                         
                         // Forçar atualização inicial
                         setTimeout(() => {
@@ -1115,19 +1112,15 @@ function openCropModal() {
                     },
                     
                     cropstart: function(e) {
-                        console.log('Crop start:', e.detail.action);
                     },
                     
                     cropmove: function(e) {
-                        // console.log('Crop move:', e.detail.action);
                     },
                     
                     cropend: function(e) {
-                        console.log('Crop end:', e.detail.action);
                     },
                     
                     crop: function(e) {
-                        // console.log('Crop data:', e.detail);
                     },
                     
                     error: function(error) {
@@ -1179,7 +1172,6 @@ function resetCropInModal() {
 }
 
 function applyCrop() {
-    console.log('🔄 Aplicando crop...');
     
     if (!cropper) {
         console.error('❌ Cropper não está inicializado');
@@ -1190,7 +1182,6 @@ function applyCrop() {
     try {
         // Obter dados do crop
         const cropData = cropper.getData();
-        console.log('📊 Dados do crop:', cropData);
         
         // Gerar canvas com a imagem cortada
         const canvas = cropper.getCroppedCanvas({
@@ -1211,7 +1202,6 @@ function applyCrop() {
             return;
         }
         
-        console.log('✅ Canvas gerado:', canvas.width, 'x', canvas.height);
         
         // Converter para blob com melhor compatibilidade
         canvas.toBlob(function(blob) {
@@ -1221,11 +1211,9 @@ function applyCrop() {
                 return;
             }
             
-            console.log('✅ Blob gerado:', blob.size, 'bytes');
             
             const reader = new FileReader();
             reader.onload = function() {
-                console.log('✅ Data URL gerado');
                 
                 // Salvar dados da imagem cortada
                 document.getElementById('cropped-image-data').value = reader.result;
@@ -1445,11 +1433,9 @@ document.head.appendChild(style);
 
 // Executar na carga da página
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🔧 DOM carregado');
     
     // Verificar se Cropper.js carregou
     if (typeof Cropper !== 'undefined') {
-        console.log('✅ Cropper.js carregado com sucesso');
     } else {
         console.error('❌ Cropper.js não foi carregado');
     }
@@ -1465,9 +1451,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Debug: Verificar user agent (Safari, Chrome, etc)
-    console.log('🔍 User Agent:', navigator.userAgent);
-    console.log('🔍 É Safari?', /^((?!chrome|android).)*safari/i.test(navigator.userAgent));
-    console.log('🔍 É macOS?', /Mac/i.test(navigator.userAgent));
     
     // Validação do formulário
     const form = document.querySelector('form');
