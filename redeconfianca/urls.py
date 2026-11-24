@@ -153,6 +153,7 @@ urlpatterns = [
     path('apresentacoes/', include('apresentacoes.urls')),  # Assistente de Apresentações
     path('busca-global/', core_busca.busca_global, name='busca_global'),  # busca do menu superior
     path('quadro-hc/', include('quadro_hc.urls')),  # Quadro de HC (só SUPERADMIN)
+    path('progresso/', include('carreira.urls')),  # Progresso: plano de carreira até Pleno
     path('uniformes/', include('uniformes.urls')),  # Uniformes (SUPERADMIN + liberados)
     path('gestao-metas/', include('gestao_metas.urls')),  # Gerenciamento de metas (SUPERADMIN + liberados)
     path('facilitador/', include('facilitador.urls')),  # Facilitador: arquivos e links úteis

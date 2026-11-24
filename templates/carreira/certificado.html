@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Certificado · {{ pessoa.full_name }}</title>
+<style>
+    :root { --tinta:#1E1B4B; --ouro:#B45309; --ouro2:#F59E0B; --roxo:#4F46E5; --rosa:#DB2777; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; background:#EEF2FF; font-family:Georgia, 'Times New Roman', serif; color:var(--tinta);
+           display:flex; flex-direction:column; align-items:center; padding:1.5rem 1rem 3rem; }
+    .acoes { font-family:system-ui, -apple-system, 'Segoe UI', sans-serif; display:flex; gap:.5rem; margin-bottom:1rem; flex-wrap:wrap; justify-content:center; }
+    .acoes a, .acoes button { border:0; cursor:pointer; text-decoration:none; padding:.6rem 1.1rem; border-radius:.8rem; font-weight:600; font-size:.9rem; }
+    .imprimir { background:linear-gradient(135deg,var(--roxo),var(--rosa)); color:#fff; }
+    .voltar { background:#fff; color:#334155; border:1px solid #CBD5E1 !important; }
+    .folha { position:relative; width:min(100%, 1050px); aspect-ratio:1.414; background:#fff; border-radius:.5rem; overflow:hidden;
+             box-shadow:0 30px 60px -30px rgba(30,27,75,.45); padding:clamp(1.2rem, 4vw, 3.2rem);
+             animation:entra .9s cubic-bezier(.22,1,.36,1); }
+    @keyframes entra { from { opacity:0; transform:translateY(24px) scale(.98); } to { opacity:1; transform:none; } }
+    .moldura { position:absolute; inset:clamp(.5rem, 1.6vw, 1.1rem); border:2px solid var(--ouro2); border-radius:.35rem; pointer-events:none; }
+    .moldura::after { content:''; position:absolute; inset:6px; border:1px solid rgba(180,83,9,.35); border-radius:.25rem; }
+    .faixa { position:absolute; left:0; right:0; top:0; height:clamp(.5rem, 1.2vw, .8rem);
+             background:linear-gradient(90deg,var(--roxo),#7C3AED,var(--rosa),var(--ouro2)); }
+    .conteudo { position:relative; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:clamp(.3rem, 1.2vw, .9rem); }
+    .marca { font-family:system-ui, sans-serif; font-size:clamp(.65rem, 1.3vw, .85rem); letter-spacing:.35em; text-transform:uppercase; color:#6366F1; font-weight:700; }
+    h1 { margin:0; font-size:clamp(1.6rem, 5vw, 3.4rem); letter-spacing:.06em; color:var(--tinta); }
+    .sub { font-size:clamp(.8rem, 1.7vw, 1.1rem); color:#475569; }
+    .nome { font-size:clamp(1.5rem, 4.6vw, 3rem); font-style:italic; color:var(--ouro); margin:.2rem 0; border-bottom:1px solid #E2E8F0; padding:0 1.5rem .3rem; }
+    .texto { max-width:46rem; font-size:clamp(.8rem, 1.7vw, 1.08rem); line-height:1.55; color:#334155; }
+    .selos { display:flex; flex-wrap:wrap; justify-content:center; gap:.35rem; max-width:44rem; font-family:system-ui, sans-serif; }
+    .selos span { font-size:clamp(.55rem, 1.1vw, .72rem); padding:.2rem .55rem; border-radius:999px; background:#ECFDF5; color:#047857; font-weight:600; }
+    .rodape { width:100%; display:flex; justify-content:space-between; align-items:flex-end; gap:1rem; margin-top:clamp(.4rem, 2vw, 1.4rem); font-family:system-ui, sans-serif; }
+    .assinatura { flex:1; max-width:15rem; border-top:1px solid #94A3B8; padding-top:.35rem; font-size:clamp(.6rem, 1.2vw, .8rem); color:#475569; }
+    .medalha { width:clamp(3.5rem, 9vw, 6rem); height:clamp(3.5rem, 9vw, 6rem); border-radius:999px; display:flex; align-items:center; justify-content:center;
+               background:radial-gradient(circle at 30% 30%, #FDE68A, var(--ouro2) 60%, var(--ouro)); color:#fff; font-size:clamp(1.3rem, 3.5vw, 2.4rem);
+               box-shadow:0 10px 25px -10px rgba(180,83,9,.7), inset 0 0 0 4px rgba(255,255,255,.35); flex-shrink:0; }
+    .codigo { font-size:clamp(.55rem, 1vw, .7rem); color:#94A3B8; }
+    @media print {
+        @page { size:A4 landscape; margin:0; }
+        body { background:#fff; padding:0; }
+        .acoes { display:none; }
+        .folha { width:100%; height:100vh; aspect-ratio:auto; box-shadow:none; border-radius:0; animation:none; }
+    }
+</style>
+</head>
+<body>
+<div class="acoes">
+    <a class="voltar" href="{% if pessoa == request.user %}{% url 'carreira:jornada' %}{% else %}{% url 'carreira:pessoa' pessoa.pk %}{% endif %}">← Voltar ao Progresso</a>
+    <button class="imprimir" type="button" onclick="window.print()">Imprimir / salvar em PDF</button>
+</div>
+<main class="folha" data-certificado="{{ tipo }}">
+    <div class="faixa"></div>
+    <div class="moldura"></div>
+    <div class="conteudo">
+        <p class="marca">Rede Confiança · Progresso</p>
+        <h1>{% if tipo == 'promocao' %}Certificado de Promoção{% else %}Certificado de Conquista{% endif %}</h1>
+        <p class="sub">Conferimos este certificado a</p>
+        <p class="nome">{{ pessoa.full_name|title }}</p>
+        <p class="texto">
+            {% if tipo == 'promocao' %}
+            por concluir o caminho do consultor e ser promovido(a) a <strong>Consultor(a) Pleno</strong>,
+            cumprindo os requisitos de tempo, resultado, satisfação do cliente, qualidade, assiduidade, conduta, formação e loja apta.
+            {% else %}
+            por cumprir os <strong>8 requisitos</strong> do caminho do consultor até <strong>Pleno</strong> —
+            tempo, resultado, satisfação do cliente, qualidade, assiduidade, conduta, formação e loja apta.
+            {% endif %}
+        </p>
+        <div class="selos">{% for r in requisitos %}<span>✓ {{ r.titulo }}</span>{% endfor %}</div>
+        <div class="rodape">
+            <div class="assinatura">{{ pessoa.sector.name|default:"" }}<br>{{ data|date:"d" }} de {{ data|date:"F"|lower }} de {{ data|date:"Y" }}</div>
+            <div class="medalha">{% if tipo == 'promocao' %}♛{% else %}★{% endif %}</div>
+            <div class="assinatura" style="text-align:right">Diretoria · Rede Confiança<br><span class="codigo">Código {{ codigo }}</span></div>
+        </div>
+    </div>
+</main>
+</body>
+</html>

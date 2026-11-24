@@ -99,6 +99,7 @@ INSTALLED_APPS = [
     'rotina',  # Rotina Gerencial: a semana do gerente, com horários e avisos
     'apresentacoes',  # Assistente de Apresentações: slides com IA na identidade da rede
     'quadro_hc',  # Quadro de HC loja a loja (SUPERADMIN e quem ele liberar)
+    'carreira',  # Progresso: o caminho do consultor até Pleno (25/11/2026)
     'facilitador',  # Facilitador: arquivos e links úteis (todos veem; SUPERADMIN gerencia)
     'uniformes',  # Uniformes: estoque, retiradas e devoluções (SUPERADMIN + liberados)
     'gestao_metas',  # Gerenciamento de metas: meta do mês por loja e pilar (SUPERADMIN + liberados)
@@ -195,6 +196,7 @@ TEMPLATES = [
                 'auditoria_d1.context_processors.auditoria_d1_menu',
                 'cameras.context_processors.cameras_menu',
                 'quadro_hc.context_processors.quadro_hc_menu',
+                'carreira.context_processors.carreira_menu',
                 'uniformes.context_processors.uniformes_menu',
                 'gestao_metas.context_processors.gestao_metas_menu',
                 'apresentacoes.context_processors.apresentacoes_menu',

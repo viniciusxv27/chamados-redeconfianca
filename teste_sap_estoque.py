@@ -424,6 +424,10 @@ t('não monta a tabela na abertura', 'colunas' not in r.context and 'id="estRola
 r = cc.get('/sap/estoque/?aba=disponivel&categoria=Smartphones')
 t('clicar no cartão abre a tabela daquela categoria', r.status_code == 200 and not r.context['inicial']
   and 'colunas' in r.context and 'data-cartoes-categorias' not in r.content.decode())
+h_cat = r.content.decode()
+t('na tabela, botão de voltar às categorias (25/11/2026)', 'data-voltar-inicio' in h_cat and 'Voltar às categorias' in h_cat
+  and 'href="/sap/estoque/"' in h_cat)
+t('a abertura (cartões) não tem o botão de voltar', 'data-voltar-inicio' not in html)
 
 print('\n== 12) O CAMPO PRODUTO SE AUTOPREENCHE ==')
 j = cc.get('/sap/estoque/sugestoes/?q=gal', HTTP_X_REQUESTED_WITH='XMLHttpRequest').json()

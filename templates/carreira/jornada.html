@@ -1,0 +1,404 @@
+{% extends 'base.html' %}
+
+{% block title %}Progresso · {{ pessoa.first_name|default:pessoa.full_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Progresso (25/11/2026): a jornada do consultor até Pleno — gamificada, com movimento e sem exagero. */
+    .pg-hero { position:relative; overflow:hidden; border-radius:1.5rem; color:#fff;
+               background:radial-gradient(900px 300px at 0% 0%, rgba(255,255,255,.18), transparent 60%),
+                          linear-gradient(135deg,#4F46E5 0%,#7C3AED 45%,#DB2777 100%); }
+    .pg-hero::after { content:''; position:absolute; inset:auto -10% -60% auto; width:28rem; height:28rem; border-radius:999px;
+                      background:radial-gradient(circle, rgba(255,255,255,.16), transparent 65%); pointer-events:none; }
+    .pg-hero-pleno { background:radial-gradient(900px 300px at 0% 0%, rgba(255,255,255,.25), transparent 60%),
+                                linear-gradient(135deg,#B45309 0%,#D97706 40%,#F59E0B 75%,#FBBF24 100%); }
+    .pg-avatar { width:4.25rem; height:4.25rem; border-radius:1.25rem; display:flex; align-items:center; justify-content:center;
+                 font-weight:800; font-size:1.5rem; background:rgba(255,255,255,.18); border:2px solid rgba(255,255,255,.35);
+                 backdrop-filter:blur(6px); }
+    .pg-anel { width:9.5rem; height:9.5rem; }
+    .pg-anel circle { fill:none; stroke-width:12; }
+    .pg-anel .fundo { stroke:rgba(255,255,255,.2); }
+    .pg-anel .frente { stroke:#fff; stroke-linecap:round; transform:rotate(-90deg); transform-origin:50% 50%;
+                       transition:stroke-dashoffset 1.6s cubic-bezier(.22,1,.36,1); filter:drop-shadow(0 0 6px rgba(255,255,255,.6)); }
+    .pg-xp { height:.65rem; border-radius:999px; background:rgba(255,255,255,.2); overflow:hidden; }
+    .pg-xp > span { display:block; height:100%; width:0; border-radius:999px; background:linear-gradient(90deg,#FDE68A,#FFFFFF);
+                    transition:width 1.6s cubic-bezier(.22,1,.36,1); }
+    .pg-selo { display:inline-flex; align-items:center; gap:.4rem; padding:.3rem .75rem; border-radius:999px; font-size:.75rem;
+               font-weight:700; background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.3); }
+
+    /* O caminho: uma trilha com as 8 estações. */
+    .pg-trilha { position:relative; }
+    .pg-trilha::before { content:''; position:absolute; left:1.6rem; top:1rem; bottom:1rem; width:4px; border-radius:4px;
+                         background:linear-gradient(180deg,#C7D2FE,#FBCFE8); }
+    @media (min-width:1024px) { .pg-trilha::before { left:50%; transform:translateX(-50%); } }
+    .pg-estacao { position:relative; display:flex; gap:1rem; align-items:flex-start; opacity:0; transform:translateY(18px);
+                  transition:opacity .6s ease, transform .6s cubic-bezier(.22,1,.36,1); }
+    .pg-estacao.visivel { opacity:1; transform:none; }
+    .pg-no { position:relative; z-index:1; flex-shrink:0; width:3.25rem; height:3.25rem; border-radius:1rem; display:flex;
+             align-items:center; justify-content:center; font-size:1.15rem; color:#fff; background:var(--c);
+             box-shadow:0 8px 18px -8px var(--c); }
+    .pg-estacao.ok .pg-no::after { content:'\f00c'; font-family:'Font Awesome 6 Free'; font-weight:900; position:absolute; right:-.45rem;
+             bottom:-.45rem; width:1.35rem; height:1.35rem; border-radius:999px; background:#10B981; color:#fff; font-size:.65rem;
+             display:flex; align-items:center; justify-content:center; border:2px solid #fff; }
+    .pg-estacao.aguardando .pg-no { background:#CBD5E1; box-shadow:none; }
+    .pg-cartao { flex:1; min-width:0; background:#fff; border:1px solid #E9EDF2; border-radius:1.15rem; padding:1rem 1.1rem;
+                 box-shadow:0 1px 2px rgba(16,24,40,.04); transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
+    .pg-cartao:hover { transform:translateY(-2px); box-shadow:0 12px 24px -14px var(--c); border-color:var(--c); }
+    .pg-estacao.ok .pg-cartao { background:linear-gradient(180deg,#F0FDF4,#FFFFFF); border-color:#BBF7D0; }
+    .pg-estacao.ok .pg-cartao::before { content:''; position:absolute; }
+    .pg-barra { height:.55rem; border-radius:999px; background:#EEF2F7; overflow:hidden; }
+    .pg-barra > span { display:block; height:100%; width:0; border-radius:999px; background:var(--c);
+                       transition:width 1.2s cubic-bezier(.22,1,.36,1); }
+    .pg-estacao.ok .pg-barra > span { background:linear-gradient(90deg,#10B981,#34D399); }
+    .pg-chip { display:inline-flex; align-items:center; gap:.3rem; padding:.15rem .55rem; border-radius:999px; font-size:.68rem; font-weight:700; }
+    .pg-chip-ok { background:#DCFCE7; color:#166534; }
+    .pg-chip-falta { background:#FEF3C7; color:#92400E; }
+    .pg-chip-aguardando { background:#F1F5F9; color:#64748B; }
+    .pg-brilho { position:relative; overflow:hidden; }
+    .pg-brilho::after { content:''; position:absolute; top:0; left:-60%; width:40%; height:100%; transform:skewX(-20deg);
+                        background:linear-gradient(90deg,transparent,rgba(255,255,255,.65),transparent); animation:pgBrilho 3.5s ease-in-out infinite; }
+    @keyframes pgBrilho { 0%,60% { left:-60%; } 100% { left:130%; } }
+    @media (min-width:1024px) {
+        .pg-estacao { width:calc(50% - 2rem); }
+        .pg-estacao.direita { margin-left:auto; flex-direction:row-reverse; text-align:right; }
+        .pg-estacao.direita .pg-cartao { text-align:left; }
+        .pg-estacao .pg-no { position:absolute; top:.5rem; }
+        .pg-estacao.esquerda .pg-no { right:-3.65rem; }
+        .pg-estacao.direita .pg-no { left:-3.65rem; }
+    }
+    /* Na tela do SUPERADMIN a trilha divide a largura com os lançamentos: uma coluna só. */
+    @media (min-width:1024px) {
+        .pg-trilha-simples::before { left:1.6rem; transform:none; }
+        .pg-trilha-simples .pg-estacao { width:auto; }
+        .pg-trilha-simples .pg-estacao.direita { margin-left:0; flex-direction:row; text-align:left; }
+        .pg-trilha-simples .pg-estacao .pg-no { position:relative; top:auto; left:auto; right:auto; }
+    }
+    .pg-pulso { animation:pgPulso 2s ease-in-out infinite; }
+    @keyframes pgPulso { 0%,100% { box-shadow:0 0 0 0 rgba(99,102,241,.45); } 50% { box-shadow:0 0 0 10px rgba(99,102,241,0); } }
+    .pg-modal { position:fixed; inset:0; z-index:70; display:flex; align-items:center; justify-content:center; padding:1rem;
+                background:rgba(15,23,42,.55); backdrop-filter:blur(3px); opacity:0; pointer-events:none; transition:opacity .3s ease; }
+    .pg-modal.aberto { opacity:1; pointer-events:auto; }
+    .pg-modal > div { transform:scale(.85) translateY(20px); transition:transform .45s cubic-bezier(.34,1.56,.64,1); }
+    .pg-modal.aberto > div { transform:none; }
+    #pgConfete { position:fixed; inset:0; pointer-events:none; z-index:80; }
+    .pg-campo { width:100%; border:1px solid #E2E8F0; border-radius:.7rem; padding:.45rem .7rem; font-size:.85rem; }
+    @media (prefers-reduced-motion: reduce) {
+        .pg-estacao { opacity:1; transform:none; transition:none; }
+        .pg-anel .frente, .pg-xp > span, .pg-barra > span { transition:none; }
+        .pg-brilho::after, .pg-pulso { animation:none; }
+    }
+    html.dark .pg-cartao { background:var(--tema-superficie); border-color:var(--tema-borda); }
+    html.dark .pg-estacao.ok .pg-cartao { background:linear-gradient(180deg, rgba(16,185,129,.12), var(--tema-superficie)); border-color:rgba(16,185,129,.35); }
+    html.dark .pg-barra { background:var(--tema-superficie-3); }
+    html.dark .pg-trilha::before { background:linear-gradient(180deg, rgba(99,102,241,.45), rgba(236,72,153,.45)); }
+    html.dark .pg-estacao.ok .pg-no::after { border-color:var(--tema-superficie); }
+    html.dark .pg-campo { background:var(--tema-superficie-2); border-color:var(--tema-borda); color:var(--tema-texto); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto" data-progresso>
+    {% if modo_superadmin %}
+    <div class="mb-3 flex flex-wrap items-center gap-2 text-sm">
+        <a href="{% url 'carreira:painel' %}" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"><i class="fas fa-arrow-left text-xs"></i>Painel do Progresso</a>
+        <span class="text-gray-500">Você está vendo a jornada de <strong>{{ pessoa.full_name }}</strong> como SUPERADMIN (com os números do comitê).</span>
+    </div>
+    {% endif %}
+
+    {# ------------------------------------------------------------------ topo #}
+    <section class="pg-hero {% if pleno %}pg-hero-pleno{% endif %} p-5 sm:p-7 mb-6">
+        <div class="relative z-10 flex flex-col lg:flex-row lg:items-center gap-6">
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-4">
+                    <div class="pg-avatar">{{ pessoa.first_name|slice:":1"|upper }}{{ pessoa.last_name|slice:":1"|upper }}</div>
+                    <div class="min-w-0">
+                        <p class="text-xs uppercase tracking-widest opacity-80 font-semibold">Progresso · plano de carreira</p>
+                        <h1 class="text-2xl sm:text-3xl font-extrabold leading-tight truncate">{% if eu_mesmo %}Olá, {{ pessoa.first_name|title }}!{% else %}{{ pessoa.full_name }}{% endif %}</h1>
+                        <p class="text-sm opacity-90">{% if pessoa.sector %}{{ pessoa.sector.name }} · {% endif %}{{ pessoa.job_title|default:"Consultor"|title }}</p>
+                    </div>
+                </div>
+                <div class="mt-5 flex flex-wrap items-center gap-2">
+                    <span class="pg-selo"><i class="fas fa-seedling"></i>Consultor Jr</span>
+                    <i class="fas fa-arrow-right-long opacity-70"></i>
+                    <span class="pg-selo {% if pleno %}pg-brilho{% endif %}"><i class="fas fa-crown"></i>Consultor Pleno</span>
+                </div>
+                <div class="mt-5 max-w-md">
+                    <div class="flex items-center justify-between text-xs font-semibold mb-1.5">
+                        <span><i class="fas fa-bolt mr-1"></i>XP da jornada</span>
+                        <span><span data-contar="{{ xp }}">0</span> / {{ xp_total }}</span>
+                    </div>
+                    <div class="pg-xp"><span data-largura="{% widthratio xp xp_total 100 %}"></span></div>
+                </div>
+                <p class="mt-4 text-sm sm:text-base opacity-95 max-w-xl">
+                    {% if pleno %}Você chegou lá: <strong>Consultor Pleno</strong>. Seu certificado está aqui embaixo.
+                    {% elif concluiu %}Todos os requisitos cumpridos! Seu pedido de promoção está com o SUPERADMIN.
+                    {% elif cumpridos == 0 %}Seu caminho até Pleno começa aqui. Veja abaixo o que falta em cada etapa.
+                    {% else %}Você já conquistou <strong>{{ cumpridos }} de {{ total }}</strong> requisitos. Falta{{ faltam|pluralize:"m" }} {{ faltam }} — veja abaixo o que fazer em cada um.{% endif %}
+                </p>
+            </div>
+            <div class="flex items-center gap-5 self-center">
+                <div class="relative">
+                    <svg class="pg-anel" viewBox="0 0 120 120" aria-hidden="true">
+                        <circle class="fundo" cx="60" cy="60" r="52"></circle>
+                        <circle class="frente" cx="60" cy="60" r="52" stroke-dasharray="326.73" stroke-dashoffset="326.73" data-anel="{{ percentual }}"></circle>
+                    </svg>
+                    <div class="absolute inset-0 flex flex-col items-center justify-center">
+                        <p class="text-4xl font-extrabold leading-none"><span data-contar="{{ percentual }}">0</span><span class="text-xl">%</span></p>
+                        <p class="text-[11px] font-semibold opacity-90 mt-1">{{ cumpridos }} de {{ total }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {# ---------------------------------------------------------- situação do pedido #}
+    {% if pleno %}
+    <div class="mb-6 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-yellow-50 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4" data-situacao="pleno">
+        <div class="w-12 h-12 rounded-2xl bg-amber-400 text-white flex items-center justify-center text-xl shrink-0 pg-brilho"><i class="fas fa-trophy"></i></div>
+        <div class="flex-1"><p class="font-bold text-amber-900">Promoção a Pleno aprovada{% if perfil.promovido_em %} em {{ perfil.promovido_em|date:"d/m/Y" }}{% endif %}!</p>
+            <p class="text-sm text-amber-800">Parabéns pela dedicação. Guarde seu certificado.</p></div>
+        <a href="{% if eu_mesmo %}{% url 'carreira:certificado' %}{% else %}{% url 'carreira:certificado_de' pessoa.pk %}{% endif %}" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 text-white font-semibold hover:bg-amber-600"><i class="fas fa-award"></i>Ver certificado</a>
+    </div>
+    {% elif pedido and pedido.situacao == 'ANALISE' %}
+    <div class="mb-6 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4" data-situacao="analise">
+        <div class="w-12 h-12 rounded-2xl bg-indigo-500 text-white flex items-center justify-center text-xl shrink-0 pg-pulso"><i class="fas fa-hourglass-half"></i></div>
+        <div class="flex-1"><p class="font-bold text-indigo-900">Enviado para análise do SUPERADMIN</p>
+            <p class="text-sm text-indigo-800">Desde {{ pedido.criado_em|date:"d/m/Y" }}. Você recebe um aviso assim que houver decisão.</p></div>
+        {% if concluiu %}<a href="{% if eu_mesmo %}{% url 'carreira:certificado' %}{% else %}{% url 'carreira:certificado_de' pessoa.pk %}{% endif %}" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700"><i class="fas fa-award"></i>Certificado da jornada</a>{% endif %}
+    </div>
+    {% elif pedido and pedido.situacao == 'NAO_AGORA' %}
+    <div class="mb-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5" data-situacao="nao_agora">
+        <p class="font-bold text-slate-800"><i class="fas fa-comment-dots mr-1.5 text-slate-500"></i>Retorno do pedido de {{ pedido.criado_em|date:"d/m/Y" }}: ainda não</p>
+        {% if pedido.parecer %}<p class="text-sm text-slate-700 mt-1">“{{ pedido.parecer }}”</p>{% endif %}
+        <p class="text-xs text-slate-500 mt-1">Continue cumprindo os requisitos: um novo pedido sai sozinho no próximo trimestre.</p>
+    </div>
+    {% endif %}
+
+    <div class="grid {% if modo_superadmin %}lg:grid-cols-3{% endif %} gap-6">
+        <div class="{% if modo_superadmin %}lg:col-span-2{% endif %} min-w-0">
+            <div class="flex items-end justify-between gap-3 mb-4">
+                <div>
+                    <h2 class="text-lg font-bold text-gray-900">O caminho até Pleno</h2>
+                    <p class="text-sm text-gray-500">8 requisitos. Cada um conquistado acende na trilha.</p>
+                </div>
+                <div class="hidden sm:flex items-center gap-3 text-xs text-gray-500">
+                    <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 mr-1"></span>Conquistado</span>
+                    <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-400 mr-1"></span>Em andamento</span>
+                    <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-slate-300 mr-1"></span>Aguardando dado</span>
+                </div>
+            </div>
+
+            {# --------------------------------------------------------------- trilha #}
+            <div class="pg-trilha {% if modo_superadmin %}pg-trilha-simples{% endif %} space-y-5 lg:space-y-6">
+                {% for r in requisitos %}
+                <article class="pg-estacao {{ r.situacao }} {% cycle 'esquerda' 'direita' %}" style="--c:{{ r.cor }}" data-requisito="{{ r.chave }}" data-situacao="{{ r.situacao }}">
+                    <div class="pg-no {% if r.situacao == 'ok' %}pg-brilho{% endif %}" title="{{ r.titulo }}"><i class="fas {{ r.icone }}"></i></div>
+                    <div class="pg-cartao">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="min-w-0">
+                                <p class="text-[11px] font-bold uppercase tracking-wide" style="color:{{ r.cor }}">Etapa {{ r.numero }}</p>
+                                <h3 class="font-bold text-gray-900 leading-snug">{{ r.titulo }}</h3>
+                            </div>
+                            {% if r.situacao == 'ok' %}<span class="pg-chip pg-chip-ok"><i class="fas fa-circle-check"></i>Conquistado</span>
+                            {% elif r.situacao == 'falta' %}<span class="pg-chip pg-chip-falta"><i class="fas fa-person-running"></i>Em andamento</span>
+                            {% else %}<span class="pg-chip pg-chip-aguardando"><i class="fas fa-clock"></i>Aguardando dado</span>{% endif %}
+                        </div>
+                        <p class="mt-2 text-sm font-semibold text-gray-800">{{ r.valor }}</p>
+                        <div class="pg-barra mt-2"><span data-largura="{{ r.progresso_pct }}"></span></div>
+                        <p class="mt-2 text-xs text-gray-600">{{ r.dica }}</p>
+                        {% if r.trilhas %}
+                        <ul class="mt-2 space-y-1">
+                            {% for t in r.trilhas %}<li class="text-xs flex items-center gap-1.5 {% if t.feita %}text-emerald-700{% else %}text-gray-500{% endif %}"><i class="fas {% if t.feita %}fa-circle-check{% else %}fa-circle{% endif %} text-[10px]"></i>{{ t.nome }}</li>{% endfor %}
+                        </ul>
+                        {% endif %}
+                        <details class="mt-2">
+                            <summary class="text-xs font-semibold text-gray-500 cursor-pointer hover:text-gray-700">Como é medido</summary>
+                            <p class="mt-1 text-xs text-gray-500">{{ r.como }} <span class="text-gray-400">· {{ r.onde }}</span></p>
+                        </details>
+                    </div>
+                </article>
+                {% endfor %}
+                <div class="pg-estacao {% if concluiu or pleno %}ok{% else %}aguardando{% endif %} esquerda lg:!ml-auto lg:!mr-auto lg:!w-auto lg:justify-center" style="--c:#F59E0B" data-final>
+                    <div class="pg-no lg:!static {% if concluiu or pleno %}pg-brilho{% endif %}"><i class="fas fa-crown"></i></div>
+                    <div class="pg-cartao lg:!flex-none">
+                        <p class="font-extrabold text-gray-900">Consultor Pleno</p>
+                        <p class="text-xs text-gray-500">{% if pleno %}Conquistado!{% elif concluiu %}Pedido enviado para o SUPERADMIN.{% else %}Cumprindo os 8, o pedido vai sozinho para análise.{% endif %}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if modo_superadmin %}
+        {# ----------------------------------------------------- lançamentos do SUPERADMIN #}
+        <aside class="space-y-4 min-w-0">
+            {% for p in pedidos %}{% if p.situacao == 'ANALISE' %}
+            <form method="post" action="{% url 'carreira:decidir' p.pk %}" class="sap-card bg-white rounded-2xl border border-indigo-200 p-4 space-y-2" data-decidir>
+                {% csrf_token %}
+                <p class="font-bold text-indigo-900"><i class="fas fa-gavel mr-1.5"></i>Pedido de promoção</p>
+                <p class="text-xs text-gray-500">Desde {{ p.criado_em|date:"d/m/Y H:i" }} — cumpriu os 8 requisitos.</p>
+                <textarea name="parecer" rows="3" class="pg-campo" placeholder="Parecer (obrigatório para “ainda não”)"></textarea>
+                <div class="grid grid-cols-2 gap-2">
+                    <button name="decisao" value="PROMOVIDO" class="px-3 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700" onclick="return confirm('Promover {{ pessoa.first_name|escapejs }} a Consultor Pleno?')"><i class="fas fa-crown mr-1"></i>Promover</button>
+                    <button name="decisao" value="NAO_AGORA" class="px-3 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50">Ainda não</button>
+                </div>
+            </form>
+            {% endif %}{% endfor %}
+
+            <form method="post" action="{% url 'carreira:pessoa_salvar' pessoa.pk %}" class="bg-white rounded-2xl border border-gray-200 p-4 space-y-3" data-lancar>
+                {% csrf_token %}
+                <p class="font-bold text-gray-900"><i class="fas fa-pen-to-square mr-1.5 text-indigo-500"></i>Lançar dados da jornada</p>
+                <label class="block text-xs text-gray-600">Última promoção <span class="text-gray-400">(vazio = admissão {{ pessoa.admission_date|date:"d/m/Y"|default:"—" }})</span>
+                    <input type="date" name="ultima_promocao" value="{{ perfil.ultima_promocao|date:'Y-m-d' }}" class="pg-campo mt-1"></label>
+                <div class="grid grid-cols-2 gap-2">
+                    <label class="block text-xs text-gray-600">Resultado: média 6 meses (%)
+                        <input name="resultado_media" inputmode="decimal" value="{{ perfil.resultado_media|default_if_none:'' }}" class="pg-campo mt-1" placeholder="ex.: 104,5"></label>
+                    <label class="block text-xs text-gray-600">Meses da média
+                        <input name="resultado_referencia" value="{{ perfil.resultado_referencia }}" class="pg-campo mt-1" placeholder="jun–nov/26"></label>
+                </div>
+                <label class="block text-xs text-gray-600">Satisfação do cliente (nota de 0 a 5)
+                    <input name="satisfacao_nota" inputmode="decimal" value="{{ perfil.satisfacao_nota|default_if_none:'' }}" class="pg-campo mt-1" placeholder="ex.: 4,6"></label>
+                <details class="rounded-xl border border-gray-100 p-2">
+                    <summary class="text-xs font-semibold text-gray-600 cursor-pointer">Corrigir Qualidade ou Assiduidade à mão</summary>
+                    <p class="text-[11px] text-gray-400 mt-1">Vazio usa o automático (D-1 e ponto). Preenchido, o número lançado vale.</p>
+                    <div class="grid grid-cols-2 gap-2 mt-2">
+                        <label class="block text-xs text-gray-600">% de erro (D-1)<input name="qualidade_manual" inputmode="decimal" value="{{ perfil.qualidade_manual|default_if_none:'' }}" class="pg-campo mt-1"></label>
+                        <label class="block text-xs text-gray-600">% de absenteísmo<input name="assiduidade_manual" inputmode="decimal" value="{{ perfil.assiduidade_manual|default_if_none:'' }}" class="pg-campo mt-1"></label>
+                    </div>
+                </details>
+                <button class="w-full px-3 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"><i class="fas fa-check mr-1"></i>Salvar</button>
+            </form>
+
+            <div class="bg-white rounded-2xl border border-gray-200 p-4" data-advertencias>
+                <p class="font-bold text-gray-900"><i class="fas fa-triangle-exclamation mr-1.5 text-red-500"></i>Advertências</p>
+                <ul class="mt-2 divide-y divide-gray-100 text-sm">
+                    {% for a in advertencias %}
+                    <li class="py-2 flex items-start justify-between gap-2">
+                        <div class="min-w-0"><p class="font-semibold text-gray-800">{{ a.data|date:"d/m/Y" }}</p>{% if a.motivo %}<p class="text-xs text-gray-500 break-words">{{ a.motivo }}</p>{% endif %}</div>
+                        <form method="post" action="{% url 'carreira:advertencia' pessoa.pk %}" onsubmit="return confirm('Apagar esta advertência?')">{% csrf_token %}
+                            <button name="apagar" value="{{ a.pk }}" class="text-xs text-red-600 hover:underline">Apagar</button></form>
+                    </li>
+                    {% empty %}<li class="py-2 text-xs text-gray-500">Nenhuma advertência registrada.</li>{% endfor %}
+                </ul>
+                <form method="post" action="{% url 'carreira:advertencia' pessoa.pk %}" class="mt-2 space-y-2">{% csrf_token %}
+                    <input type="date" name="data" required class="pg-campo">
+                    <input name="motivo" class="pg-campo" placeholder="Motivo">
+                    <button class="w-full px-3 py-2 rounded-xl border border-red-200 text-red-700 text-sm font-semibold hover:bg-red-50">Registrar advertência</button>
+                </form>
+            </div>
+
+            {% if pedidos %}
+            <div class="bg-white rounded-2xl border border-gray-200 p-4">
+                <p class="font-bold text-gray-900"><i class="fas fa-clock-rotate-left mr-1.5 text-gray-400"></i>Pedidos</p>
+                <ul class="mt-2 space-y-1.5 text-xs">{% for p in pedidos %}
+                    <li>{{ p.criado_em|date:"d/m/Y" }} · <strong>{{ p.get_situacao_display }}</strong>{% if p.decidido_por %} por {{ p.decidido_por.first_name }}{% endif %}{% if p.parecer %} — “{{ p.parecer|truncatechars:90 }}”{% endif %}</li>
+                {% endfor %}</ul>
+            </div>
+            {% endif %}
+        </aside>
+        {% endif %}
+    </div>
+</div>
+
+{# ---------------------------------------------------------- parabéns #}
+{% if concluiu or pleno %}
+<canvas id="pgConfete" aria-hidden="true"></canvas>
+<div id="pgParabens" class="pg-modal" role="dialog" aria-modal="true" aria-labelledby="pgParabensTitulo">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 text-center shadow-2xl">
+        <div class="mx-auto w-20 h-20 rounded-3xl flex items-center justify-center text-4xl text-white pg-brilho" style="background:linear-gradient(135deg,#F59E0B,#DB2777)"><i class="fas {% if pleno %}fa-crown{% else %}fa-trophy{% endif %}"></i></div>
+        <h2 id="pgParabensTitulo" class="mt-4 text-2xl font-extrabold text-gray-900">Parabéns, {{ pessoa.first_name|title }}! 🎉</h2>
+        <p class="mt-2 text-gray-600">{% if pleno %}Você agora é <strong>Consultor Pleno</strong>.{% else %}Você cumpriu os <strong>8 requisitos</strong> do Pleno. Seu pedido foi para o SUPERADMIN analisar.{% endif %}</p>
+        <div class="mt-6 flex flex-col sm:flex-row gap-2 justify-center">
+            <a href="{% if eu_mesmo %}{% url 'carreira:certificado' %}{% else %}{% url 'carreira:certificado_de' pessoa.pk %}{% endif %}" class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-white font-semibold" style="background:linear-gradient(135deg,#4F46E5,#DB2777)"><i class="fas fa-award"></i>Ver meu certificado</a>
+            <button type="button" onclick="pgFecharParabens()" class="px-5 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50">Fechar</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+(function () {
+    var calmo = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Números que sobem contando.
+    document.querySelectorAll('[data-contar]').forEach(function (el) {
+        var alvo = Number(el.getAttribute('data-contar')) || 0;
+        if (calmo || !alvo) { el.textContent = alvo; return; }
+        var ini = performance.now(), dur = 1400;
+        (function passo(t) {
+            var p = Math.min(1, (t - ini) / dur), suave = 1 - Math.pow(1 - p, 3);
+            el.textContent = Math.round(alvo * suave);
+            if (p < 1) requestAnimationFrame(passo);
+        })(ini);
+    });
+    // Anel e barras crescem depois que a página aparece.
+    requestAnimationFrame(function () {
+        setTimeout(function () {
+            var anel = document.querySelector('[data-anel]');
+            if (anel) anel.style.strokeDashoffset = 326.73 * (1 - (Number(anel.getAttribute('data-anel')) || 0) / 100);
+            var xp = document.querySelector('.pg-xp > span');
+            if (xp) xp.style.width = Math.min(100, Number(xp.getAttribute('data-largura')) || 0) + '%';
+        }, 120);
+    });
+    // As estações aparecem uma a uma ao rolar.
+    var estacoes = document.querySelectorAll('.pg-estacao');
+    function acender(el, atraso) {
+        setTimeout(function () {
+            el.classList.add('visivel');
+            var barra = el.querySelector('.pg-barra > span');
+            if (barra) barra.style.width = Math.min(100, Number(barra.getAttribute('data-largura')) || 0) + '%';
+        }, atraso);
+    }
+    if (calmo || !('IntersectionObserver' in window)) {
+        estacoes.forEach(function (el) { acender(el, 0); });
+    } else {
+        var fila = 0;
+        var io = new IntersectionObserver(function (entradas) {
+            entradas.forEach(function (e) {
+                if (!e.isIntersecting) return;
+                io.unobserve(e.target);
+                acender(e.target, (fila++ % 4) * 110);
+            });
+        }, {threshold: 0.15});
+        estacoes.forEach(function (el) { io.observe(el); });
+    }
+
+    // Parabéns: confete e o cartão, uma vez por conquista (lembrado neste navegador).
+    var modal = document.getElementById('pgParabens');
+    window.pgFecharParabens = function () { if (modal) modal.classList.remove('aberto'); };
+    if (!modal) return;
+    var chave = 'progresso_parabens_{{ pessoa.pk }}_{% if pleno %}pleno{% else %}{{ pedido.pk|default:"jornada" }}{% endif %}';
+    var visto = false;
+    try { visto = localStorage.getItem(chave) === '1'; } catch (e) {}
+    {% if not eu_mesmo %}visto = true;{% endif %}
+    if (visto) return;
+    setTimeout(function () {
+        modal.classList.add('aberto');
+        try { localStorage.setItem(chave, '1'); } catch (e) {}
+        if (!calmo) confete();
+    }, 900);
+    modal.addEventListener('click', function (e) { if (e.target === modal) pgFecharParabens(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') pgFecharParabens(); });
+
+    function confete() {
+        var c = document.getElementById('pgConfete'), ctx = c.getContext('2d');
+        var w = c.width = innerWidth, h = c.height = innerHeight;
+        var cores = ['#4F46E5', '#7C3AED', '#DB2777', '#F59E0B', '#10B981', '#0EA5E9'];
+        var pedacos = [];
+        for (var i = 0; i < 160; i++) {
+            pedacos.push({x: w / 2 + (Math.random() - .5) * w * .4, y: h * .35, vx: (Math.random() - .5) * 14,
+                          vy: -Math.random() * 15 - 4, g: .32 + Math.random() * .15, r: Math.random() * Math.PI,
+                          vr: (Math.random() - .5) * .3, s: 6 + Math.random() * 6, c: cores[i % cores.length]});
+        }
+        var ini = performance.now();
+        (function quadro(t) {
+            ctx.clearRect(0, 0, w, h);
+            pedacos.forEach(function (p) {
+                p.vy += p.g; p.x += p.vx; p.y += p.vy; p.vx *= .99; p.r += p.vr;
+                ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c;
+                ctx.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); ctx.restore();
+            });
+            if (t - ini < 4200) requestAnimationFrame(quadro); else ctx.clearRect(0, 0, w, h);
+        })(ini);
+    }
+})();
+</script>
+{% endblock %}

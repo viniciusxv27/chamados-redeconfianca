@@ -1,0 +1,179 @@
+{% extends 'base.html' %}
+
+{% block title %}Progresso · Painel{% endblock %}
+
+{% block extra_css %}
+<style>
+    .pp-card { background:#fff; border:1px solid #E9EDF2; border-radius:1.15rem; box-shadow:0 1px 2px rgba(16,24,40,.04); }
+    .pp-topo { border-radius:1.5rem; color:#fff; background:radial-gradient(900px 300px at 0% 0%, rgba(255,255,255,.18), transparent 60%),
+               linear-gradient(135deg,#4F46E5 0%,#7C3AED 45%,#DB2777 100%); }
+    .pp-num { font-size:1.9rem; font-weight:800; line-height:1; }
+    .pp-chave { position:relative; width:3.25rem; height:1.8rem; border-radius:999px; background:rgba(255,255,255,.3); transition:background .2s; }
+    .pp-chave::after { content:''; position:absolute; top:.2rem; left:.2rem; width:1.4rem; height:1.4rem; border-radius:999px; background:#fff;
+                       transition:transform .25s cubic-bezier(.34,1.56,.64,1); box-shadow:0 2px 6px rgba(0,0,0,.2); }
+    .pp-chave.ligada { background:#10B981; }
+    .pp-chave.ligada::after { transform:translateX(1.45rem); }
+    .pp-pontos { display:flex; gap:3px; }
+    .pp-pontos i { width:.6rem; height:.6rem; border-radius:3px; background:#E2E8F0; display:block; }
+    .pp-pontos i.ok { background:#10B981; }
+    .pp-pontos i.falta { background:#FBBF24; }
+    .pp-campo { border:1px solid #E2E8F0; border-radius:.6rem; padding:.35rem .55rem; font-size:.8rem; background:#fff; }
+    html.dark .pp-card { background:var(--tema-superficie); border-color:var(--tema-borda); }
+    html.dark .pp-campo { background:var(--tema-superficie-2); border-color:var(--tema-borda); color:var(--tema-texto); }
+    html.dark .pp-pontos i { background:var(--tema-superficie-3); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto space-y-6" data-painel-progresso>
+    <section class="pp-topo p-5 sm:p-7 flex flex-col lg:flex-row lg:items-center gap-5">
+        <div class="flex-1 min-w-0">
+            <p class="text-xs uppercase tracking-widest opacity-80 font-semibold">Progresso · plano de carreira</p>
+            <h1 class="text-2xl sm:text-3xl font-extrabold">O caminho do consultor até Pleno</h1>
+            <p class="text-sm opacity-90 mt-1 max-w-2xl">Cada consultor do comercial vê os 8 requisitos e o que falta. Quem cumpre todos cai aqui para você decidir a promoção.</p>
+        </div>
+        <form method="post" action="{% url 'carreira:liberar' %}" class="flex items-center gap-3 bg-white/10 rounded-2xl px-4 py-3" data-liberar>
+            {% csrf_token %}
+            <input type="hidden" name="liberado" value="{% if config.liberado %}0{% else %}1{% endif %}">
+            <div class="text-sm">
+                <p class="font-bold">{% if config.liberado %}Liberado para o comercial{% else %}Só o SUPERADMIN vê{% endif %}</p>
+                <p class="text-xs opacity-80">{% if config.liberado %}Os consultores veem "Progresso" no menu.{% else %}Libere quando quiser mostrar aos consultores.{% endif %}</p>
+            </div>
+            <button type="submit" class="pp-chave {% if config.liberado %}ligada{% endif %}" title="{% if config.liberado %}Esconder do comercial{% else %}Liberar para o comercial{% endif %}"
+                    onclick="return confirm('{% if config.liberado %}Esconder o Progresso dos consultores?{% else %}Liberar o Progresso para todo o comercial?{% endif %}')"><span class="sr-only">Alternar</span></button>
+        </form>
+    </section>
+
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="pp-card p-4"><p class="text-xs text-gray-500">Consultores no comercial</p><p class="pp-num text-gray-900 mt-2">{{ pessoas|length }}</p></div>
+        <div class="pp-card p-4"><p class="text-xs text-gray-500">Pedidos em análise</p><p class="pp-num text-indigo-600 mt-2">{{ pedidos|length }}</p></div>
+        <div class="pp-card p-4"><p class="text-xs text-gray-500">Trilhas da Formação</p><p class="pp-num text-pink-600 mt-2">{{ trilhas_escolhidas|length }}</p></div>
+        <div class="pp-card p-4"><p class="text-xs text-gray-500">Lojas avaliadas ({{ tri }}º tri/{{ ano }})</p><p class="pp-num text-teal-600 mt-2">{{ lojas_avaliadas }}<span class="text-sm text-gray-400 font-semibold"> / {{ lojas|length }}</span></p></div>
+    </div>
+
+    {# ------------------------------------------------------- pedidos em análise #}
+    <section>
+        <h2 class="text-lg font-bold text-gray-900 mb-3"><i class="fas fa-gavel text-indigo-500 mr-1.5"></i>Pedidos de promoção</h2>
+        {% if pedidos %}
+        <div class="grid md:grid-cols-2 gap-4">
+            {% for p in pedidos %}
+            <form method="post" action="{% url 'carreira:decidir' p.pk %}" class="pp-card p-4 space-y-3" data-pedido="{{ p.pk }}">
+                {% csrf_token %}
+                <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0"><p class="font-bold text-gray-900">{{ p.user.full_name }}</p>
+                        <p class="text-xs text-gray-500">{{ p.user.sector.name|default:"—" }} · desde {{ p.criado_em|date:"d/m/Y" }}</p></div>
+                    <a href="{% url 'carreira:pessoa' p.user_id %}" class="text-xs font-semibold text-indigo-600 hover:underline whitespace-nowrap">Ver jornada →</a>
+                </div>
+                <ul class="grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs">
+                    {% for r in p.requisitos %}<li class="flex items-start gap-1.5"><i class="fas fa-circle-check text-emerald-500 mt-0.5"></i><span><strong>{{ r.titulo }}:</strong> {{ r.valor }}</span></li>{% endfor %}
+                </ul>
+                <textarea name="parecer" rows="2" class="pp-campo w-full" placeholder="Parecer (obrigatório para “ainda não”)"></textarea>
+                <div class="grid grid-cols-2 gap-2">
+                    <button name="decisao" value="PROMOVIDO" class="px-3 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700"
+                            onclick="return confirm('Promover {{ p.user.first_name|escapejs }} a Consultor Pleno?')"><i class="fas fa-crown mr-1"></i>Promover</button>
+                    <button name="decisao" value="NAO_AGORA" class="px-3 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50">Ainda não</button>
+                </div>
+            </form>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="pp-card p-6 text-center text-sm text-gray-500"><i class="fas fa-inbox text-2xl text-gray-300"></i><p class="mt-2">Nenhum pedido esperando decisão.</p></div>
+        {% endif %}
+        {% if decididos %}
+        <details class="mt-3 pp-card p-3">
+            <summary class="text-sm font-semibold text-gray-700 cursor-pointer">Decisões recentes</summary>
+            <ul class="mt-2 text-xs space-y-1">{% for p in decididos %}
+                <li>{{ p.decidido_em|date:"d/m/Y" }} · <strong>{{ p.user.full_name }}</strong> — {{ p.get_situacao_display }}{% if p.decidido_por %} ({{ p.decidido_por.first_name }}){% endif %}{% if p.parecer %}: “{{ p.parecer|truncatechars:100 }}”{% endif %}</li>
+            {% endfor %}</ul>
+        </details>
+        {% endif %}
+    </section>
+
+    <div class="grid lg:grid-cols-3 gap-6">
+        {# --------------------------------------------------------- consultores #}
+        <section class="lg:col-span-2 min-w-0">
+            <div class="flex items-end justify-between gap-3 mb-3">
+                <h2 class="text-lg font-bold text-gray-900"><i class="fas fa-route text-violet-500 mr-1.5"></i>Consultores</h2>
+                <input type="search" placeholder="Filtrar por nome ou loja…" data-filtro-pessoas class="pp-campo w-56">
+            </div>
+            <div class="pp-card overflow-hidden">
+                <table class="w-full text-sm" data-rc-wrapped="1">
+                    <thead class="bg-gray-50 text-xs text-gray-500 uppercase"><tr>
+                        <th class="text-left px-4 py-2">Consultor</th><th class="text-left px-2 py-2 hidden sm:table-cell">Loja</th>
+                        <th class="text-left px-2 py-2">Requisitos</th><th class="px-4 py-2"></th></tr></thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for p in pessoas %}
+                        <tr data-pessoa="{{ p.full_name|lower }} {{ p.sector.name|lower }}">
+                            <td class="px-4 py-2"><p class="font-semibold text-gray-900">{{ p.full_name }}</p><p class="text-[11px] text-gray-500">{{ p.nivel }}</p></td>
+                            <td class="px-2 py-2 text-xs text-gray-600 hidden sm:table-cell">{{ p.sector.name }}</td>
+                            <td class="px-2 py-2">
+                                {% if p.retrato %}
+                                <div class="flex items-center gap-2"><div class="pp-pontos">{% for chave, situacao in p.retrato.requisitos.items %}<i class="{{ situacao }}" title="{{ chave }}: {{ situacao }}"></i>{% endfor %}</div>
+                                    <span class="text-xs font-semibold text-gray-700">{{ p.retrato.cumpridos }}/{{ p.retrato.total }}</span></div>
+                                {% else %}<span class="text-xs text-gray-400">ainda não calculado</span>{% endif %}
+                            </td>
+                            <td class="px-4 py-2 text-right"><a href="{% url 'carreira:pessoa' p.pk %}" class="text-xs font-semibold text-indigo-600 hover:underline whitespace-nowrap">Abrir e lançar →</a></td>
+                        </tr>
+                        {% empty %}<tr><td colspan="4" class="px-4 py-6 text-center text-gray-500">Nenhum consultor Padrão lotado em loja.</td></tr>{% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-[11px] text-gray-400 mt-2">Os pontinhos são o último retrato de cada um (atualiza quando a pessoa ou você abre a jornada).</p>
+        </section>
+
+        <aside class="space-y-6 min-w-0">
+            {# ------------------------------------------------------ formação #}
+            <form method="post" action="{% url 'carreira:trilhas' %}" class="pp-card p-4" data-trilhas>
+                {% csrf_token %}
+                <p class="font-bold text-gray-900"><i class="fas fa-graduation-cap text-pink-500 mr-1.5"></i>Trilhas da Formação</p>
+                <p class="text-xs text-gray-500 mt-0.5">"Trilha do consultor e formação de responsável de loja": marque as trilhas que contam.</p>
+                <div class="mt-2 max-h-56 overflow-y-auto space-y-1">
+                    {% for t in trilhas %}
+                    <label class="flex items-center gap-2 text-sm py-0.5"><input type="checkbox" name="trilhas" value="{{ t.pk }}" {% if t.pk in trilhas_escolhidas %}checked{% endif %} class="rounded border-gray-300 text-pink-600">{{ t.title }}</label>
+                    {% empty %}<p class="text-xs text-gray-500">Nenhuma trilha cadastrada.</p>{% endfor %}
+                </div>
+                <button class="mt-3 w-full px-3 py-2 rounded-xl bg-pink-600 text-white text-sm font-semibold hover:bg-pink-700">Salvar trilhas</button>
+            </form>
+
+            {# ----------------------------------------------------- lojas aptas #}
+            <form method="post" action="{% url 'carreira:lojas_aptas' %}" class="pp-card p-4" id="lojas" data-lojas>
+                {% csrf_token %}
+                <div class="flex items-center justify-between gap-2">
+                    <p class="font-bold text-gray-900"><i class="fas fa-store text-teal-500 mr-1.5"></i>Lojas aptas</p>
+                    <div class="flex gap-1">
+                        <select name="tri" class="pp-campo" onchange="location.href='?ano='+this.form.ano.value+'&tri='+this.value+'#lojas'">{% for n in "1234" %}<option value="{{ n }}" {% if n|add:0 == tri %}selected{% endif %}>{{ n }}º tri</option>{% endfor %}</select>
+                        <select name="ano" class="pp-campo" onchange="location.href='?ano='+this.value+'&tri='+this.form.tri.value+'#lojas'">{% for a in anos %}<option value="{{ a }}" {% if a == ano %}selected{% endif %}>{{ a }}</option>{% endfor %}</select>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500 mt-0.5">Rentabilidade final acima de 20% no trimestre. O consultor vê só "apta" ou "não apta".</p>
+                <div class="mt-2 max-h-[26rem] overflow-y-auto divide-y divide-gray-100">
+                    {% for l in lojas %}
+                    <div class="py-1.5 flex items-center gap-2">
+                        <span class="flex-1 min-w-0 text-xs font-semibold text-gray-800 truncate" title="{{ l.setor.name }}">{{ l.setor.name }}</span>
+                        <input name="rent_{{ l.setor.pk }}" value="{{ l.registro.rentabilidade|default_if_none:'' }}" inputmode="decimal" placeholder="%" class="pp-campo w-16 text-right">
+                        <select name="apta_{{ l.setor.pk }}" class="pp-campo">
+                            <option value="">—</option>
+                            <option value="1" {% if l.registro and l.registro.apta %}selected{% endif %}>Apta</option>
+                            <option value="0" {% if l.registro and not l.registro.apta %}selected{% endif %}>Não apta</option>
+                        </select>
+                    </div>
+                    {% endfor %}
+                </div>
+                <button class="mt-3 w-full px-3 py-2 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700">Salvar o {{ tri }}º trimestre</button>
+            </form>
+        </aside>
+    </div>
+</div>
+<script>
+(function () {
+    var f = document.querySelector('[data-filtro-pessoas]');
+    if (!f) return;
+    f.addEventListener('input', function () {
+        var termo = f.value.trim().toLowerCase();
+        document.querySelectorAll('tr[data-pessoa]').forEach(function (tr) {
+            tr.hidden = termo && tr.dataset.pessoa.indexOf(termo) === -1;
+        });
+    });
+})();
+</script>
+{% endblock %}
