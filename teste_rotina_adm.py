@@ -304,7 +304,7 @@ h = ca.get('/rotina-adm/', {'pessoa': gestor.id}).content.decode()
 t('Visualizador não troca a pessoa', 'Contagem de estoque LVUT' in h)
 
 print('LVUT e remoção de acesso')
-t('LVUT marcada como exemplo', 'Dados de exemplo' in h)
+t('LVUT de verdade: sem "Dados de exemplo" e com o botão de registrar (24/11)', 'Dados de exemplo' not in h and 'Registrar contagem' in h and 'Nunca contada' in h)
 t('LVUT com as 4 categorias (09/11)', all(n in h for n in ('Smartphones', 'Eletrônicos e Essenciais',
                                                          'SIM Card e Cartão de Recarga', 'Películas'))
   and 'Acessórios' not in h and '>Chips<' not in h)

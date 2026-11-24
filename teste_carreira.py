@@ -280,6 +280,7 @@ LINHAS = [
 ] + [{'previsto_segundos': H8, 'trabalhado_segundos': H8, 'pendencias': []}] * 47
 User.objects.filter(pk=ana.pk).update(tangerino_employee_id=999)
 ana = User.objects.get(pk=ana.pk)
+LINHAS = [{**l, 'usuario': ana} for l in LINHAS]
 _cache.clear()   # LocMem deste teste
 with mock.patch('tangerino.pendencias.linhas_do_periodo', return_value=LINHAS):
     a = regras.absenteismo(ana, HOJE)

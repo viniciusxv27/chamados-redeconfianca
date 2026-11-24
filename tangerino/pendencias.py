@@ -477,3 +477,40 @@ def resumo(linhas):
         'horas_extras': hhmm(sum(l['extras_segundos'] for l in linhas)),
     }
 
+
+
+TOLERANCIA_ABSENTEISMO = 10 * 60        # CLT: até 10 min de variação no dia não é atraso
+
+
+def absenteismo_das_linhas(linhas, tolerancia=TOLERANCIA_ABSENTEISMO):
+    """Absenteísmo por pessoa a partir das linhas de ``linhas_do_periodo``.
+
+    {user_id: {'pct': Decimal, 'dias_sem_batida', 'minutos_atraso', 'dias'}} — só quem tem horas previstas.
+    Dia sem batida nenhuma conta inteiro; atraso e saída antes da hora contam o que passa da tolerância;
+    dia com batida esquecida fica fora (não é ausência); folga e dia abonado (feriado, férias, atestado)
+    chegam sem horas previstas e não entram. Usado pelo Progresso (carreira) e pela Rotina ADM.
+    """
+    from decimal import Decimal
+    contas = {}
+    for l in linhas:
+        if not l['previsto_segundos']:
+            continue
+        c = contas.setdefault(l['usuario'].pk, {'previsto': 0, 'faltou': 0, 'sem_batida': 0, 'atraso': 0, 'dias': 0})
+        motivos = ' '.join(l['pendencias'])
+        if 'nenhuma batida' in motivos:
+            c['previsto'] += l['previsto_segundos']
+            c['faltou'] += l['previsto_segundos']
+            c['sem_batida'] += 1
+            c['dias'] += 1
+        elif 'Faltou' in motivos or 'em aberto' in motivos:
+            continue
+        else:
+            c['previsto'] += l['previsto_segundos']
+            c['dias'] += 1
+            atraso = l['previsto_segundos'] - l['trabalhado_segundos']
+            if atraso > tolerancia:
+                c['faltou'] += atraso
+                c['atraso'] += atraso
+    return {pk: {'pct': (Decimal(c['faltou'] * 100) / Decimal(c['previsto'])).quantize(Decimal('0.01')),
+                 'dias_sem_batida': c['sem_batida'], 'minutos_atraso': c['atraso'] // 60, 'dias': c['dias']}
+            for pk, c in contas.items() if c['previsto']}

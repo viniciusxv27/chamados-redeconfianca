@@ -78,7 +78,7 @@ from django.utils import timezone
 from communications.models import CommunicationGroup
 from impulso.models import Meta
 from impulso.scoring import calcular_pontuacao
-from rotina_adm import ranking
+from rotina_adm import ranking, servicos
 from rotina_adm.models import AcessoRotinaAdm, ConfiguracaoRotinaAdm, ItemChecklist, MarcacaoChecklist
 from users.models import Sector
 
@@ -156,7 +156,7 @@ t('a lista de avaliações fica só no modal', pos_modal_rn > 0 and h.find(rv.co
 t('a lista do SAP fica só no modal', pos_modal_sap > 0 and h.find('ZZ Cliente Sem') > pos_modal_sap)
 t('links seguem filtrados pela loja', f'/renova/?loja={gloria.id}' in h and f'/sap/renova/?loja={gloria.id}' in h
   and f'/sap/renova/?loja={gloria.id}&q=9100001' in h and f'/renova/{rv.pk}/' in h)
-t('CSS com versão nova', 'rotina_adm.css?v=5' in h)
+t('CSS com versão nova', 'rotina_adm.css?v=6' in h)
 Renova.objects.all().delete()
 VendaRenova.objects.all().delete()
 
@@ -299,7 +299,12 @@ t('mês atual conta até ontem', p_ini == hoje.replace(day=1) and p_ate == hoje 
 t('mês do futuro volta para o atual', ranking.periodo('2999-01')[0] == hoje.replace(day=1))
 
 print('Tela do ranking e acesso')
-t('Visualizador não abre o ranking', ca.get('/rotina-adm/ranking/').status_code == 302)
+r = ca.get('/rotina-adm/ranking/', {'mes': f'{inicio:%Y-%m}'})
+h = r.content.decode()
+t('Visualizador abre o ranking com o placar dele e a tabela geral (24/11)', r.status_code == 200 and 'Seus pontos' in h
+  and 'Classificação geral' in h and 'ZZRK bia' in h and 'name="broche_pct_minimo"' not in h)
+t('Visualizador vê a aba do ranking mas não a de montar check-list', 'href="/rotina-adm/ranking/"' in h
+  and 'href="/rotina-adm/checklist/' not in h)
 r = cg.get('/rotina-adm/ranking/', {'mes': f'{inicio:%Y-%m}'})
 h = r.content.decode()
 t('Gestor abre o ranking', r.status_code == 200, r.status_code)
@@ -351,6 +356,140 @@ t('mês passado da Duda igual depois da cópia (sem virar 100% nem broche)', da_
 t('mês atual da Duda igual depois da cópia (dias antes dela seguem previstos)', da_duda(mes_atual) == antes_atual,
   (antes_atual, da_duda(mes_atual)))
 t('a Duda continua fora do broche', not da_duda(mes_ant)[3] and da_duda(mes_ant)[0] < 40, da_duda(mes_ant))
+
+# ─────────────────────────────────────────────────────────────────────────────
+print('Pontos (24/11/2026): check-list, pendências fiscais, contagem de estoque e assiduidade')
+from rotina_adm.models import ContagemEstoque  # noqa: E402
+P = ranking.PONTOS
+dados = ranking.calcular(mes_ant)
+la = next(l for l in dados['linhas'] if l['pessoa'].id == ana.id)
+lb = next(l for l in dados['linhas'] if l['pessoa'].id == bia.id)
+itens_ana = 3 * (len(uteis) + 1)
+t('check-list da Ana: +2 por item no prazo e +3 por dia 100%',
+  la['pontos']['checklist'] == itens_ana * P['item_no_prazo'] + (len(uteis) + 1) * P['dia_100'], la['pontos'])
+t('check-list da Bia: +1 por item fora do prazo, sem bônus', lb['pontos']['checklist'] == len(uteis) * P['item_atrasado'], lb['pontos'])
+t('total = soma das frentes e ordem pelo total', la['total'] == sum(la['pontos'].values())
+  and [l['total'] for l in dados['linhas']] == sorted((l['total'] for l in dados['linhas']), reverse=True))
+t('nível pelo total', la['nivel']['nome'] == ranking.nivel(la['total'])['nome'] and ranking.nivel(0)['nome'] == 'Bronze'
+  and ranking.nivel(500)['nome'] == 'Diamante' and ranking.nivel(160)['falta'] == 140)
+
+print('  Contagem de estoque')
+ContagemEstoque.objects.all().delete()
+r = ca.post('/rotina-adm/estoque/registrar/', {'categoria': 'SMARTPHONES', 'divergencias': '2', 'observacao': 'faltam 2'})
+t('analista registra a contagem da loja dele', r.status_code == 302
+  and ContagemEstoque.objects.filter(loja=gloria, categoria='SMARTPHONES', feito_por=ana, divergencias=2).exists())
+t('mensagem com os pontos', '+10 pontos' in ca.get('/rotina-adm/').content.decode())
+ca.post('/rotina-adm/estoque/registrar/', {'categoria': 'SMARTPHONES', 'divergencias': '0'})
+h = ca.get('/rotina-adm/').content.decode()
+t('segunda contagem da mesma categoria na semana é registrada, mas avisa que já pontuou',
+  ContagemEstoque.objects.filter(loja=gloria, categoria='SMARTPHONES').count() == 2 and 'já tinha pontuado' in h)
+ca.post('/rotina-adm/estoque/registrar/', {'categoria': 'PELICULAS', 'divergencias': '0'})
+r = ca.post('/rotina-adm/estoque/registrar/', {'categoria': 'XPTO', 'divergencias': '0'})
+t('categoria inválida é recusada', not ContagemEstoque.objects.filter(categoria='XPTO').exists())
+ca.post('/rotina-adm/estoque/registrar/', {'categoria': 'SIMCARD', 'divergencias': 'abc'})
+t('divergência que não é número é recusada', not ContagemEstoque.objects.filter(categoria='SIMCARD').exists())
+cb.post('/rotina-adm/estoque/registrar/', {'categoria': 'SIMCARD', 'divergencias': '0', 'loja': gloria.id})
+t('analista de outra loja não registra na Glória (vai para a loja dele)',
+  not ContagemEstoque.objects.filter(loja=gloria, categoria='SIMCARD').exists()
+  and ContagemEstoque.objects.filter(loja=serra, categoria='SIMCARD', feito_por=bia).exists())
+la = next(l for l in ranking.calcular(mes_atual)['linhas'] if l['pessoa'].id == ana.id)
+t('estoque da Ana no mês: 2 categorias na semana = 20 pts', la['pontos']['estoque'] == 2 * P['estoque'], la['pontos'])
+h = ca.get('/rotina-adm/').content.decode()
+t('central mostra a situação real da categoria', 'Contada na semana' in h and '2 divergências' not in h
+  and 'bateu tudo' in h and 'Nunca contada' in h)
+semana_passada = hoje - timedelta(days=hoje.weekday() + 3)
+ContagemEstoque.objects.create(loja=gloria, categoria='ELETRONICOS', data=semana_passada, feito_por=ana)
+t('contada só na semana passada = pendente na semana',
+  next(c for c in servicos.contagem_estoque(gloria, hoje) if c['chave'] == 'ELETRONICOS')['tom'] == 'amarelo')
+
+print('  Pendências fiscais')
+from auditoria_sap.models import TIPOS_DA_TELA, LinhaAuditoria, SincronizacaoAuditoria  # noqa: E402
+t('"SEM NF" é tipo da tela da Visão SAP', 'SEM NF' in TIPOS_DA_TELA)
+sinc = SincronizacaoAuditoria.objects.create(total=1)
+SincronizacaoAuditoria.objects.filter(pk=sinc.pk).update(quando=timezone.now() - timedelta(hours=2), segundos=10)
+
+
+def linha_semnf(n, quem, ativa=True, horas=1, tipo='SEM NF'):
+    linha = LinhaAuditoria.objects.create(chave=f'zz{n}', tipo_erro=tipo, pdv='GLORIA', id_venda=f'V{n}', ativa=ativa,
+                                          data_venda=hoje)
+    LinhaAuditoria.objects.filter(pk=linha.pk).update(resolvida=True, resolvida_por=quem,
+                                                      resolvida_em=timezone.now() - timedelta(hours=horas))
+    return linha
+
+
+linha_semnf(1, ana, ativa=False)            # saiu do SAP: conta
+linha_semnf(2, ana, ativa=True, horas=1)    # marcada depois da última leitura: conta (aguardando a leitura)
+linha_semnf(3, ana, ativa=True, horas=5)    # o SAP leu de novo e ela continua lá: não conta
+linha_semnf(4, bia, ativa=False)
+linha_semnf(5, ana, ativa=False, tipo='VALOR')  # não é "Sem NF": não conta
+la = next(l for l in ranking.calcular(mes_atual)['linhas'] if l['pessoa'].id == ana.id)
+t('fiscal da Ana: 2 resolvidas que contam, 1 ainda no SAP fora', la['pontos']['fiscal'] == 2 * P['fiscal']
+  and la['detalhe']['resolvidas'] == 2 and la['detalhe']['nao_confirmadas'] == 1, la['detalhe'])
+with mock.patch('auditoria_sap.models.inicio_da_ultima_leitura', side_effect=RuntimeError('fora')):
+    dados_fora = ranking.calcular(mes_atual)
+t('Visão SAP fora: ranking abre sem os pontos fiscais', dados_fora['fiscal_fora']
+  and all(l['pontos']['fiscal'] == 0 for l in dados_fora['linhas']))
+
+print('  Assiduidade')
+t('faixas: 0% = 150, 2% = 100, 5% = 50, acima = 0, sem dado = 0',
+  [ranking.pontos_assiduidade(x) for x in (0, 1.5, 2, 4.9, 5, 5.01, None)] == [150, 100, 100, 50, 50, 0, 0])
+User.objects.filter(pk__in=[ana.pk, bia.pk]).update(tangerino_employee_id=None)
+User.objects.filter(pk=ana.pk).update(tangerino_employee_id=901)
+User.objects.filter(pk=bia.pk).update(tangerino_employee_id=902)
+ana.refresh_from_db(); bia.refresh_from_db()
+H8 = 8 * 3600
+
+
+def linhas_ponto(inicio_p, fim_p, usuarios=None, buscar=True, **k):
+    assert buscar is False, 'o ranking não pode mandar buscar no Tangerino'
+    saida = []
+    for u in usuarios:
+        for n in range(20):
+            falta = u.pk == bia.pk and n == 0
+            saida.append({'usuario': u, 'previsto_segundos': H8, 'trabalhado_segundos': 0 if falta else H8,
+                          'pendencias': ['Não houve nenhuma batida no dia'] if falta else []})
+    return saida
+
+
+from django.core.cache import cache as _cache  # noqa: E402
+_cache.clear()  # LocMem deste teste
+with mock.patch('tangerino.pendencias.linhas_do_periodo', side_effect=linhas_ponto) as chamado:
+    dados = ranking.calcular(mes_ant)
+    ranking.calcular(mes_ant)
+t('ponto lido uma vez só (guardado)', chamado.call_count == 1, chamado.call_count)
+la = next(l for l in dados['linhas'] if l['pessoa'].id == ana.id)
+lb = next(l for l in dados['linhas'] if l['pessoa'].id == bia.id)
+ld = next(l for l in dados['linhas'] if l['pessoa'].id == duda.id)
+t('Ana sem ausência: +150', la['pontos']['assiduidade'] == 150, la['detalhe']['absenteismo'])
+t('Bia com 1 falta em 20 dias (5%): +50', lb['pontos']['assiduidade'] == 50 and lb['detalhe']['absenteismo']['dias_sem_batida'] == 1,
+  lb['detalhe']['absenteismo'])
+t('Duda sem ponto no Tangerino: 0', ld['pontos']['assiduidade'] == 0 and not ld['detalhe']['bate_ponto'])
+_cache.clear()
+with mock.patch('tangerino.pendencias.linhas_do_periodo', side_effect=RuntimeError('fora')):
+    dados = ranking.calcular(mes_ant)
+t('ponto fora: ranking abre e a assiduidade fica 0', all(l['pontos']['assiduidade'] == 0 for l in dados['linhas']))
+User.objects.filter(pk__in=[ana.pk, bia.pk]).update(tangerino_employee_id=None)
+ana.refresh_from_db(); bia.refresh_from_db()
+_cache.clear()
+
+print('  Marcar o check-list mostra os pontos')
+MarcacaoChecklist.objects.filter(data=hoje).delete()
+ItemChecklist.objects.filter(pk__in=[i1.pk, i3.pk]).update(horario=time(23, 59))
+r1 = marcar(ca, i1)
+r2 = marcar(ca, i2)
+r3 = marcar(ca, i3)
+t('item no prazo responde +2', r1.get('pontos') == P['item_no_prazo'] and not r1.get('dia_100'), r1)
+t('o último item do dia responde +2 e o bônus do dia 100%', r3.get('pontos') == P['item_no_prazo'] + P['dia_100'] and r3.get('dia_100'), r3)
+t('remarcar não dá ponto de novo', marcar(ca, i1).get('pontos') == 0)
+h = ca.get('/rotina-adm/').content.decode()
+t('central mostra os pontos da pessoa no topo', 'class="ra-meus-pontos' in h and 'href="/rotina-adm/ranking/"' in h)
+t('central mostra quanto vale cada frente', '+10 pts por categoria na semana' in h and '+2 pts por item no prazo' in h)
+h = cg.get('/rotina-adm/').content.decode()
+t('Gestor fora de loja não tem placar, só o atalho do ranking', 'class="ra-meus-pontos' not in h and 'href="/rotina-adm/ranking/"' in h)
+h = ca.get('/rotina-adm/ranking/').content.decode()
+t('ranking do mês atual: placar, pódio, "você" e regras', 'Seus pontos' in h and 'ra-podio' in h and 'ra-voce' in h
+  and 'Como ganhar pontos' in h)
+t('pontuação do Impulso igual com os pontos novos', pontuacao(ana) == antes)
 
 print(f'\n{ok} OK, {fail} falha(s)')
 sys.exit(1 if fail else 0)

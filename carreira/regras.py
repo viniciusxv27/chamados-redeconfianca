@@ -222,26 +222,10 @@ def absenteismo(user, hoje):
         from tangerino import pendencias
         linhas = pendencias.linhas_do_periodo(hoje - timedelta(days=JANELA_DIAS), hoje - timedelta(days=1),
                                               usuarios=[user], buscar=False)
-        previsto = faltou = sem_batida = atraso_total = 0
-        for l in linhas:
-            if not l['previsto_segundos']:
-                continue                     # folga ou dia abonado (atestado, ausência legal): não entra
-            motivos = ' '.join(l['pendencias'])
-            if 'nenhuma batida' in motivos:
-                previsto += l['previsto_segundos']
-                faltou += l['previsto_segundos']           # falta: o dia inteiro
-                sem_batida += 1
-            elif 'Faltou' in motivos or 'em aberto' in motivos:
-                continue                     # batida esquecida não é ausência: o dia fica fora da conta
-            else:
-                previsto += l['previsto_segundos']
-                atraso = l['previsto_segundos'] - l['trabalhado_segundos']
-                if atraso > TOLERANCIA_DIA:
-                    faltou += atraso                       # atraso e saída antes da hora, além da tolerância
-                    atraso_total += atraso
-        if previsto:
-            valor = {'pct': (Decimal(faltou * 100) / Decimal(previsto)).quantize(Decimal('0.01')),
-                     'dias_sem_batida': sem_batida, 'minutos_atraso': atraso_total // 60}
+        conta = pendencias.absenteismo_das_linhas(linhas, TOLERANCIA_DIA).get(user.pk)
+        if conta:
+            valor = {'pct': conta['pct'], 'dias_sem_batida': conta['dias_sem_batida'],
+                     'minutos_atraso': conta['minutos_atraso']}
     except Exception:  # noqa: BLE001 — sem o ponto, o requisito fica aguardando
         logger.warning('Carreira: ponto não lido para %s', user.pk, exc_info=True)
         return None

@@ -180,14 +180,38 @@ def agenda_da_semana(pessoa, segunda):
             'feitas': sum(1 for d in dias for i in d['itens'] if i['feita'])}
 
 
-# ── Contagem LVUT (fictícia até existir a fonte) ─────────────────────────────
-LVUT_EXEMPLO = [
-    {'nome': 'Smartphones', 'icone': 'fa-mobile-alt', 'cor': 'laranja', 'status': 'Saudável', 'tom': 'verde',
-     'pct': 82, 'nota': 'Estoque dentro do esperado.'},
-    {'nome': 'Eletrônicos e Essenciais', 'icone': 'fa-headphones', 'cor': 'verde', 'status': 'Atenção',
-     'tom': 'amarelo', 'pct': 58, 'nota': 'Verificar divergências.'},
-    {'nome': 'SIM Card e Cartão de Recarga', 'icone': 'fa-sim-card', 'cor': 'azul', 'status': 'Crítico',
-     'tom': 'vermelho', 'pct': 24, 'nota': 'Nível abaixo do ideal.'},
-    {'nome': 'Películas', 'icone': 'fa-shield-alt', 'cor': 'cinza', 'status': 'Em conferência', 'tom': 'azul',
-     'pct': 40, 'nota': 'Em processo de contagem.'},
-]
+# ── Contagem de estoque LVUT (24/11/2026: registrada pela loja, vale pontos) ──
+VISUAL_ESTOQUE = {
+    'SMARTPHONES': ('fa-mobile-alt', 'laranja'),
+    'ELETRONICOS': ('fa-headphones', 'verde'),
+    'SIMCARD': ('fa-sim-card', 'azul'),
+    'PELICULAS': ('fa-shield-alt', 'cinza'),
+}
+
+
+def contagem_estoque(loja, hoje=None):
+    """Cada categoria com a última contagem da loja e a situação na semana (segunda a domingo).
+
+    Contada nesta semana = verde; na semana passada = amarelo (a desta está pendente); antes disso ou
+    nunca = vermelho.
+    """
+    from .models import ContagemEstoque
+    hoje = hoje or timezone.localdate()
+    segunda = hoje - timedelta(days=hoje.weekday())
+    ultimas = {}
+    for c in (ContagemEstoque.objects.filter(loja=loja, data__gte=hoje - timedelta(days=90))
+              .select_related('feito_por').order_by('-data', '-feito_em')):
+        ultimas.setdefault(c.categoria, c)
+    saida = []
+    for chave, nome in ContagemEstoque.CATEGORIAS:
+        icone, cor = VISUAL_ESTOQUE[chave]
+        ultima = ultimas.get(chave)
+        if ultima and ultima.data >= segunda:
+            status, tom = 'Contada na semana', 'verde'
+        elif ultima and ultima.data >= segunda - timedelta(days=7):
+            status, tom = 'Pendente na semana', 'amarelo'
+        else:
+            status, tom = 'Atrasada' if ultima else 'Nunca contada', 'vermelho'
+        saida.append({'chave': chave, 'nome': nome, 'icone': icone, 'cor': cor, 'ultima': ultima,
+                      'status': status, 'tom': tom, 'em_dia': tom == 'verde'})
+    return saida

@@ -97,3 +97,36 @@ class ConfiguracaoRotinaAdm(models.Model):
     def get(cls):
         cfg, _ = cls.objects.get_or_create(pk=1)
         return cfg
+
+
+class ContagemEstoque(models.Model):
+    """Uma contagem de estoque LVUT feita pela loja (24/11/2026): substitui os números de exemplo da central.
+
+    Cada categoria contada na semana vale pontos no ranking dos analistas (uma vez por categoria e semana).
+    """
+
+    SMARTPHONES = 'SMARTPHONES'
+    ELETRONICOS = 'ELETRONICOS'
+    SIMCARD = 'SIMCARD'
+    PELICULAS = 'PELICULAS'
+    CATEGORIAS = [(SMARTPHONES, 'Smartphones'), (ELETRONICOS, 'Eletrônicos e Essenciais'),
+                  (SIMCARD, 'SIM Card e Cartão de Recarga'), (PELICULAS, 'Películas')]
+
+    loja = models.ForeignKey('users.Sector', on_delete=models.CASCADE, related_name='contagens_estoque_adm',
+                             verbose_name='Loja')
+    categoria = models.CharField(max_length=12, choices=CATEGORIAS, verbose_name='Categoria')
+    data = models.DateField(db_index=True)
+    divergencias = models.PositiveIntegerField(default=0, verbose_name='Divergências encontradas')
+    observacao = models.TextField(blank=True, default='', verbose_name='Observação')
+    feito_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                  related_name='+')
+    feito_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Contagem de estoque da loja'
+        verbose_name_plural = 'Contagens de estoque da loja'
+        ordering = ['-data', '-feito_em']
+        indexes = [models.Index(fields=['loja', 'categoria', 'data'])]
+
+    def __str__(self):
+        return f'{self.loja} — {self.get_categoria_display()} em {self.data:%d/%m/%Y}'

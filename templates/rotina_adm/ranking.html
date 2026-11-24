@@ -1,10 +1,15 @@
 {% extends 'rotina_adm/_base.html' %}
 {% block ra_titulo %}Ranking dos analistas · Rotina ADM{% endblock %}
 {% block ra_conteudo %}
+{% comment %}
+Ranking de pontos (24/11/2026): check-list, pendências fiscais, contagem de estoque e assiduidade somam pontos
+(rotina_adm/ranking.py, PONTOS). Quem tem a Rotina ADM vê o próprio placar e a tabela geral; o broche segue
+pelo check-list.
+{% endcomment %}
 <header class="ra-topo">
     <div class="ra-titulo">
         <span class="ra-escudo"><i class="fas fa-trophy"></i></span>
-        <div><h1>Ranking dos analistas</h1><p>Entrega da rotina ADM pelo check-list diário da loja · {{ mes_extenso }}</p></div>
+        <div><h1>Ranking dos analistas</h1><p>Pontos da rotina ADM · {{ mes_extenso }}</p></div>
     </div>
     <div class="ra-acoes">
         <form method="get" class="ra-data">
@@ -18,57 +23,151 @@
     </div>
 </header>
 
-<section class="ra-card ra-secao ra-broche">
-    <div class="ra-secao-cabeca">
-        <div class="ra-secao-titulo"><span class="ic" style="background:var(--ra-ambar-claro);color:var(--ra-ambar)"><i class="fas fa-award"></i></span>
-            <div><h2>Broche de analista destaque</h2>
-                <p>Elegível quem, no mês, concluiu <b>pelo menos {{ cfg.broche_pct_minimo }}%</b> dos itens previstos do check-list da loja
-                    e fez <b>pelo menos {{ cfg.broche_no_prazo_minimo }}%</b> deles no prazo (até o horário do item).</p></div></div>
-        <span class="ra-selo {% if elegiveis %}verde{% else %}cinza{% endif %}"><i class="fas fa-medal"></i>{{ elegiveis }} elegíve{{ elegiveis|pluralize:"l,is" }}</span>
+{% if meu %}
+<section class="ra-card ra-placar {{ meu.nivel.classe }}" data-placar>
+    <div class="ra-placar-esq">
+        <span class="ra-placar-medalha"><i class="fas {{ meu.nivel.icone }}"></i></span>
+        <div>
+            <small>Seus pontos em {{ mes_extenso }}</small>
+            <p class="ra-placar-total"><b data-conta="{{ meu.total }}">{{ meu.total }}</b> pts</p>
+            <p class="ra-placar-pos"><i class="fas fa-trophy"></i>{{ meu.posicao }}º lugar de {{ linhas|length }} · nível <b>{{ meu.nivel.nome }}</b></p>
+            {% if meu.nivel.proximo %}
+            <div class="ra-placar-nivel"><div class="ra-barra"><i style="width: {{ meu.nivel.progresso }}%"></i></div>
+                <small>faltam <b>{{ meu.nivel.falta }} pts</b> para {{ meu.nivel.proximo }}</small></div>
+            {% else %}<p class="ra-placar-pos"><i class="fas fa-gem"></i>Nível máximo — você é referência!</p>{% endif %}
+        </div>
     </div>
-    {% if superadmin %}
-    <form method="post" class="ra-broche-form">
-        {% csrf_token %}<input type="hidden" name="mes" value="{{ mes }}">
-        <label>Mínimo concluído <span><input class="ra-campo" type="number" name="broche_pct_minimo" min="0" max="100" required value="{{ cfg.broche_pct_minimo }}">%</span></label>
-        <label>Mínimo no prazo <span><input class="ra-campo" type="number" name="broche_no_prazo_minimo" min="0" max="100" required value="{{ cfg.broche_no_prazo_minimo }}">%</span></label>
-        <button class="ra-botao primario" type="submit"><i class="fas fa-check"></i>Salvar critério</button>
-    </form>
-    {% else %}
-    <p class="ra-nota"><i class="fas fa-lock"></i> O critério é ajustado pelo SUPERADMIN.</p>
-    {% endif %}
-    <p class="ra-nota"><i class="fas fa-circle-info"></i>
-        {% if dias_contados %}Dias contados: {{ inicio|date:"d/m" }} a {{ ate|date:"d/m" }} ({{ dias_contados }} dia{{ dias_contados|pluralize }}).{% else %}O mês ainda não tem dia fechado.{% endif %}
-        {% if mes_atual %}O dia de hoje entra quando virar.{% endif %}
-        Domingo só conta se a loja marcou algum item. Empate: mais no prazo, mais dias 100%, mais itens feitos.
-        Não muda a pontuação do Impulso.</p>
+    <div class="ra-frentes">
+        {% for f in frentes %}
+        <div class="ra-frente {{ f.cor }}" data-frente="{{ f.chave }}">
+            <span class="ic"><i class="fas {{ f.icone }}"></i></span>
+            <div class="corpo">
+                <strong>{{ f.nome }}</strong>
+                <p><b data-conta="{{ f.pontos }}">{{ f.pontos }}</b> pts</p>
+                <small>
+                    {% if f.chave == 'checklist' %}{{ meu.detalhe.itens }} ite{{ meu.detalhe.itens|pluralize:"m,ns" }} ({{ meu.detalhe.itens_prazo }} no prazo) · {{ meu.detalhe.dias_completos }} dia{{ meu.detalhe.dias_completos|pluralize }} 100%
+                    {% elif f.chave == 'fiscal' %}{% if meu.detalhe.fiscal_fora %}Visão SAP indisponível agora{% else %}{{ meu.detalhe.resolvidas }} venda{{ meu.detalhe.resolvidas|pluralize }} sem NF resolvida{{ meu.detalhe.resolvidas|pluralize }}{% if meu.detalhe.nao_confirmadas %} · {{ meu.detalhe.nao_confirmadas }} ainda no SAP (não conta){% endif %}{% endif %}
+                    {% elif f.chave == 'estoque' %}{{ meu.detalhe.categorias }} categoria{{ meu.detalhe.categorias|pluralize }}×semana contada{{ meu.detalhe.categorias|pluralize }}
+                    {% else %}{% if not meu.detalhe.bate_ponto %}sem ponto no Tangerino{% elif meu.detalhe.absenteismo %}{{ meu.detalhe.absenteismo.pct|floatformat:"-2" }}% de ausência{% if meu.detalhe.absenteismo.dias_sem_batida %} · {{ meu.detalhe.absenteismo.dias_sem_batida }} falta{{ meu.detalhe.absenteismo.dias_sem_batida|pluralize }}{% endif %}{% else %}sem dia fechado no mês ainda{% endif %}{% endif %}
+                </small>
+            </div>
+            <span class="ra-frente-barra"><i style="width: {{ f.pct }}%"></i></span>
+        </div>
+        {% endfor %}
+    </div>
 </section>
+{% endif %}
+
+{% if podio %}
+<section class="ra-podio" aria-label="Pódio do mês">
+    {% for l in podio %}
+    <div class="ra-podio-lugar p{{ l.posicao }}{% if meu and l.pessoa.id == meu.pessoa.id %} eu{% endif %}" style="--ordem: {{ forloop.counter }}">
+        <span class="coroa">{% if l.posicao == 1 %}<i class="fas fa-crown"></i>{% else %}<i class="fas fa-medal"></i>{% endif %}</span>
+        <span class="avatar">{{ l.nome|slice:":1"|upper }}</span>
+        <strong>{{ l.nome }}</strong><small>{{ l.loja }}</small>
+        <span class="degrau"><b>{{ l.total }}</b> pts<em>{{ l.posicao }}º</em></span>
+    </div>
+    {% endfor %}
+</section>
+{% endif %}
 
 <section class="ra-card ra-secao">
     <div class="ra-secao-cabeca">
         <div class="ra-secao-titulo"><span class="ic" style="background:var(--ra-roxo-claro);color:var(--ra-roxo)"><i class="fas fa-list-ol"></i></span>
-            <div><h2>Classificação</h2><p>Analista = quem tem a Rotina ADM liberada e é de loja, mais quem marcou o check-list no mês</p></div></div>
+            <div><h2>Classificação geral</h2><p>Analista = quem tem a Rotina ADM liberada e é de loja, mais quem marcou o check-list ou contou o estoque no mês</p></div></div>
+        <span class="ra-selo {% if elegiveis %}verde{% else %}cinza{% endif %}" title="Broche de analista destaque"><i class="fas fa-award"></i>{{ elegiveis }} elegíve{{ elegiveis|pluralize:"l,is" }} ao broche</span>
     </div>
     {% if linhas %}
-    <div class="ra-rank" role="table" aria-label="Ranking dos analistas">
+    <div class="ra-rank ra-rank-pontos" role="table" aria-label="Ranking dos analistas">
         <div class="ra-rank-linha ra-rank-cabeca" role="row">
-            <span role="columnheader">#</span><span role="columnheader">Analista</span><span role="columnheader">Conclusão</span>
-            <span role="columnheader">No prazo</span><span role="columnheader">Dias 100%</span><span role="columnheader">Itens</span><span role="columnheader">Broche</span>
+            <span role="columnheader">#</span><span role="columnheader">Analista</span><span role="columnheader">Total</span>
+            <span role="columnheader">Check-list</span><span role="columnheader">Fiscal</span><span role="columnheader">Estoque</span>
+            <span role="columnheader">Assiduidade</span><span role="columnheader">Broche</span>
         </div>
         {% for l in linhas %}
-        <div class="ra-rank-linha{% if l.elegivel %} elegivel{% endif %}" role="row" data-pessoa="{{ l.pessoa.id }}">
-            <span class="pos" role="cell">{% if l.posicao <= 3 and l.previstos %}<i class="fas fa-medal p{{ l.posicao }}"></i>{% endif %}{{ l.posicao }}º</span>
-            <span class="quem" role="cell"><strong>{{ l.nome }}</strong>
-                <small>{{ l.loja }}{% if l.divide_loja %} · <span title="Mais de um analista marca esta loja: cada um conta só o que marcou">divide a loja</span>{% endif %}{% if l.outras_lojas %} · +{{ l.outras_lojas }} em outras lojas{% endif %}</small></span>
-            <span class="pct" role="cell" data-rotulo="Conclusão">{% if l.previstos %}<span class="ra-barra"><i class="{% if l.pct >= cfg.broche_pct_minimo %}verde{% elif l.pct >= 50 %}amarelo{% else %}vermelho{% endif %}" style="width: {{ l.pct|floatformat:0 }}%"></i></span><b>{{ l.pct|floatformat:"-1" }}%</b>{% else %}<small>sem check-list</small>{% endif %}</span>
-            <span role="cell" data-rotulo="No prazo"><b>{% if l.feitos %}{{ l.pct_prazo|floatformat:"-1" }}%{% else %}—{% endif %}</b></span>
-            <span role="cell" data-rotulo="Dias 100%"><b>{{ l.dias_100 }}</b></span>
-            <span role="cell" data-rotulo="Itens"><b>{{ l.feitos }}</b><small>/{{ l.previstos }}</small></span>
+        <div class="ra-rank-linha{% if l.elegivel %} elegivel{% endif %}{% if meu and l.pessoa.id == meu.pessoa.id %} eu{% endif %}" role="row" data-pessoa="{{ l.pessoa.id }}" style="--atraso: {{ forloop.counter0 }}">
+            <span class="pos" role="cell">{% if l.posicao <= 3 and l.total %}<i class="fas fa-medal p{{ l.posicao }}"></i>{% endif %}{{ l.posicao }}º</span>
+            <span class="quem" role="cell"><strong>{{ l.nome }}{% if meu and l.pessoa.id == meu.pessoa.id %} <em class="ra-voce">você</em>{% endif %}</strong>
+                <small><i class="fas {{ l.nivel.icone }} nv-{{ l.nivel.classe }}" title="Nível {{ l.nivel.nome }}"></i> {{ l.loja }}{% if l.divide_loja %} · <span title="Mais de um analista marca esta loja: cada um conta só o que marcou">divide a loja</span>{% endif %}{% if l.outras_lojas %} · +{{ l.outras_lojas }} em outras lojas{% endif %}</small></span>
+            <span class="pct total" role="cell" data-rotulo="Total"><span class="ra-barra"><i class="roxo" style="width: {{ l.pct_do_lider }}%"></i></span><b>{{ l.total }}</b></span>
+            <span role="cell" data-rotulo="Check-list" title="{{ l.feitos }}/{{ l.previstos }} itens até ontem ({{ l.pct|floatformat:'-1' }}%, {{ l.pct_prazo|floatformat:'-1' }}% no prazo)"><b>{{ l.pontos.checklist }}</b>{% if l.previstos %}<small> · {{ l.pct|floatformat:"0" }}%</small>{% endif %}</span>
+            <span role="cell" data-rotulo="Fiscal"><b>{{ l.pontos.fiscal }}</b></span>
+            <span role="cell" data-rotulo="Estoque"><b>{{ l.pontos.estoque }}</b></span>
+            <span role="cell" data-rotulo="Assiduidade"><b>{{ l.pontos.assiduidade }}</b>{% if l.detalhe.absenteismo %}<small> · {{ l.detalhe.absenteismo.pct|floatformat:"-1" }}%</small>{% endif %}</span>
             <span class="broche" role="cell">{% if l.elegivel %}<span class="ra-selo verde"><i class="fas fa-award"></i>Elegível</span>{% else %}<span class="ra-selo cinza">Não</span>{% endif %}</span>
         </div>
         {% endfor %}
     </div>
     {% else %}
-    <div class="ra-vazio"><i class="fas fa-user-clock"></i>Ninguém de loja com a Rotina ADM liberada e nenhum check-list marcado neste mês.</div>
+    <div class="ra-vazio"><i class="fas fa-user-clock"></i>Ninguém de loja com a Rotina ADM liberada e nada marcado neste mês.</div>
     {% endif %}
 </section>
+
+<section class="ra-grade-regras">
+    <article class="ra-card ra-secao">
+        <div class="ra-secao-cabeca">
+            <div class="ra-secao-titulo"><span class="ic" style="background:var(--ra-ambar-claro);color:var(--ra-ambar)"><i class="fas fa-star"></i></span>
+                <div><h2>Como ganhar pontos</h2><p>Vale para todos os analistas; zera a cada mês</p></div></div>
+        </div>
+        <ul class="ra-regras">
+            <li class="verde"><i class="fas fa-list-check"></i><div><strong>Check-list da loja</strong>
+                <small>+{{ regra.item_no_prazo }} por item feito até o horário · +{{ regra.item_atrasado }} se fizer depois · +{{ regra.dia_100 }} de bônus no dia em que você faz todos os itens</small></div></li>
+            <li class="ambar"><i class="fas fa-file-invoice"></i><div><strong>Pendências fiscais</strong>
+                <small>+{{ regra.fiscal }} por venda "Sem NF" da Visão SAP que você dá como resolvida. Se o SAP ler de novo e ela continuar lá, não conta.</small></div></li>
+            <li class="roxo"><i class="fas fa-cubes"></i><div><strong>Contagem de estoque</strong>
+                <small>+{{ regra.estoque }} por categoria contada na semana (Smartphones, Eletrônicos, SIM Card, Películas) — registre na central da loja</small></div></li>
+            <li class="azul"><i class="fas fa-user-clock"></i><div><strong>Assiduidade</strong>
+                <small>Pelo ponto do mês (dias fechados): {% for limite, pts in regra_assiduidade %}{% if limite == 0 %}sem ausência +{{ pts }}{% else %} · até {{ limite }}% +{{ pts }}{% endif %}{% endfor %}. Atestado, férias e folga não contam.</small></div></li>
+        </ul>
+        <div class="ra-niveis">{% for nome, minimo, icone, classe in niveis %}<span class="ra-nivel {{ classe }}"><i class="fas {{ icone }}"></i>{{ nome }}<small>{{ minimo }}+ pts</small></span>{% endfor %}</div>
+        <p class="ra-nota"><i class="fas fa-circle-info"></i>
+            Os pontos contam até agora — o que você faz hoje já soma. As porcentagens do check-list e a assiduidade olham só os dias fechados
+            {% if dias_contados %}({{ inicio|date:"d/m" }} a {{ ate|date:"d/m" }}){% endif %}. Domingo só conta se a loja marcou algum item.
+            Empate: maior % do check-list, mais no prazo, mais dias 100%. Não muda a pontuação do Impulso.</p>
+    </article>
+
+    <article class="ra-card ra-secao ra-broche">
+        <div class="ra-secao-cabeca">
+            <div class="ra-secao-titulo"><span class="ic" style="background:var(--ra-ambar-claro);color:var(--ra-ambar)"><i class="fas fa-award"></i></span>
+                <div><h2>Broche de analista destaque</h2>
+                    <p>Elegível quem, no mês, concluiu <b>pelo menos {{ cfg.broche_pct_minimo }}%</b> dos itens previstos do check-list da loja
+                        e fez <b>pelo menos {{ cfg.broche_no_prazo_minimo }}%</b> deles no prazo (até o horário do item).</p></div></div>
+        </div>
+        {% if superadmin %}
+        <form method="post" class="ra-broche-form">
+            {% csrf_token %}<input type="hidden" name="mes" value="{{ mes }}">
+            <label>Mínimo concluído <span><input class="ra-campo" type="number" name="broche_pct_minimo" min="0" max="100" required value="{{ cfg.broche_pct_minimo }}">%</span></label>
+            <label>Mínimo no prazo <span><input class="ra-campo" type="number" name="broche_no_prazo_minimo" min="0" max="100" required value="{{ cfg.broche_no_prazo_minimo }}">%</span></label>
+            <button class="ra-botao primario" type="submit"><i class="fas fa-check"></i>Salvar critério</button>
+        </form>
+        {% else %}
+        <p class="ra-nota"><i class="fas fa-lock"></i> O critério é ajustado pelo SUPERADMIN.</p>
+        {% endif %}
+        {% if meu %}
+        <p class="ra-nota"><i class="fas fa-user"></i> Você: {{ meu.pct|floatformat:"-1" }}% concluído e {{ meu.pct_prazo|floatformat:"-1" }}% no prazo até ontem
+            — {% if meu.elegivel %}<b>elegível!</b>{% else %}ainda não elegível.{% endif %}</p>
+        {% endif %}
+    </article>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    // Os números do placar sobem de 0 até o valor (só na primeira pintura; respeita quem pediu menos movimento).
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    document.querySelectorAll('[data-placar] [data-conta]').forEach(function (el) {
+        var alvo = Number(el.dataset.conta) || 0, inicio = null, dur = 900;
+        if (!alvo) return;
+        el.textContent = '0';
+        function passo(t) {
+            if (inicio === null) inicio = t;
+            var p = Math.min(1, (t - inicio) / dur);
+            el.textContent = Math.round(alvo * (1 - Math.pow(1 - p, 3)));
+            if (p < 1) requestAnimationFrame(passo);
+        }
+        requestAnimationFrame(passo);
+    });
+})();
+</script>
 {% endblock %}
