@@ -2,7 +2,8 @@
 // cache-first sem revalidar. Sem trocar este nome, o celular continuaria
 // com a folha de estilo antiga para sempre — e foi uma regra dela que
 // travou o app. Trocar o nome apaga os caches velhos no activate.
-const CACHE_NAME = 'rede-confianca-v3';
+// v4 (24/11/2026): logo nova no /static/images/logo.png (mesmo nome de arquivo).
+const CACHE_NAME = 'rede-confianca-v4';
 // Não pré-cacheamos páginas HTML (ex.: '/') — elas usam network-first para
 // sempre refletir a versão mais recente do servidor. Só assets estáticos aqui.
 const urlsToCache = [
