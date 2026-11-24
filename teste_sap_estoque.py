@@ -405,7 +405,7 @@ except FileNotFoundError:
 
 
 print('\n== 11) VISÃO INICIAL: CARTÕES DAS CATEGORIAS (25/11/2026) ==')
-from auditoria_sap.views_estoque import icone_da_categoria as ve_ic
+from auditoria_sap.views_estoque import icone_da_categoria as ve_ic, faixa_de_idade as ve_faixa
 r = cc.get('/sap/estoque/')
 html = r.content.decode()
 cartoes = r.context['cartoes'] or []
@@ -425,9 +425,58 @@ r = cc.get('/sap/estoque/?aba=disponivel&categoria=Smartphones')
 t('clicar no cartão abre a tabela daquela categoria', r.status_code == 200 and not r.context['inicial']
   and 'colunas' in r.context and 'data-cartoes-categorias' not in r.content.decode())
 h_cat = r.content.decode()
-t('na tabela, botão de voltar às categorias (25/11/2026)', 'data-voltar-inicio' in h_cat and 'Voltar às categorias' in h_cat
-  and 'href="/sap/estoque/"' in h_cat)
+t('na tabela, a aba Panorama volta às categorias (24/11/2026)', 'data-voltar-inicio' in h_cat and '>Panorama' in h_cat
+  and 'href="?aba=inicio&loja=' in h_cat)
 t('a abertura (cartões) não tem o botão de voltar', 'data-voltar-inicio' not in html)
+t('o filtro de categoria vira um chip que se tira', 'est-filtro-chip' in h_cat and '&categoria="' in h_cat)
+
+print('\n== 11b) PANORAMA E NAVEGAÇÃO SEM RECARREGAR (24/11/2026) ==')
+r = cc.get('/sap/estoque/?aba=inicio&loja=057E')
+pan = r.context['panorama']
+html_pan = r.content.decode()
+t('?aba=inicio abre o Panorama da loja', r.status_code == 200 and r.context['inicial'] and r.context['f']['loja'] == '057E'
+  and 'data-panorama' in html_pan and 'data-cartoes-categorias' in html_pan)
+t('os números aparecem também no Panorama', 'data-contar=' in html_pan and 'Livre para venda' in html_pan)
+lojas_pan = {l['centro']: l for l in pan['lojas']}
+t('estoque por loja: livre e a caminho, maior primeiro', lojas_pan['057E']['livre'] == int(sum(
+    deps.get('LVUT', (0, 0))[0] for (c, _m), deps in est.fotografia()['saldos'].items() if c == '057E'))
+  and lojas_pan['057E']['transito'] == 1 and lojas_pan['057E']['minha']
+  and [l['livre'] for l in pan['lojas']] == sorted((l['livre'] for l in pan['lojas']), reverse=True), pan['lojas'][:3])
+t('a maior barra enche o trilho', max(l['pct_livre'] + l['pct_transito'] for l in pan['lojas']) == 100)
+t('clicar na loja abre o Panorama dela (e na escolhida volta para a rede)',
+  'href="?aba=inicio&loja=064E"' in html_pan and 'href="?aba=inicio&loja=todas"' in html_pan)
+saude = {s['chave']: s for s in pan['saude']}
+rep_loja = est.reposicao(est.fotografia(), '057E')
+t('saúde da reposição conta cada situação', saude['critico']['qtd'] == sum(1 for l in rep_loja if l['situacao'] == 'critico')
+  and pan['saude_total'] == len(rep_loja) and round(sum(s['pct'] for s in pan['saude'])) in (0, 100), saude)
+t('cada pedaço da saúde abre a reposição filtrada', 'aba=reposicao&situacao=critico&loja=057E' in html_pan)
+t('mais urgentes: só zerados que vendem', all(u['situacao'] in ('critico', 'ruptura') for u in pan['urgentes'])
+  and len(pan['urgentes']) <= 6)
+t('tempo parado: só seriais livres da loja', pan['idades_total'] + pan['sem_data'] == sum(
+    1 for u in est.fotografia()['unidades'] if u[2] == '057E' and u[3] == 'LVUT' and u[4] == '01'), pan['idades'])
+t('a faixa de tempo leva ao detalhado', 'aba=detalhado&deposito=LVUT&idade=' in html_pan)
+t('faixas de idade', [ve_faixa(d) for d in (0, 30, 31, 60, 61, 90, 91, 400, None)]
+  == ['ate30', 'ate30', '31a60', '31a60', '61a90', '61a90', 'mais90', 'mais90', ''])
+r = cc.get('/sap/estoque/?aba=detalhado&loja=057E&idade=mais90')
+t('detalhado filtra pelo tempo parado', r.status_code == 200 and all((u['dias'] or 0) > 90 for u in r.context['pagina'])
+  and 'data-idades' in r.content.decode())
+r = cc.get('/sap/estoque/?aba=inicio&loja=057E&categoria=Smartphones')
+t('buscar/escolher categoria no Panorama mostra a tabela', r.context['f']['aba'] == 'disponivel' and not r.context['inicial'])
+r = cc.get('/sap/estoque/?aba=reposicao&loja=057E&situacao=critico')
+sits = {c: q for c, _r, q, _cor in r.context['situacoes']}
+t('chips da reposição com a contagem de cada situação', sits[''] == len(rep_loja)
+  and sits['critico'] == saude['critico']['qtd'] and len(r.context['pagina'].object_list) == sits['critico'], sits)
+r = cc.get('/sap/estoque/?aba=disponivel&loja=057E', HTTP_X_ESTOQUE_PARCIAL='1')
+parcial = r.content.decode()
+t('pedido da própria tela devolve só o miolo', r.status_code == 200 and r['X-Estoque-Parcial'] == '1'
+  and 'id="estEstado"' in parcial and 'id="estRolagem"' not in html_pan and 'id="estRolagem"' in parcial
+  and '<html' not in parcial and 'id="estGaveta"' not in parcial and 'X-Estoque-Parcial' in r.get('Vary', ''))
+r = cc.get('/sap/estoque/?aba=disponivel&loja=057E')
+t('sem o cabeçalho, a página inteira (com a gaveta)', 'id="estGaveta"' in r.content.decode()
+  and 'id="estApp"' in r.content.decode() and 'X-Estoque-Parcial' not in r)
+t('a matriz pinta a quantidade em escala', re.search(r'class="est-q est-q-[1-5]"', r.content.decode()) is not None
+  and 'est-q-5' in r.content.decode())
+t('quem não vê o estoque não recebe o miolo', cv.get('/sap/estoque/?aba=disponivel', HTTP_X_ESTOQUE_PARCIAL='1').status_code == 302)
 
 print('\n== 12) O CAMPO PRODUTO SE AUTOPREENCHE ==')
 j = cc.get('/sap/estoque/sugestoes/?q=gal', HTTP_X_REQUESTED_WITH='XMLHttpRequest').json()
