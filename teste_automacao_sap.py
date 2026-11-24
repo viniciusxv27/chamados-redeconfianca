@@ -215,6 +215,32 @@ t('trocar a chave invalida a antiga', anon.get(API + '?atual=1.2.1', HTTP_X_CHAV
 cadm.post(U + 'chave/')
 t('ADMIN não troca a chave', anon.get(API, HTTP_X_CHAVE_AUTOMACAO=ChaveAutomacaoSAP.get().chave).status_code == 200)
 
+print('Gestor da Visão SAP envia e publica versões (25/11/2026)')
+from users.models import UserModuleAccess  # noqa: E402
+gest = novo('gestor', hierarchy='PADRAO')
+UserModuleAccess.objects.create(user=gest, module_key='sap.gestor')
+cgest = Client(); cgest.force_login(gest)
+h = cgest.get(U).content.decode()
+t('gestor vê o formulário de envio, mas não a chave nem a ponte', 'Enviar versão nova' in h
+  and 'data-chave-app' not in h and ChaveAutomacaoSAP.get().chave not in h and 'data-ponte-enviar' not in h)
+r = cgest.post(U + 'enviar/', {'arquivo': pacote('AutomacaoSAP_v3.0.0.zip'), 'notas': 'do gestor', 'publicar': 'off'}, follow=True)
+v300 = VersaoAutomacaoSAP.objects.filter(versao='3.0.0').first()
+t('gestor envia (sem publicar) e fica como quem enviou', v300 is not None and not v300.publicada and v300.enviada_por_id == gest.pk)
+t('gestor vê e baixa a versão não publicada', '3.0.0' in cgest.get(U).content.decode()
+  and cgest.get(f'{U}{v300.id}/baixar/').status_code == 200)
+cgest.post(f'{U}{v300.id}/publicar/')
+v300.refresh_from_db()
+t('gestor publica', v300.publicada and VersaoAutomacaoSAP.atual().versao == '3.0.0')
+cgest.post(f'{U}{v300.id}/publicar/')
+v300.refresh_from_db()
+t('gestor despublica', not v300.publicada)
+chave_antes = ChaveAutomacaoSAP.get().chave
+cgest.post(U + 'chave/')
+t('gestor não troca a chave', ChaveAutomacaoSAP.get().chave == chave_antes)
+h = cadm.get(U).content.decode()
+t('ADMIN sem a marcação continua sem formulário', 'Enviar versão nova' not in h)
+v300.delete()
+
 print('App dentro do portal (Ponte)')
 from unittest import mock as _mock  # noqa: E402
 

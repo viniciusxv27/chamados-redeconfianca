@@ -14,7 +14,7 @@ from django.views.decorators.http import require_GET, require_POST
 from . import automacao
 from .espelho import ultima_sincronizacao
 from .models import ChaveAutomacaoSAP, InstaladorPonteSAP, VersaoAutomacaoSAP, versao_em_tupla
-from .permissions import e_gestor, pode_escolher_gestores, pode_ver
+from .permissions import CHAVE_GESTOR, e_gestor, pode_escolher_gestores, pode_ver
 from .views import so_auditoria
 
 logger = logging.getLogger(__name__)
@@ -24,10 +24,28 @@ def e_superadmin(user):
     return bool(user.is_authenticated and (user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN'))
 
 
+def pode_enviar_versao(user):
+    """Envia, publica e despublica versões do app (25/11/2026): o SUPERADMIN e os gestores marcados em /sap/gestores/.
+
+    A chave do app e o instalador da ponte continuam só com o SUPERADMIN.
+    """
+    if e_superadmin(user):
+        return True
+    from users.module_access import user_has_module
+    return bool(user.is_authenticated and user_has_module(user, CHAVE_GESTOR))
+
+
 def _so_superadmin(request):
     if e_superadmin(request.user):
         return None
-    messages.error(request, 'Só o SUPERADMIN publica versões da Automação SAP.')
+    messages.error(request, 'Só o SUPERADMIN mexe na chave do app e na ponte.')
+    return redirect('auditoria_sap:automacao')
+
+
+def _so_quem_envia(request):
+    if pode_enviar_versao(request.user):
+        return None
+    messages.error(request, 'Só o SUPERADMIN e os gestores da Visão SAP enviam versões da Automação SAP.')
     return redirect('auditoria_sap:automacao')
 
 
@@ -50,13 +68,14 @@ def _entregar(versao):
 @so_auditoria
 def tela(request):
     superadmin = e_superadmin(request.user)
+    pode_enviar = pode_enviar_versao(request.user)
     versoes = list(VersaoAutomacaoSAP.objects.select_related('enviada_por'))
     versoes.sort(key=lambda v: v.tupla, reverse=True)
     contexto = {
         'aba': 'automacao', 'ultima': ultima_sincronizacao(), 'e_gestor': e_gestor(request.user),
         'pode_escolher_gestores': pode_escolher_gestores(request.user),
-        'atual': VersaoAutomacaoSAP.atual(), 'versoes': versoes if superadmin else [v for v in versoes if v.publicada],
-        'superadmin': superadmin, 'ponte': automacao.ponte_oferecida(), 'ponte_enviada': InstaladorPonteSAP.atual(),
+        'atual': VersaoAutomacaoSAP.atual(), 'versoes': versoes if pode_enviar else [v for v in versoes if v.publicada],
+        'superadmin': superadmin, 'pode_enviar': pode_enviar, 'ponte': automacao.ponte_oferecida(), 'ponte_enviada': InstaladorPonteSAP.atual(),
     }
     if superadmin:
         contexto['chave'] = ChaveAutomacaoSAP.get()
@@ -67,7 +86,7 @@ def tela(request):
 @login_required
 @require_POST
 def enviar(request):
-    if (barra := _so_superadmin(request)) is not None:
+    if (barra := _so_quem_envia(request)) is not None:
         return barra
     arquivo = request.FILES.get('arquivo')
     if not arquivo:
@@ -108,7 +127,7 @@ def enviar(request):
 @login_required
 @require_POST
 def publicar(request, versao_id):
-    if (barra := _so_superadmin(request)) is not None:
+    if (barra := _so_quem_envia(request)) is not None:
         return barra
     versao = get_object_or_404(VersaoAutomacaoSAP, pk=versao_id)
     versao.publicada = not versao.publicada
@@ -138,7 +157,7 @@ def trocar_chave(request):
 @so_auditoria
 def baixar(request, versao_id):
     versao = get_object_or_404(VersaoAutomacaoSAP, pk=versao_id)
-    if not versao.publicada and not e_superadmin(request.user):
+    if not versao.publicada and not pode_enviar_versao(request.user):
         raise Http404
     VersaoAutomacaoSAP.objects.filter(pk=versao.pk).update(downloads=F('downloads') + 1)
     return _entregar(versao)

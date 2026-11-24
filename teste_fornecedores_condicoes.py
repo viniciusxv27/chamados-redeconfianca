@@ -112,4 +112,47 @@ c.post(reverse('suppliers:supplier_edit', args=[s2.pk]), dict(base, name='ZZ Com
 s2.refresh_from_db()
 t('edição apaga o preço (vazio) e muda o frete', s2.preco is None and s2.frete == Decimal('99.90') and s2.tempo_entrega == '')
 
+print('Descrição, categoria e preço sob consulta (25/11/2026)')
+h = c.get('/suppliers/novo/').content.decode()
+t('"O que faz" virou "Descrição"', 'Descrição *' in h and 'O que Faz' not in h)
+t('categoria em select com "Criar nova" e campo escondido', 'id="f-categoria-sel"' in h and '+ Criar nova categoria' in h
+  and 'name="categoria"' in h)
+t('preço com "Valor fixo" e "Sob consulta"', 'value="fixo"' in h and 'value="consulta"' in h and 'name="preco_referencia"' in h)
+c.post('/suppliers/novo/', dict(base, name='ZZ Elétrica', cnpj='44.555.666/0001-81', categoria='Manutenção predial',
+                                preco_tipo='consulta', preco='999', preco_referencia='orçamento por visita'))
+s3 = Supplier.objects.get(name='ZZ Elétrica')
+t('sob consulta não grava valor e guarda o "o que consultar"', s3.preco_sob_consulta and s3.preco is None
+  and s3.preco_referencia == 'orçamento por visita' and s3.categoria == 'Manutenção predial')
+t('resumo do preço sob consulta', s3.preco_resumo == 'Sob consulta · orçamento por visita', s3.preco_resumo)
+c.post('/suppliers/novo/', dict(base, name='ZZ Hidráulica', cnpj='55.666.777/0001-81', categoria='  manutencao   PREDIAL ',
+                                preco_tipo='fixo', preco='150', preco_referencia='por visita técnica'))
+s4 = Supplier.objects.get(name='ZZ Hidráulica')
+t('categoria digitada com outra grafia é gravada com a de sempre', s4.categoria == 'Manutenção predial', s4.categoria)
+t('valor fixo com referência', s4.preco == Decimal('150.00') and not s4.preco_sob_consulta
+  and s4.preco_resumo == 'R$ 150,00 · por visita técnica', s4.preco_resumo)
+h = c.get('/suppliers/novo/').content.decode()
+t('a categoria nova aparece no select uma vez só', h.count('<option value="Manutenção predial">') == 1)
+h = c.get('/suppliers/').content.decode()
+t('lista mostra categoria, filtro e o preço resumido', 'Todas as categorias' in h and 'Sob consulta · orçamento por visita' in h
+  and 'R$ 150,00 · por visita técnica' in h)
+h = c.get('/suppliers/', {'categoria': 'manutenção predial'}).content.decode()
+t('filtro por categoria', 'ZZ Elétrica' in h and 'ZZ Hidráulica' in h and 'ZZ Fornecedor<' not in h and '>ZZ Fornecedor\n' not in h
+  and 'ZZ Com preço' not in h)
+h = c.get(f'/suppliers/{s3.pk}/').content.decode()
+t('detalhe mostra a categoria, "Sob consulta" e a seção Descrição', 'Manutenção predial' in h and 'Sob consulta' in h
+  and 'orçamento por visita' in h and 'Serviços Oferecidos' not in h)
+h = c.get(reverse('suppliers:supplier_edit', args=[s3.pk])).content.decode()
+t('edição volta com "Sob consulta" marcado e a categoria', 'value="consulta" class="sr-only peer" checked' in h
+  and 'id="f-categoria" value="Manutenção predial"' in h)
+c.post(reverse('suppliers:supplier_edit', args=[s3.pk]), dict(base, name='ZZ Elétrica', cnpj='44.555.666/0001-81',
+                                                            categoria='Elétrica', preco_tipo='fixo', preco='200,00'))
+s3.refresh_from_db()
+t('edição volta para valor fixo e troca a categoria', not s3.preco_sob_consulta and s3.preco == Decimal('200.00')
+  and s3.categoria == 'Elétrica' and s3.preco_referencia == '')
+r = c.post('/suppliers/novo/', dict(base, name='ZZ Erro', cnpj='123', categoria='Limpeza', preco_tipo='consulta',
+                                    preco_referencia='por m²'))
+h = r.content.decode()
+t('erro no cadastro mantém categoria e "Sob consulta"', 'id="f-categoria" value="Limpeza"' in h
+  and 'value="consulta" class="sr-only peer" checked' in h and 'value="por m²"' in h)
+
 print(f'\n{OK} OK, {FALHAS} falha(s)')

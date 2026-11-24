@@ -13,6 +13,7 @@
         <div class="relative z-10">
             <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
                 <div class="flex-1">
+                    {% if supplier.categoria %}<span class="inline-flex items-center gap-1.5 bg-white bg-opacity-20 rounded-full px-3 py-1 text-xs font-semibold mb-3"><i class="fas fa-tag"></i>{{ supplier.categoria }}</span>{% endif %}
                     <h1 class="text-2xl sm:text-3xl lg:text-4xl font-bold mb-4">{{ supplier.name }}</h1>
                     <p class="text-lg opacity-95 mb-6 leading-relaxed">{{ supplier.services|truncatechars:200 }}</p>
                     
@@ -81,7 +82,8 @@
                         </div>
                         <div class="grid grid-cols-3 gap-3">
                             <div><label class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Preço</label>
-                                <p class="text-gray-900 font-medium mt-1">{% if supplier.preco is not None %}R$ {{ supplier.preco|floatformat:"2g" }}{% else %}—{% endif %}</p></div>
+                                <p class="text-gray-900 font-medium mt-1">{% if supplier.preco_sob_consulta %}<span class="inline-flex items-center gap-1 text-amber-700"><i class="fas fa-comments-dollar"></i>Sob consulta</span>{% elif supplier.preco is not None %}R$ {{ supplier.preco|floatformat:"2g" }}{% else %}—{% endif %}</p>
+                                {% if supplier.preco_referencia %}<p class="text-xs text-gray-500 mt-0.5" title="{% if supplier.preco_sob_consulta %}O que consultar{% else %}Referente a{% endif %}">{{ supplier.preco_referencia }}</p>{% endif %}</div>
                             <div><label class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Frete</label>
                                 <p class="text-gray-900 font-medium mt-1">{% if supplier.frete is not None %}R$ {{ supplier.frete|floatformat:"2g" }}{% else %}—{% endif %}</p></div>
                             <div><label class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Entrega</label>
@@ -95,11 +97,11 @@
                 </div>
             </div>
 
-            <!-- Serviços Oferecidos -->
+            <!-- Descrição -->
             <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-50 mb-6">
                 <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
                     <i class="fas fa-briefcase mr-3 text-orange-500"></i>
-                    Serviços Oferecidos
+                    Descrição
                 </h3>
                 <div class="bg-gray-50 rounded-lg p-4">
                     <p class="text-gray-900 leading-relaxed">{{ supplier.services }}</p>

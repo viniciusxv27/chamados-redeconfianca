@@ -138,7 +138,7 @@
                         </p>
                         <p class="text-[11px] text-gray-500">
                             {{ v.enviada_em|date:"d/m/Y H:i" }}{% if v.enviada_por %} · {{ v.enviada_por.get_full_name|default:v.enviada_por.email }}{% endif %}
-                            · {{ v.tamanho|filesizeformat }}{% if superadmin %} · {{ v.downloads }} download(s) · {{ v.atualizacoes }} atualização(ões) automática(s){% endif %}
+                            · {{ v.tamanho|filesizeformat }}{% if pode_enviar %} · {{ v.downloads }} download(s) · {{ v.atualizacoes }} atualização(ões) automática(s){% endif %}
                         </p>
                         {% if v.notas and not atual or v.notas and v.id != atual.id %}<p class="text-xs text-gray-600 mt-1 whitespace-pre-line break-words">{{ v.notas|truncatechars:300 }}</p>{% endif %}
                     </div>
@@ -146,7 +146,7 @@
                         <a href="{% url 'auditoria_sap:automacao_baixar' v.id %}" class="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50">
                             <i class="fas fa-download mr-1"></i>Baixar
                         </a>
-                        {% if superadmin %}
+                        {% if pode_enviar %}
                         <form method="post" action="{% url 'auditoria_sap:automacao_publicar' v.id %}"
                               onsubmit="return confirm('{% if v.publicada %}Despublicar a versão {{ v.versao }}? As lojas passam a receber a maior versão publicada que sobrar.{% else %}Publicar a versão {{ v.versao }} para as lojas?{% endif %}')">
                             {% csrf_token %}
@@ -165,7 +165,8 @@
         </section>
     </div>
 
-    {% if superadmin %}
+    {% if pode_enviar %}
+    {% comment %}Enviar e publicar versões: SUPERADMIN e gestores de /sap/gestores/ (25/11/2026). Ponte e chave: só SUPERADMIN.{% endcomment %}
     <div class="flex flex-col gap-4 min-w-0">
         <form method="post" action="{% url 'auditoria_sap:automacao_enviar' %}" enctype="multipart/form-data"
               class="sap-card p-5 flex flex-col gap-3" id="automacaoEnviar">
@@ -192,6 +193,7 @@
             </button>
         </form>
 
+        {% if superadmin %}
         <form method="post" action="{% url 'auditoria_sap:automacao_ponte_enviar' %}" enctype="multipart/form-data"
               class="sap-card p-5 flex flex-col gap-3" data-ponte-enviar>
             {% csrf_token %}
@@ -225,6 +227,7 @@
                 <button type="submit" class="text-xs text-red-700 hover:underline mt-1">Trocar a chave</button>
             </form>
         </section>
+        {% endif %}
     </div>
     {% endif %}
 </div>

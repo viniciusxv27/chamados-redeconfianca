@@ -31,12 +31,20 @@ class Supplier(models.Model):
         help_text="Área de atuação da empresa"
     )
     services = models.TextField(
-        verbose_name="O que faz",
+        verbose_name="Descrição",
         help_text="Descrição dos serviços/produtos oferecidos"
     )
+    # Categoria (25/11/2026): como a do gasto nos cartões — escolhe uma das que já existem ou cria nova.
+    categoria = models.CharField(max_length=120, blank=True, default='', db_default='', db_index=True,
+                                 verbose_name='Categoria')
     
     # Condições comerciais (11/11/2026) — nenhuma é obrigatória.
     preco = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, verbose_name='Preço (R$)')
+    # Preço sob consulta (25/11/2026): muito fornecedor cobra pelo serviço pedido, então não há valor fixo.
+    # ``preco_referencia`` diz a que o preço se refere ("por visita técnica") ou o que pedir na consulta.
+    preco_sob_consulta = models.BooleanField(default=False, db_default=False, verbose_name='Preço sob consulta')
+    preco_referencia = models.CharField(max_length=200, blank=True, default='', db_default='',
+                                        verbose_name='Preço referente a')
     frete = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, verbose_name='Frete (R$)')
     tempo_entrega = models.CharField(max_length=120, blank=True, default='', db_default='',
                                      verbose_name='Tempo de entrega', help_text='Ex.: 5 dias úteis')
@@ -62,6 +70,17 @@ class Supplier(models.Model):
     
     def __str__(self):
         return self.name
+
+    @property
+    def preco_resumo(self):
+        """Como o preço aparece nas telas: "R$ 150,00 · por visita", "Sob consulta · instalação" ou ""."""
+        if self.preco_sob_consulta:
+            base = 'Sob consulta'
+        elif self.preco is not None:
+            base = 'R$ ' + f'{self.preco:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+        else:
+            return ''
+        return f'{base} · {self.preco_referencia}' if self.preco_referencia else base
     
     def clean(self):
         """Validação customizada"""
