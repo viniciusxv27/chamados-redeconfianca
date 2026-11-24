@@ -327,9 +327,10 @@ print('\n== 7) QUEM ENTRA ==')
 r = cg.get('/sap/estoque/?aba=disponivel')
 t('gerente de loja entra e abre na loja dele, vendo a rede', r.status_code == 200 and r.context['f']['loja'] == '064E'
   and len(r.context['colunas']) == 4)
-t('quem não é da Visão SAP não entra', cv.get('/sap/estoque/').status_code == 302)
-t('nem na gaveta', cv.get(f'/sap/estoque/unidades/?centro=064E&material={GALAXY}',
-                          HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code == 403)
+t('estoque liberado para todos (24/11/2026): quem não é da Visão SAP entra', cv.get('/sap/estoque/').status_code == 200)
+t('e abre a gaveta', cv.get(f'/sap/estoque/unidades/?centro=064E&material={GALAXY}',
+                            HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code == 200)
+t('anônimo não entra', Client().get('/sap/estoque/').status_code == 302)
 
 print('\n== 8) SAP FORA DO AR ==')
 est._MEMORIA.clear(); cache.clear()
@@ -392,8 +393,8 @@ t('a gaveta dos seriais também traz preço e Renova', j['preco']['valor'] == 22
 html = cc.get('/sap/estoque/?loja=057E').content.decode()
 t('na tabela: o nome abre a gaveta do produto e o selo Renova aparece', f'data-produto="{GALAXY}"' in html
   and 'Renova −R$ 300' in html)
-t('quem não é da Visão SAP não vê preço', cv.get(f'/sap/estoque/produto/?material={GALAXY}',
-                                                HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code == 403)
+t('quem não é da Visão SAP também vê preço', cv.get(f'/sap/estoque/produto/?material={GALAXY}',
+                                                    HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code == 200)
 js = next((sc for sc in re.findall(r'<script>(.*?)</script>', html, re.S) if 'estFechar' in sc), '')
 arq = PASTA / 'estoque2.js'
 arq.write_text(js, encoding='utf-8')
@@ -476,7 +477,7 @@ t('sem o cabeçalho, a página inteira (com a gaveta)', 'id="estGaveta"' in r.co
   and 'id="estApp"' in r.content.decode() and 'X-Estoque-Parcial' not in r)
 t('a matriz pinta a quantidade em escala', re.search(r'class="est-q est-q-[1-5]"', r.content.decode()) is not None
   and 'est-q-5' in r.content.decode())
-t('quem não vê o estoque não recebe o miolo', cv.get('/sap/estoque/?aba=disponivel', HTTP_X_ESTOQUE_PARCIAL='1').status_code == 302)
+t('anônimo não recebe o miolo', Client().get('/sap/estoque/?aba=disponivel', HTTP_X_ESTOQUE_PARCIAL='1').status_code == 302)
 
 print('\n== 12) O CAMPO PRODUTO SE AUTOPREENCHE ==')
 j = cc.get('/sap/estoque/sugestoes/?q=gal', HTTP_X_REQUESTED_WITH='XMLHttpRequest').json()
@@ -486,8 +487,8 @@ t('um por nome (as cores viram uma sugestão só)', len(nomes) == len(set(n.lowe
 t('cada sugestão diz categoria e quanto tem livre', all({'categoria', 'livre', 'cores'} <= set(s) for s in j['sugestoes']))
 t('menos de 2 letras não sugere nada', cc.get('/sap/estoque/sugestoes/?q=g').json()['sugestoes'] == [])
 t('no máximo 12', len(cc.get('/sap/estoque/sugestoes/?q=a').json()['sugestoes']) <= 12)
-t('quem não vê o estoque não recebe sugestão', cv.get('/sap/estoque/sugestoes/?q=gal',
-                                                      HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code == 403)
+t('anônimo não recebe sugestão', Client().get('/sap/estoque/sugestoes/?q=gal',
+                                             HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code in (302, 403))
 html = cc.get('/sap/estoque/?aba=disponivel').content.decode()
 t('o campo tem a lista de sugestões', 'id="estBusca"' in html and 'id="estSugestoes"' in html
   and '/sap/estoque/sugestoes/' in html)
@@ -508,16 +509,14 @@ t('o SKU continua valendo antes do nome', cc.get(f'/sap/estoque/produto/?materia
 t('nome normalizado ignora acento, caixa e parênteses', ve._nome_para_preco('iPhone 17 256GB (Demo)') == 'iphone 17 256gb'
   and ve._nome_para_preco('Película Câmera') == 'pelicula camera')
 
-print('\n== 14) LIBERAR SÓ O ESTOQUE (25/11/2026) ==')
+print('\n== 14) ESTOQUE PARA TODOS (24/11/2026) ==')
 from users.models import UserModuleAccess
 from auditoria_sap.permissions import pode_ver, pode_ver_estoque, so_estoque
 csa = Client(); csa.force_login(chefe)
 h = csa.get('/sap/gestores/').content.decode()
-t('/sap/gestores/ tem a lista "Só o estoque"', 'Só o estoque' in h and 'name="estoque"' in h)
-csa.post('/sap/gestores/', {'secao': 'estoque', 'estoque': [vendedor.pk]})
-vendedor = User.objects.get(pk=vendedor.pk)
-t('liberado só para o estoque', UserModuleAccess.objects.filter(user=vendedor, module_key='sap.estoque').exists()
-  and pode_ver_estoque(vendedor) and not pode_ver(vendedor) and so_estoque(vendedor))
+t('/sap/gestores/ não tem mais a lista "Só o estoque"', 'name="estoque"' not in h and 'data-estoque-para-todos' in h)
+t('qualquer um logado vê o estoque', pode_ver_estoque(vendedor) and not pode_ver(vendedor) and so_estoque(vendedor)
+  and not UserModuleAccess.objects.filter(user=vendedor, module_key='sap.estoque').exists())
 r = cv.get('/sap/estoque/?aba=disponivel')
 h = r.content.decode()
 nav = h.split('<nav class="flex items-center gap-1 mt-4')[1][:3000] if '<nav class="flex items-center gap-1 mt-4' in h else ''
@@ -527,9 +526,39 @@ t('a gaveta e as sugestões também abrem', cv.get(f'/sap/estoque/produto/?mater
   and cv.get('/sap/estoque/sugestoes/?q=gal').status_code == 200)
 t('mas a auditoria continua fechada', cv.get('/sap/').status_code == 302 and cv.get('/sap/painel/').status_code == 302)
 t('o menu mostra "Estoque SAP"', 'Estoque SAP' in h)
-t('liberar estoque não mexe na Visão SAP inteira', not UserModuleAccess.objects.filter(module_key='sap').exists())
-csa.post('/sap/gestores/', {'secao': 'estoque'})
-t('desmarcar tira o estoque', cv.get('/sap/estoque/?aba=disponivel').status_code == 302)
+t('o POST antigo da lista não libera nada', csa.post('/sap/gestores/', {'secao': 'estoque', 'estoque': [vendedor.pk]}).status_code in (200, 302)
+  and not UserModuleAccess.objects.filter(module_key='sap.estoque').exists())
+inativo = User.objects.create_user(username='zz_inativo_est', password='x', is_active=False)
+t('conta desativada não vê', not pode_ver_estoque(inativo))
+
+print('\n== 15) CATEGORIA AUTOMÁTICA E SIM CARD EM OUTROS (24/11/2026) ==')
+cat_teste = {
+    'C1': {'nome_comercial': 'Capa Galaxy A57', 'categoria': 'Essenciais', 'subcategoria': 'Capas', 'cor': '', 'fabricante': '', 'gama': ''},
+    'S1': {'nome_comercial': 'Sim Card Vivo', 'categoria': 'Essenciais', 'subcategoria': 'Outros', 'cor': '', 'fabricante': '', 'gama': ''},
+    **{f'M{i}': {'nome_comercial': f'Motorola Moto G{i}', 'categoria': 'Smartphone', 'subcategoria': 'Smartphone',
+                 'cor': '', 'fabricante': '', 'gama': ''} for i in range(4)},
+    'O1': {'nome_comercial': 'Algo', 'categoria': 'Outros', 'subcategoria': 'Chip', 'cor': '', 'fabricante': '', 'gama': ''},
+}
+desc_teste = {'X1': 'SIM CARD 5G 2/3/4FF AVULSO P69S RJ', 'X2': 'CARTÃO REC. R$15 COMBO CHIP + RECARGA',
+              'X3': 'MOTOROLA XT2625-13 SMARTPHONE 128GB GF', 'X4': 'UP2 FONE OUVIDO TUNE 530BT JBL PT',
+              'X5': 'LENOVO TAB IDEA 11" 128GB CZ', 'X6': 'APPLE WATCH SE 3 GPS 44MM', 'X7': 'SONY CONTROLE S/FIO DUALSENSE',
+              'X8': 'CAPA IPHONE 17 TRANSPARENTE', 'X9': 'ZZZ COISA QUALQUER',
+              **{f'M{i}': f'MOTO XYZ LINHA G{i}' for i in range(4)}, 'X10': 'MOTO XYZ LINHA NOVA'}
+auto = est.categorias_automaticas(cat_teste, desc_teste, {}, set(desc_teste) | set(cat_teste))
+t('SIM Card sem cadastro vai para Outros', auto.get('X1') == ('Outros', 'Chip') and auto.get('X2', ('',))[0] == 'Outros', auto)
+t('SIM Card cadastrado em outra categoria também vai para Outros', auto.get('S1', ('',))[0] == 'Outros')
+t('pelas palavras da descrição', [auto.get(k, ('',))[0] for k in ('X3', 'X4', 'X5', 'X6', 'X7', 'X8')]
+  == ['Smartphone', 'Áudio', 'Notebook e Tablets', 'Bem Estar', 'Games', 'Essenciais'], auto)
+t('aprende com os parecidos do catálogo', auto.get('X10', ('',))[0] == 'Smartphone', auto.get('X10'))
+t('sem pista nenhuma, fica sem categoria', 'X9' not in auto)
+t('quem tem categoria no catálogo não muda', 'C1' not in auto and 'M0' not in auto)
+foto = est.fotografia()
+f2 = {**foto, 'categoria_auto': {**foto['categoria_auto'], 'TGSA609C2000': ('Outros', 'Chip')}}
+t('produto() usa a categoria automática', est.produto(f2, 'TGSA609C2000')['categoria'] == 'Outros'
+  and est.produto(foto, 'TGSA609C2000')['categoria'] == 'Smartphones')
+f3 = {**foto, 'categoria_auto': {'NOVO1': ('Games', '')}}
+t('a categoria automática entra no filtro', 'Games' in est.categorias(f3) and est.categorias(f3)[-1] == 'Sem categoria')
+t('produto sem pista continua em "Sem categoria"', est.produto(foto, TV)['categoria'] == 'Sem categoria')
 
 print(f'\n{ok} OK / {fail} falhas')
 sys.exit(1 if fail else 0)

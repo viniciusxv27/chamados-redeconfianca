@@ -59,36 +59,16 @@
     </div>
 </form>
 
-<form method="post" class="sap-card overflow-hidden mb-4" data-sap-lista="estoque">
-    {% csrf_token %}
-    <input type="hidden" name="secao" value="estoque">
-    <div class="px-5 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
-        <div>
-            <h2 class="font-semibold text-gray-800"><i class="fas fa-warehouse text-sky-600 mr-1.5"></i>Só o estoque</h2>
-            <p class="text-xs text-gray-500 mt-0.5">
-                Marcados aqui abrem só o Estoque (saldos, seriais, preços e onde tem) — sem a auditoria, o painel, a Renova nem a automação.
-                No menu aparece "Estoque SAP". Quem já acessa a Visão SAP vê o estoque de qualquer jeito.
-            </p>
-        </div>
-        <button type="submit" class="px-4 py-2 bg-sky-600 text-white rounded-lg text-sm font-medium hover:bg-sky-700 whitespace-nowrap">
-            <i class="fas fa-check mr-1"></i>Salvar estoque
-        </button>
+<div class="sap-card px-5 py-4 mb-4 flex items-start gap-3" data-estoque-para-todos>
+    <i class="fas fa-warehouse text-sky-600 mt-0.5"></i>
+    <div>
+        <h2 class="font-semibold text-gray-800">Estoque liberado para todos</h2>
+        <p class="text-xs text-gray-500 mt-0.5">
+            Todo mundo logado abre o Estoque (saldos, seriais, preços e onde tem) — sem precisar escolher ninguém.
+            A auditoria, o painel, a Renova e a automação continuam só para quem está liberado acima.
+        </p>
     </div>
-    <div class="px-5 py-3 border-b border-gray-100">
-        <input type="search" placeholder="Filtrar pessoas…" data-sap-filtro
-               class="w-full sm:w-80 border border-gray-200 rounded-lg px-3 py-1.5 text-sm">
-        <span class="text-xs text-gray-500 ml-2" data-sap-contagem>{{ com_estoque|length }} liberado(s)</span>
-    </div>
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 px-5 py-3 max-h-[24rem] overflow-y-auto">
-        {% for p in pessoas_estoque %}
-        <label class="flex items-center gap-2 py-1.5 text-sm cursor-pointer min-w-0" data-nome="{{ p.full_name|lower }} {{ p.sector.name|default:''|lower }}">
-            <input type="checkbox" name="estoque" value="{{ p.id }}" {% if p.id in com_estoque %}checked{% endif %} class="rounded border-gray-300 text-sky-600">
-            <span class="text-gray-800">{{ p.full_name }}</span>
-            <span class="text-[11px] text-gray-400 truncate">{{ p.get_hierarchy_display|default:p.hierarchy }}{% if p.sector %} · {{ p.sector.name }}{% endif %}</span>
-        </label>
-        {% endfor %}
-    </div>
-</form>
+</div>
 
 <form method="post" class="sap-card overflow-hidden" data-sap-lista="gestores">
     {% csrf_token %}

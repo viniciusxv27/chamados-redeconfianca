@@ -49,16 +49,13 @@ CHAVE_ESTOQUE = 'sap.estoque'
 
 
 def pode_ver_estoque(user):
-    """Abre /sap/estoque/: quem vê a Visão SAP, ou quem o SUPERADMIN liberou só para o estoque (25/11/2026).
+    """Abre /sap/estoque/: todo mundo logado (24/11/2026, "deixar liberado pra todos").
 
-    Estoque não tem cliente nem documento — por isso dá para liberar sem abrir a auditoria.
+    Estoque não tem cliente nem documento — saldo, serial e preço servem a qualquer
+    loja. Antes era quem via a Visão SAP mais uma lista do SUPERADMIN (sap.estoque);
+    as liberações antigas ficam no banco sem efeito.
     """
-    if not user or not getattr(user, 'is_authenticated', False):
-        return False
-    if pode_ver(user):
-        return True
-    from users.module_access import user_has_module
-    return user_has_module(user, CHAVE_ESTOQUE)
+    return bool(user and getattr(user, 'is_authenticated', False) and getattr(user, 'is_active', True))
 
 
 def so_estoque(user):

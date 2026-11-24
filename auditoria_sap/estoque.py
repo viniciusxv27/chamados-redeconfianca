@@ -353,6 +353,95 @@ def _ler_vendas(hoje):
     return vendas, nomes
 
 
+# ---------------------------------------------------------------------------
+# Categoria automática (24/11/2026): "deve capturar outras categorias
+# automaticamente, está muito Sem Categoria" e "SIM Card deve ir para Outros".
+# O que não está em produtos_nome_comercial (chip, aparelho recém-chegado...) ganha
+# a categoria pela descrição do SAP: primeiro as regras abaixo (a primeira que
+# bate vale — por isso capa/película vêm antes de smartphone), depois o que os
+# produtos parecidos do catálogo dizem (mesmas primeiras palavras da descrição).
+# SIM Card vai para Outros sempre, mesmo que o catálogo diga outra coisa.
+# ---------------------------------------------------------------------------
+SIM_CARD = ('sim card', 'simcard', 'chip ', 'e-sim', 'esim ', 'cartao rec')
+REGRAS_DE_CATEGORIA = (
+    ('Outros', 'Chip', SIM_CARD),
+    ('Essenciais', '', ('capa ', 'capinha', 'pelicula', 'cabo ', 'carregador', 'fonte ', 'adaptador', 'suporte ',
+                        'protetor', 'power bank', 'powerbank', 'bateria portatil', 'carreg ')),
+    ('Bem Estar', '', ('watch', 'relogio', 'smartband', 'massag', 'balanca', 'escova ')),
+    ('Notebook e Tablets', '', (' tab ', 'tablet', 'ipad', 'notebook', 'macbook', 'chromebook')),
+    ('Games', '', ('dualsense', 'controle', 'console', 'playstation', ' ps5', 'xbox', 'nintendo', 'joystick')),
+    ('Áudio', '', ('fone', 'headphone', 'headset', 'earbud', 'airpods', 'caixa de som', 'caixa som', 'soundbar',
+                   'speaker')),
+    ('TV', '', (' tv ', 'smart tv', 'televis')),
+    ('Box e Modem e FWT', '', ('modem', 'roteador', 'fwt', 'repetidor')),
+    ('Casa Inteligente', '', ('lampada', 'tomada', 'alexa', 'echo ', 'fechadura', 'camera de seguranca')),
+    ('Smartphone', 'Smartphone', ('smartphone', 'iphone', 'galaxy', 'moto g', 'motorola', 'redmi', 'xiaomi',
+                                  'celular', 'poco ')),
+)
+APRENDER_MINIMO = 3          # produtos parecidos no catálogo para valer
+APRENDER_PARCELA = 0.7       # e a categoria tem que ser a de 70% deles
+
+
+def e_sim_card(texto):
+    alvo = f' {_sem_acento(texto)} '
+    return any(chave in alvo for chave in SIM_CARD)
+
+
+def _primeiras(texto, n):
+    palavras = re.findall(r'[a-z0-9]+', _sem_acento(texto))
+    return ' '.join(palavras[:n]) if len(palavras) >= n else ''
+
+
+def categorias_automaticas(catalogo, descricoes, nomes_vendas, materiais):
+    """{material: (categoria, subcategoria)} para quem não tem categoria no catálogo e para todo SIM Card."""
+    oficiais = {_chave_nome(c['categoria']): c['categoria'] for c in catalogo.values() if c.get('categoria')}
+
+    def oficial(nome):
+        return oficiais.get(_chave_nome(nome), nome)
+
+    # O que o catálogo ensina: primeiras palavras da descrição do SAP → categorias.
+    licoes = {}
+    for material, c in catalogo.items():
+        if not c.get('categoria'):
+            continue
+        for n in (3, 2):
+            chave = _primeiras(descricoes.get(material, ''), n)
+            if chave:
+                licoes.setdefault(chave, {}).setdefault(c['categoria'], 0)
+                licoes[chave][c['categoria']] += 1
+
+    def aprendida(descricao):
+        for n in (3, 2):
+            votos = licoes.get(_primeiras(descricao, n))
+            if votos:
+                total = sum(votos.values())
+                categoria, qtd = max(votos.items(), key=lambda par: par[1])
+                if total >= APRENDER_MINIMO and qtd / total >= APRENDER_PARCELA:
+                    return categoria
+        return ''
+
+    saida = {}
+    for material in materiais:
+        c = catalogo.get(material) or {}
+        descricao = descricoes.get(material, '')
+        nome = c.get('nome_comercial') or nomes_vendas.get(material, '')
+        texto = f' {_sem_acento(nome)} {_sem_acento(descricao)} '
+        if any(chave in texto for chave in SIM_CARD):
+            saida[material] = (oficial('Outros'), c.get('subcategoria') or 'Chip')
+            continue
+        if c.get('categoria'):
+            continue
+        for categoria, sub, chaves in REGRAS_DE_CATEGORIA:
+            if any(chave in texto for chave in chaves):
+                saida[material] = (oficial(categoria), sub)
+                break
+        else:
+            achada = aprendida(descricao) or aprendida(nome)
+            if achada:
+                saida[material] = (achada, '')
+    return saida
+
+
 _MEMORIA = {}
 
 
@@ -360,7 +449,7 @@ def fotografia(forcar=False):
     """O estoque da última carga, pronto para a tela. Levanta ``mysql.SapIndisponivel``."""
     iq09, mb52 = ultimas_cargas()
     hoje = timezone.localdate()
-    chave = f'sap_estoque:foto:v3:{iq09}:{mb52}:{hoje.isoformat()}'
+    chave = f'sap_estoque:foto:v4:{iq09}:{mb52}:{hoje.isoformat()}'
     if not forcar and _MEMORIA.get('chave') == chave:
         return _MEMORIA['foto']
     foto = None
@@ -387,11 +476,15 @@ def fotografia(forcar=False):
         except mysql.SapIndisponivel:
             logger.warning('Estoque SAP: descontos do Renova não lidos', exc_info=True)
             renova = {}
+        descricoes = {**desc_iq09, **desc_mb52}
+        materiais = ({m for (_c, m) in saldos} | {m for (_c, m) in transito} | {u[0] for u in unidades}
+                     | set(catalogo))
+        categoria_auto = categorias_automaticas(catalogo, descricoes, nomes_vendas, materiais)
         foto = {
-            'iq09': iq09, 'mb52': mb52, 'renova': renova,
+            'iq09': iq09, 'mb52': mb52, 'renova': renova, 'categoria_auto': categoria_auto,
             'quando_iq09': _data_da_carga(iq09), 'quando_mb52': _data_da_carga(mb52),
             'saldos': saldos, 'transito': transito, 'unidades': unidades,
-            'descricoes': {**desc_iq09, **desc_mb52}, 'nomes_sap': nomes_sap,
+            'descricoes': descricoes, 'nomes_sap': nomes_sap,
             'catalogo': catalogo, 'vendas': vendas, 'nomes_vendas': nomes_vendas, 'hoje': hoje,
         }
         try:
@@ -432,12 +525,14 @@ def produto(foto, material):
     descricao = foto['descricoes'].get(material, '')
     nome = (cat.get('nome_comercial') or (foto.get('nomes_vendas') or {}).get(material)
             or descricao.title() or material)
+    auto = (foto.get('categoria_auto') or {}).get(material)
     return {
         'material': material,
         'nome': nome,
         'cor': cat.get('cor', ''),
-        'categoria': cat.get('categoria', '') or 'Sem categoria',
-        'subcategoria': cat.get('subcategoria', ''),
+        'categoria': (auto[0] if auto else cat.get('categoria', '')) or 'Sem categoria',
+        'subcategoria': (auto[1] if auto and auto[1] else cat.get('subcategoria', '')),
+        'categoria_auto': bool(auto) and not cat.get('categoria'),
         'fabricante': cat.get('fabricante', ''),
         'gama': cat.get('gama', ''),
         'descricao_sap': descricao,
@@ -633,6 +728,8 @@ def catalogo(foto, busca='', categoria='', fabricante=''):
 def categorias(foto):
     """As categorias do filtro, uma de cada (o catálogo já vem padronizado); "Sem categoria" no fim."""
     nomes = {c.get('categoria') for c in foto['catalogo'].values() if c.get('categoria')}
+    nomes |= {cat for cat, _sub in (foto.get('categoria_auto') or {}).values() if cat}
+    nomes.discard('Sem categoria')
     return sorted(nomes, key=_sem_acento) + ['Sem categoria']
 
 

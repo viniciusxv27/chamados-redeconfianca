@@ -21,7 +21,7 @@ from .models import (GRUPOS_DA_TELA, LIMITE_VALOR_DESPREZIVEL, TIPO_NAO_LANCADA_
                      q_valor_desprezivel)
 from .mysql import SapIndisponivel
 from .permissions import e_gestor as _e_gestor
-from .permissions import (CHAVE_ACESSO, CHAVE_ESTOQUE, CHAVE_GESTOR, gestores_escolhidos, lojas_visiveis, nome_da_loja, normalizar_loja,
+from .permissions import (CHAVE_ACESSO, CHAVE_GESTOR, gestores_escolhidos, lojas_visiveis, nome_da_loja, normalizar_loja,
                           pode_escolher_gestores)
 from .permissions import pode_ver as _pode_ver
 
@@ -589,8 +589,8 @@ def gestores(request):
         messages.success(request, f'Leitura automática do SAP a cada {agenda.intervalo_horas} h.' if agenda.ativo
                          else 'Leitura automática do SAP desligada: só pelo botão "Atualizar do SAP".')
         return redirect('auditoria_sap:gestores')
-    # O SUPERADMIN libera pessoa a pessoa: a Visão SAP inteira (24/11/2026) ou só o estoque (25/11/2026).
-    LIBERACOES = {'acessos': (CHAVE_ACESSO, 'Acesso à Visão SAP'), 'estoque': (CHAVE_ESTOQUE, 'Acesso só ao estoque SAP')}
+    # O SUPERADMIN libera pessoa a pessoa a Visão SAP inteira (24/11/2026). O estoque é de todos desde 24/11/2026.
+    LIBERACOES = {'acessos': (CHAVE_ACESSO, 'Acesso à Visão SAP')}
 
     def liberados(chave):
         return set(UserModuleAccess.objects.filter(module_key=chave, user__is_active=True)
@@ -618,7 +618,6 @@ def gestores(request):
         messages.success(request, f'{rotulo} salvo: {len(escolhidos)} pessoa(s) liberada(s).')
         return redirect('auditoria_sap:gestores')
     com_acesso = liberados(CHAVE_ACESSO)
-    com_estoque = liberados(CHAVE_ESTOQUE)
     atuais = set(gestores_escolhidos().values_list('pk', flat=True))
     if request.method == 'POST':
         escolhidos = {int(i) for i in request.POST.getlist('gestores') if str(i).isdigit()}
@@ -641,12 +640,10 @@ def gestores(request):
         return redirect('auditoria_sap:gestores')
     pessoas = list(User.objects.filter(is_active=True).select_related('sector').order_by('first_name', 'last_name'))
     pessoas_acesso = sorted(pessoas, key=lambda u: (u.pk not in com_acesso, (u.first_name or '').upper()))
-    pessoas_estoque = sorted(pessoas, key=lambda u: (u.pk not in com_estoque, (u.first_name or '').upper()))
     pessoas.sort(key=lambda u: (u.pk not in atuais, (u.first_name or '').upper()))
     return render(request, 'auditoria_sap/gestores.html', {
         'pessoas': pessoas, 'atuais': atuais, 'aba': 'gestores',
         'pessoas_acesso': pessoas_acesso, 'com_acesso': com_acesso,
-        'pessoas_estoque': pessoas_estoque, 'com_estoque': com_estoque,
         'agenda': agenda, 'proxima': proxima_leitura(agenda),
         'pode_escolher_gestores': True, 'e_gestor': True, 'ultima': ultima_sincronizacao(),
     })
