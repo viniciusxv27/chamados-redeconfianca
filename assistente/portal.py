@@ -239,8 +239,12 @@ def caminho_seguro(caminho):
     return path, dict(parse_qsl(partes.query, keep_blank_values=True)), None
 
 
-def ler_pagina(user, caminho, parte=1):
-    """Abre a página como a pessoa e devolve o texto (ou o JSON) dela, em partes."""
+def ler_pagina(user, caminho, parte=1, com_traceback=False):
+    """Abre a página como a pessoa e devolve o texto (ou o JSON) dela, em partes.
+
+    ``com_traceback``: quando a página quebra, devolve também o rastro do erro (usado pela
+    análise de bugs em /bugs/, para o Claude ver onde o código falhou).
+    """
     from django.contrib.sessions.backends.signed_cookies import SessionStore
     from django.core.exceptions import PermissionDenied
     from django.http import Http404, StreamingHttpResponse, FileResponse
@@ -279,7 +283,11 @@ def ler_pagina(user, caminho, parte=1):
         return {'erro': 'Você não tem acesso a esta página.'}
     except Exception as exc:                                    # noqa: BLE001
         logger.exception('Assistente: página %s falhou ao abrir', path)
-        return {'erro': f'A página não abriu ({type(exc).__name__}).'}
+        saida = {'erro': f'A página não abriu ({type(exc).__name__}).'}
+        if com_traceback:
+            import traceback
+            saida['traceback'] = traceback.format_exc()[-8000:]
+        return saida
 
     avisos = [str(m.message) for m in request._messages]
     if isinstance(resposta, (StreamingHttpResponse, FileResponse)):

@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% comment %}/bugs/configurar/ — só SUPERADMIN: token e repositório do GitHub onde a correção aprovada vira commit.{% endcomment %}
+{% block title %}Bugs · GitHub{% endblock %}
+{% block extra_css %}{% include 'bugs/_estilo.html' %}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
+    <a href="{% url 'bugs:lista' %}" class="bg-sub inline-flex items-center gap-1 mb-3 hover:text-orange-600"><i class="fas fa-arrow-left"></i>Bugs</a>
+    <form method="post" class="bg-card p-5 sm:p-6 space-y-4">
+        {% csrf_token %}
+        <h1 class="text-xl font-extrabold flex items-center gap-2"><i class="fab fa-github"></i>Publicação no GitHub</h1>
+        <p class="bg-sub">Quando você aprova uma correção, o portal faz um commit direto na branch abaixo (commit + push num passo só, pela API do GitHub). Use um token <em>fine-grained</em> só deste repositório, com permissão <strong>Contents: Read and write</strong>.</p>
+        <div>
+            <label class="bg-rotulo" for="tk">Token do GitHub</label>
+            <input class="bg-campo" id="tk" name="token" type="password" autocomplete="off"
+                   placeholder="{% if cfg.token_hint %}Guardado (termina em {{ cfg.token_hint }}) — deixe vazio para manter{% elif token_do_ambiente %}Usando o token do ambiente do servidor{% else %}github_pat_…{% endif %}">
+            <p class="bg-sub mt-1">Fica cifrado no banco e nunca volta para a tela.</p>
+        </div>
+        <div class="grid sm:grid-cols-3 gap-3">
+            <div class="sm:col-span-2">
+                <label class="bg-rotulo" for="rp">Repositório (dono/nome)</label>
+                <input class="bg-campo" id="rp" name="repositorio" value="{{ cfg.repositorio }}" placeholder="{{ repo_efetivo|default:'dono/repositorio' }}">
+            </div>
+            <div>
+                <label class="bg-rotulo" for="br">Branch</label>
+                <input class="bg-campo" id="br" name="branch" value="{{ cfg.branch|default:'main' }}">
+            </div>
+        </div>
+        <p class="bg-sub">Valendo agora: <strong>{{ repo_efetivo|default:"(sem repositório)" }}</strong> · branch <strong>{{ branch_efetiva }}</strong> · token {% if tem_token %}<strong class="text-green-700">configurado</strong>{% else %}<strong class="text-red-700">ausente</strong>{% endif %}</p>
+        <div class="flex flex-wrap gap-2">
+            <button class="bg-botao" name="acao" value="salvar"><i class="fas fa-floppy-disk"></i>Salvar</button>
+            <button class="bg-botao-sec" name="acao" value="testar"><i class="fas fa-plug"></i>Salvar e testar</button>
+            {% if cfg.token_hint %}<button class="bg-botao-sec bg-botao-perigo ml-auto" name="acao" value="remover_token" onclick="return confirm('Remover o token guardado?')"><i class="fas fa-trash"></i>Remover token</button>{% endif %}
+        </div>
+        {% if cfg.atualizado_em %}<p class="bg-sub">Alterado por {{ cfg.atualizado_por.get_full_name }} em {{ cfg.atualizado_em|date:"d/m/Y H:i" }}.</p>{% endif %}
+    </form>
+</div>
+{% endblock %}

@@ -158,6 +158,7 @@ urlpatterns = [
     path('uniformes/', include('uniformes.urls')),  # Uniformes (SUPERADMIN + liberados)
     path('gestao-metas/', include('gestao_metas.urls')),  # Gerenciamento de metas (SUPERADMIN + liberados)
     path('facilitador/', include('facilitador.urls')),  # Facilitador: arquivos e links úteis
+    path('bugs/', include('bugs.urls')),  # Bugs: relato → correção do Claude → aprovação do SUPERADMIN → GitHub
     path('ponto/', include('solicitacoes_dp.urls')),  # Solicitações ao DP: ajuste de ponto, atestados, declarações
     path('', include('tangerino.urls')),  # Ponto e Férias (integração Tangerino)
     path('reports/', include('core.reports_urls')),  # Sistema de denúncias

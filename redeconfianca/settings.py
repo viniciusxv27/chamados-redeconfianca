@@ -104,6 +104,7 @@ INSTALLED_APPS = [
     'facilitador',  # Facilitador: arquivos e links úteis (todos veem; SUPERADMIN gerencia)
     'uniformes',  # Uniformes: estoque, retiradas e devoluções (SUPERADMIN + liberados)
     'gestao_metas',  # Gerenciamento de metas: meta do mês por loja e pilar (SUPERADMIN + liberados)
+    'bugs',  # Bugs: colaborador relata, o Claude corrige e testa, SUPERADMIN aprova e publica (commit + push)
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 

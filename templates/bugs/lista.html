@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% comment %}
+/bugs/ — relatar bug e acompanhar (24/11/2026). Qualquer pessoa logada relata e vê os seus;
+o SUPERADMIN vê todos, com o filtro "Para aprovar" na frente. Formulário aceita print colado (Ctrl+V).
+{% endcomment %}
+{% block title %}Bugs{% endblock %}
+{% block extra_css %}{% include 'bugs/_estilo.html' %}{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
+
+    <section class="rc-hero rc-surge relative overflow-hidden rounded-3xl text-white shadow-lg mb-5">
+        <span class="rc-forma rc-forma-1" aria-hidden="true"></span>
+        <span class="rc-forma rc-forma-2" aria-hidden="true"></span>
+        <div class="relative p-5 sm:p-7 flex flex-col lg:flex-row lg:items-center gap-5">
+            <div class="flex items-center gap-4 flex-1 min-w-0">
+                <div class="rc-hero-avatar w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center flex-shrink-0">
+                    <i class="fas fa-bug text-2xl sm:text-3xl"></i>
+                </div>
+                <div class="min-w-0">
+                    <h1 class="text-2xl sm:text-3xl font-extrabold leading-tight">Bugs do portal</h1>
+                    <p class="rc-hero-suave text-sm mt-0.5">Conte onde deu problema. O Claude acha a causa, corrige, testa e {% if superadmin %}manda para a sua aprovação{% else %}o SUPERADMIN aprova{% endif %}.</p>
+                </div>
+            </div>
+            <div class="grid grid-cols-3 gap-2 sm:gap-3 lg:w-[26rem]">
+                <div class="bg-stat rc-vidro"><strong>{{ contagem.andamento }}</strong><span>Em análise</span></div>
+                <div class="bg-stat rc-vidro"><strong>{{ contagem.aprovar }}</strong><span>{% if superadmin %}Para aprovar{% else %}Aguardando{% endif %}</span></div>
+                <div class="bg-stat rc-vidro"><strong>{{ contagem.publicados }}</strong><span>Corrigidos</span></div>
+            </div>
+        </div>
+    </section>
+
+    {% if superadmin and not config_ok %}
+    <div class="bg-card p-4 mb-4 flex flex-wrap items-center gap-3" style="border-color:#FDBA74">
+        <i class="fab fa-github text-2xl text-orange-500"></i>
+        <p class="text-sm flex-1 min-w-[12rem]">Para publicar as correções aprovadas (commit + push), configure o token e o repositório do GitHub.</p>
+        <a href="{% url 'bugs:configurar' %}" class="bg-botao-sec"><i class="fas fa-gear"></i>Configurar</a>
+    </div>
+    {% endif %}
+
+    <div class="grid lg:grid-cols-5 gap-5 items-start">
+        {# ------------------------------------------------ relatar #}
+        <form method="post" action="{% url 'bugs:relatar' %}" enctype="multipart/form-data" class="bg-card p-5 lg:col-span-2 space-y-4" id="bg-form">
+            {% csrf_token %}
+            <h2 class="text-lg font-extrabold flex items-center gap-2"><i class="fas fa-paper-plane text-orange-500"></i>Relatar um bug</h2>
+            <div>
+                <label class="bg-rotulo" for="bg-url">Endereço da página (URL)</label>
+                <input class="bg-campo" id="bg-url" name="url" required maxlength="500" placeholder="Ex.: /tickets/123/ ou o link completo" value="{{ url_inicial }}">
+            </div>
+            <div>
+                <label class="bg-rotulo" for="bg-desc">O que aconteceu?</label>
+                <textarea class="bg-campo" id="bg-desc" name="descricao" required minlength="10" rows="6"
+                          placeholder="O que você fez, o que esperava e o que apareceu (mensagem de erro, botão que não funciona, número errado...)"></textarea>
+            </div>
+            <div>
+                <span class="bg-rotulo">Print da tela (opcional)</span>
+                <label class="bg-cola block" id="bg-cola" tabindex="0">
+                    <i class="fas fa-image mr-1"></i>Clique para escolher ou <strong>cole com Ctrl+V</strong>
+                    <input type="file" name="print_tela" id="bg-print" accept="image/*" class="hidden">
+                    <img id="bg-previa" alt="" hidden>
+                </label>
+            </div>
+            <button class="bg-botao w-full" {% if not pode_relatar %}disabled title="Limite de relatos de hoje atingido"{% endif %}>
+                <i class="fas fa-robot"></i>Enviar para o Claude analisar
+            </button>
+            <p class="bg-sub">Nenhuma mudança vai para o ar sem a aprovação do SUPERADMIN.</p>
+        </form>
+
+        {# ------------------------------------------------ lista #}
+        <div class="lg:col-span-3 min-w-0">
+            <div class="flex flex-wrap items-center gap-2 mb-3">
+                <nav class="bg-seg">
+                    <a href="?f=todos" class="{% if filtro == 'todos' %}on{% endif %}">Todos</a>
+                    <a href="?f=abertos" class="{% if filtro == 'abertos' %}on{% endif %}">Abertos</a>
+                    {% if superadmin %}<a href="?f=aprovar" class="{% if filtro == 'aprovar' %}on{% endif %}">Para aprovar{% if contagem.aprovar %} ({{ contagem.aprovar }}){% endif %}</a>{% endif %}
+                    <a href="?f=publicados" class="{% if filtro == 'publicados' %}on{% endif %}">Corrigidos</a>
+                    <a href="?f=encerrados" class="{% if filtro == 'encerrados' %}on{% endif %}">Encerrados</a>
+                </nav>
+                {% if superadmin %}<a href="{% url 'bugs:configurar' %}" class="bg-botao-sec ml-auto" title="GitHub"><i class="fab fa-github"></i><span class="hidden sm:inline">GitHub</span></a>{% endif %}
+            </div>
+            <div class="bg-card overflow-hidden">
+                {% for r in pagina %}
+                <a href="{% url 'bugs:detalhe' r.pk %}" class="bg-item">
+                    <span class="bg-icone"><i class="fas {% if r.status == 'publicado' %}fa-check{% elif r.status == 'analisando' or r.status == 'publicando' %}fa-spinner bg-gira{% else %}fa-bug{% endif %}"></i></span>
+                    <span class="flex-1 min-w-0">
+                        <span class="flex flex-wrap items-center gap-2">
+                            <strong class="text-sm">#{{ r.pk }} {{ r.titulo|default:r.descricao|truncatechars:80 }}</strong>
+                            <span class="bg-chip bg-st-{{ r.status }}">{{ r.get_status_display }}</span>
+                        </span>
+                        <span class="bg-sub block mt-1"><i class="fas fa-link mr-1"></i>{{ r.url|truncatechars:70 }}</span>
+                        <span class="bg-sub block">{% if superadmin %}{{ r.autor.get_full_name|default:r.autor.email }} · {% endif %}{{ r.criado_em|date:"d/m/Y H:i" }}</span>
+                    </span>
+                </a>
+                {% empty %}
+                <div class="p-8 text-center bg-sub"><i class="fas fa-mug-hot text-3xl mb-2 block text-orange-300"></i>Nenhum bug por aqui.</div>
+                {% endfor %}
+            </div>
+            {% if pagina.has_other_pages %}
+            <div class="flex justify-center gap-2 mt-3">
+                {% if pagina.has_previous %}<a class="bg-botao-sec" href="?f={{ filtro }}&p={{ pagina.previous_page_number }}"><i class="fas fa-chevron-left"></i></a>{% endif %}
+                <span class="bg-sub self-center">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+                {% if pagina.has_next %}<a class="bg-botao-sec" href="?f={{ filtro }}&p={{ pagina.next_page_number }}"><i class="fas fa-chevron-right"></i></a>{% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var input = document.getElementById('bg-print'), previa = document.getElementById('bg-previa'), cola = document.getElementById('bg-cola');
+    function mostrar(arquivo) {
+        if (!arquivo) { previa.hidden = true; return; }
+        previa.src = URL.createObjectURL(arquivo);
+        previa.hidden = false;
+    }
+    input.addEventListener('change', function () { mostrar(input.files[0]); });
+    document.addEventListener('paste', function (ev) {
+        var itens = (ev.clipboardData && ev.clipboardData.items) || [];
+        for (var i = 0; i < itens.length; i++) {
+            if (itens[i].type && itens[i].type.indexOf('image/') === 0) {
+                var arq = itens[i].getAsFile();
+                if (!arq || typeof DataTransfer === 'undefined') return;
+                var dt = new DataTransfer();
+                dt.items.add(new File([arq], 'print.png', {type: arq.type}));
+                input.files = dt.files;
+                mostrar(input.files[0]);
+                cola.classList.add('on');
+                ev.preventDefault();
+                return;
+            }
+        }
+    });
+    document.getElementById('bg-form').addEventListener('submit', function (ev) {
+        var botao = ev.target.querySelector('button');
+        setTimeout(function () { botao.disabled = true; botao.innerHTML = '<i class="fas fa-spinner bg-gira"></i>Enviando…'; }, 0);
+    });
+})();
+</script>
+{% endblock %}
