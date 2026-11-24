@@ -185,3 +185,23 @@ def ler_vendas_sem_sap(desde):
         "FROM vw_conferencia_vendas_produtos "
         "WHERE ORIGEM_REGISTRO = 'VIVOGO' AND STATUS_LOCALIZACAO = 'NÃO ENCONTRADO NA SAP' "
         "AND DATA_VENDA >= %s", (desde,))
+
+
+def ler_presenca_no_estoque(seriais):
+    """Onde cada serial esteve no estoque SAP (IQ09) e se ainda está (23/11/2026).
+
+    Devolve ``(ultima_carga, {serial: {centro: última carga em que estava ali}})``.
+    A IQ09 guarda todas as cargas; o serial não tem índice, então vai em lotes
+    (~7 s para mil seriais).
+    """
+    seriais = sorted({str(s).upper() for s in seriais if s})
+    ultima = _consultar("SELECT MAX(execucao_id) AS m FROM estoque_iq09")
+    ultima = (ultima[0]['m'] if ultima else '') or ''
+    presenca = {}
+    for i in range(0, len(seriais), 500):
+        parte = seriais[i:i + 500]
+        for r in _consultar(
+                "SELECT UPPER(n_de_serie) AS s, centro, MAX(execucao_id) AS ult FROM estoque_iq09 "
+                "WHERE UPPER(n_de_serie) IN (" + ','.join(['%s'] * len(parte)) + ") GROUP BY 1, 2", parte):
+            presenca.setdefault(r['s'], {})[str(r['centro'] or '').strip().upper()] = r['ult']
+    return ultima, presenca

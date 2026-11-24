@@ -145,12 +145,16 @@ def linhas_nao_lancadas_no_sap(brutas):
             valor = _so_letras_e_numeros(bruta.get(coluna))
             if venda and valor:
                 explicadas.add((venda, campo, valor))
+    itens = list(mysql.ler_vendas_sem_sap(desde))
+    baixados = _baixados_no_estoque(itens)
     linhas = []
-    for item in mysql.ler_vendas_sem_sap(desde):
+    for item in itens:
         venda = _texto(item.get('ID_VENDA'))
         sku = _so_letras_e_numeros(item.get('SKU'))
         seriais = {_so_letras_e_numeros(item.get('IMEI_CONSULTA')), _so_letras_e_numeros(item.get('IMEI_ORIGINAL'))} - {''}
         if (venda, 'sku', sku) in explicadas or any((venda, 'serial', s) in explicadas for s in seriais):
+            continue
+        if id(item) in baixados:
             continue
         valor = _decimal(item.get('RECEITA_VIVOGO'))
         serial = _texto(item.get('IMEI_ORIGINAL')) or _texto(item.get('IMEI_CONSULTA'))
@@ -178,6 +182,57 @@ def linhas_nao_lancadas_no_sap(brutas):
             'ORIGEM': 'vw_conferencia_vendas_produtos',
         })
     return linhas
+
+
+def _variantes_do_serial(item):
+    """Os jeitos do serial aparecer na IQ09: o lido e, no Apple, sem o "S" do código de barras."""
+    variantes = set()
+    for coluna in ('IMEI_ORIGINAL', 'IMEI_CONSULTA'):
+        serial = _so_letras_e_numeros(item.get(coluna))
+        if len(serial) >= 8:
+            variantes.add(serial)
+            if serial.startswith('S') and not serial[1:].isdigit():
+                variantes.add(serial[1:])
+    return variantes
+
+
+def _baixados_no_estoque(itens):
+    """Itens que o SAP já baixou do estoque — vendidos lá, só fora da ZS103 (23/11/2026).
+
+    "Essa venda, SC4H619717TKQ8YQA8, tá vendida certinho, porém aparece que não está
+    lançada no SAP": o carregador estava no estoque livre da Anchieta (IQ09) até a carga
+    de 18/11, foi vendido no Vivo GO em 19/11 e na carga seguinte não estava em loja
+    nenhuma — o SAP deu a saída. Quem não trouxe foi o extrato da ZS103 (o carregador
+    Apple 20W é o caso mais comum: 26 faturas no SAP para 107 vendas em novembro).
+    Medido em 23/11/2026: 101 das 753 linhas da aba eram isso.
+
+    Vale quando o serial esteve no estoque da loja da venda e não está em loja nenhuma
+    na última carga da IQ09. Ainda no estoque (172) ou nunca visto (480) continua na
+    lista. Se a IQ09 não responder, ninguém sai. Devolve o ``id()`` dos itens.
+    """
+    from .estoque import centro_da_loja
+
+    por_item = {id(item): _variantes_do_serial(item) for item in itens}
+    todos = set().union(*por_item.values()) if por_item else set()
+    if not todos:
+        return set()
+    try:
+        ultima, presenca = mysql.ler_presenca_no_estoque(todos)
+    except Exception:                                 # noqa: BLE001 — sem a IQ09, a lista fica como está
+        logger.warning('Auditoria SAP: estoque (IQ09) não lido para conferir as não lançadas', exc_info=True)
+        return set()
+    if not ultima:
+        return set()
+    baixados = set()
+    for item in itens:
+        centro = centro_da_loja(item.get('PDV'))
+        onde = {}
+        for serial in por_item[id(item)]:
+            for c, carga in presenca.get(serial, {}).items():
+                onde[c] = max(onde.get(c, ''), carga)
+        if centro and centro in onde and all(carga < ultima for carga in onde.values()):
+            baixados.add(id(item))
+    return baixados
 
 
 TIPO_NAO_ENCONTRADA_NO_VIVOGO = 'VENDA NÃO ENCONTRADA NO VIVO GO'

@@ -198,6 +198,57 @@ t('a consulta é a da ponte Vivo GO × SAP, só o que o SAP não tem',
   'vw_conferencia_vendas_produtos' in sql and "STATUS_LOCALIZACAO = 'NÃO ENCONTRADO NA SAP'" in sql
   and "ORIGEM_REGISTRO = 'VIVOGO'" in sql and consulta.call_args[0][1] == (DIA,), sql)
 
+print('\n== 1b) O SAP JÁ DEU BAIXA NO ESTOQUE (23/11/2026) ==')
+# "SC4H619717TKQ8YQA8 tá vendido certinho, porém aparece que não está lançado no SAP":
+# o serial estava no estoque da loja (IQ09) e na última carga não está em loja nenhuma.
+itens_baixa = [
+    item_vivogo(ID_VENDA='7100001', PDV='ANCHIETA', IMEI_ORIGINAL='SC4H619717TKQ8YQA8',
+                IMEI_CONSULTA='SC4H619717TKQ8YQA8'),          # Apple: na IQ09 sem o "S"
+    item_vivogo(ID_VENDA='7100002', PDV='ANCHIETA', IMEI_ORIGINAL='35100000000002',
+                IMEI_CONSULTA='35100000000002'),              # ainda no estoque: segue na lista
+    item_vivogo(ID_VENDA='7100003', PDV='ANCHIETA', IMEI_ORIGINAL='35100000000003',
+                IMEI_CONSULTA='35100000000003'),              # nunca esteve na IQ09: segue
+    item_vivogo(ID_VENDA='7100004', PDV='ANCHIETA', IMEI_ORIGINAL='35100000000004',
+                IMEI_CONSULTA='35100000000004'),              # saiu de OUTRA loja: segue
+    item_vivogo(ID_VENDA='7100005', PDV='ANCHIETA', IMEI_ORIGINAL='35100000000005',
+                IMEI_CONSULTA='35100000000005'),              # foi transferido e está em outra loja: segue
+]
+ULTIMA = 'iq09_20261123_175754'
+presenca = {
+    'C4H619717TKQ8YQA8': {'057E': 'iq09_20261118_073720'},
+    '35100000000002': {'057E': ULTIMA},
+    '35100000000004': {'064E': 'iq09_20261118_073720'},
+    '35100000000005': {'057E': 'iq09_20261118_073720', '064E': ULTIMA},
+}
+pedidos_iq09 = []
+
+
+def ler_presenca(seriais):
+    pedidos_iq09.append(set(seriais))
+    return ULTIMA, {s: dict(presenca[s]) for s in seriais if s in presenca}
+
+
+with mock.patch.object(mysql, 'ler_vendas_sem_sap', return_value=[dict(i) for i in itens_baixa]), \
+        mock.patch.object(mysql, 'ler_presenca_no_estoque', side_effect=ler_presenca):
+    montadas_baixa = linhas_nao_lancadas_no_sap(auditoria)
+t('procura o serial Apple também sem o "S"', pedidos_iq09 and 'C4H619717TKQ8YQA8' in pedidos_iq09[0]
+  and 'SC4H619717TKQ8YQA8' in pedidos_iq09[0], pedidos_iq09)
+t('saiu do estoque da loja da venda e não está em loja nenhuma: não é "não lançada"',
+  '7100001' not in {m['ID_VENDA'] for m in montadas_baixa})
+t('ainda no estoque, nunca visto, saiu de outra loja ou transferido: continuam',
+  sorted(m['ID_VENDA'] for m in montadas_baixa) == ['7100002', '7100003', '7100004', '7100005'],
+  [m['ID_VENDA'] for m in montadas_baixa])
+with mock.patch.object(mysql, 'ler_vendas_sem_sap', return_value=[dict(i) for i in itens_baixa]), \
+        mock.patch.object(mysql, 'ler_presenca_no_estoque', side_effect=mysql.SapIndisponivel('IQ09 fora')):
+    montadas_baixa = linhas_nao_lancadas_no_sap(auditoria)
+t('IQ09 fora do ar: ninguém sai da lista', len(montadas_baixa) == 5)
+with mock.patch.object(mysql, '_consultar', side_effect=[[{'m': ULTIMA}], [
+        {'s': 'C4H619717TKQ8YQA8', 'centro': '057E', 'ult': 'iq09_20261118_073720'}]]) as consulta:
+    ultima, achou = mysql.ler_presenca_no_estoque({'c4h619717tkq8yqa8'})
+t('a leitura da IQ09 devolve a última carga e onde o serial esteve', ultima == ULTIMA
+  and achou == {'C4H619717TKQ8YQA8': {'057E': 'iq09_20261118_073720'}}
+  and 'estoque_iq09' in consulta.call_args[0][0], (ultima, achou))
+
 print('\n== 1) O ESPELHO ==')
 with mock.patch.object(mysql, 'ler_visao_geral', return_value=auditoria), \
         mock.patch.object(mysql, 'ler_vendas_sem_sap', side_effect=ler_sem_sap):
