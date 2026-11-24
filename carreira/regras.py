@@ -264,7 +264,7 @@ def _assiduidade(user, perfil, hoje):
 
 
 def _conduta(user, perfil, hoje):
-    base = {'chave': 'conduta', 'titulo': 'Conduta', 'icone': 'fa-shield-heart', 'cor': '#EF4444',
+    base = {'chave': 'conduta', 'titulo': 'Conduta', 'icone': 'fa-user-shield', 'cor': '#EF4444',
             'como': 'Nenhuma advertência escrita nos últimos 3 meses.', 'onde': 'Portal (RH)'}
     ultima = Advertencia.objects.filter(user=user, data__gt=hoje - timedelta(days=JANELA_DIAS)).order_by('-data').first()
     if ultima is None:

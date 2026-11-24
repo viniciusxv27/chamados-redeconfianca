@@ -45,14 +45,14 @@
 </head>
 <body>
 <div class="acoes">
-    <a class="voltar" href="{% if pessoa == request.user %}{% url 'carreira:jornada' %}{% else %}{% url 'carreira:pessoa' pessoa.pk %}{% endif %}">← Voltar ao Progresso</a>
+    <a class="voltar" href="{% if pessoa == request.user %}{% url 'carreira:jornada' %}{% else %}{% url 'carreira:pessoa' pessoa.pk %}{% endif %}">← Voltar ao Plano de Carreira</a>
     <button class="imprimir" type="button" onclick="window.print()">Imprimir / salvar em PDF</button>
 </div>
 <main class="folha" data-certificado="{{ tipo }}">
     <div class="faixa"></div>
     <div class="moldura"></div>
     <div class="conteudo">
-        <p class="marca">Rede Confiança · Progresso</p>
+        <p class="marca">Rede Confiança · Plano de Carreira</p>
         <h1>{% if tipo == 'promocao' %}Certificado de Promoção{% else %}Certificado de Conquista{% endif %}</h1>
         <p class="sub">Conferimos este certificado a</p>
         <p class="nome">{{ pessoa.full_name|title }}</p>

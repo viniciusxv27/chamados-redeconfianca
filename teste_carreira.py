@@ -114,7 +114,9 @@ csa, cana, cbeto, cadm = Client(), Client(), Client(), Client()
 csa.force_login(sa); cana.force_login(ana); cbeto.force_login(beto); cadm.force_login(adm)
 
 print('Quem vê')
-t('SUPERADMIN vê o menu', 'Progresso' in csa.get('/').content.decode() and regras.pode_ver_modulo(sa))
+h_menu = csa.get('/').content.decode()
+t('SUPERADMIN vê o menu "Plano de Carreira" (24/11/2026)', '>Plano de Carreira</span>' in h_menu
+  and '>Progresso</span>' not in h_menu and regras.pode_ver_modulo(sa))
 r = csa.get('/progresso/')
 t('SUPERADMIN abre direto no painel', r.status_code == 302 and r['Location'].endswith('/progresso/painel/'))
 t('consultor não vê antes de liberar', cana.get('/progresso/').status_code == 302 and not regras.pode_ver_modulo(ana))
@@ -162,6 +164,7 @@ t('formação aguarda o SUPERADMIN escolher as trilhas', req['formacao']['situac
 t('não há mais etapa de loja apta', 'loja' not in req)
 # a tela do consultor
 h = cana.get('/progresso/').content.decode()
+t('Conduta com ícone que existe no Font Awesome 6.0', 'fa-user-shield' in h and 'fa-shield-heart' not in h)
 t('a tela mostra os 7 com situação e barra (sem Etapa 8)', h.count('data-requisito=') == 7 and 'Etapa 8' not in h
   and 'Loja apta' not in h and '7 requisitos' in h and 'pg-barra' in h and 'data-anel' in h
   and 'Aguardando dado' in h and 'Conquistado' in h)

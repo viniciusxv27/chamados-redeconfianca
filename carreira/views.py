@@ -22,7 +22,7 @@ User = get_user_model()
 def _so_superadmin(request):
     if regras.e_superadmin(request.user):
         return None
-    messages.error(request, 'Só o SUPERADMIN mexe no Progresso.')
+    messages.error(request, 'Só o SUPERADMIN mexe no Plano de Carreira.')
     return redirect('carreira:jornada')
 
 
@@ -61,7 +61,7 @@ def _decimal(texto, minimo=None, maximo=None):
 def jornada(request):
     user = request.user
     if not regras.pode_ver_modulo(user):
-        messages.error(request, 'O Progresso ainda não está liberado para você.')
+        messages.error(request, 'O Plano de Carreira ainda não está liberado para você.')
         return redirect('home')
     if regras.e_superadmin(user) and not regras.e_do_comercial(user):
         return redirect('carreira:painel')
@@ -131,8 +131,8 @@ def liberar(request):
     config.save()
     from django.core.cache import cache
     cache.delete(regras.CHAVE_LIBERADO)
-    messages.success(request, 'Progresso liberado para o comercial: os consultores já veem a jornada no menu.'
-                     if config.liberado else 'Progresso escondido: só o SUPERADMIN vê.')
+    messages.success(request, 'Plano de Carreira liberado para o comercial: os consultores já veem a jornada no menu.'
+                     if config.liberado else 'Plano de Carreira escondido: só o SUPERADMIN vê.')
     return redirect('carreira:painel')
 
 
@@ -286,7 +286,7 @@ def decidir(request, pedido_id):
             perfil.atualizado_por = request.user
             perfil.save()
             regras.avisar_pessoa(pedido.user, 'Parabéns, você é Consultor Pleno! 🎉',
-                                 f'{nome}, sua promoção a Pleno foi aprovada. Seu certificado já está no Progresso.')
+                                 f'{nome}, sua promoção a Pleno foi aprovada. Seu certificado já está no Plano de Carreira.')
             messages.success(request, f'{pedido.user.full_name} promovido a Pleno. Lembre de atualizar o cargo no cadastro.')
         else:
             regras.avisar_pessoa(pedido.user, 'Sua jornada até Pleno',

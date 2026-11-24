@@ -561,13 +561,13 @@
                         </li>
                         {% endif %}
                         {% if carreira_liberado %}
-                        {% comment %}Progresso (plano de carreira até Pleno): SUPERADMIN sempre; o comercial depois que ele libera.{% endcomment %}
+                        {% comment %}Plano de Carreira (/progresso/, até Pleno; o menu dizia "Progresso" até 24/11/2026): SUPERADMIN sempre; o comercial depois que ele libera.{% endcomment %}
                         <li>
                             <a href="{% url 'carreira:jornada' %}" data-rota="{% url 'carreira:jornada' %}"
                                class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
                                 <i class="fas fa-trophy text-fuchsia-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm">Progresso</span>
-                                <div class="tooltip-collapsed">Progresso</div>
+                                <span class="text-sm">Plano de Carreira</span>
+                                <div class="tooltip-collapsed">Plano de Carreira</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-fuchsia-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>

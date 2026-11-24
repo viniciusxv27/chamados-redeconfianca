@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Progresso · {{ pessoa.first_name|default:pessoa.full_name }}{% endblock %}
+{% block title %}Plano de Carreira · {{ pessoa.first_name|default:pessoa.full_name }}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -112,7 +112,7 @@
                 <div class="flex items-center gap-4">
                     <div class="pg-avatar">{{ pessoa.first_name|slice:":1"|upper }}{{ pessoa.last_name|slice:":1"|upper }}</div>
                     <div class="min-w-0">
-                        <p class="text-xs uppercase tracking-widest opacity-80 font-semibold">Progresso · plano de carreira</p>
+                        <p class="text-xs uppercase tracking-widest opacity-80 font-semibold">Plano de Carreira</p>
                         <h1 class="text-2xl sm:text-3xl font-extrabold leading-tight truncate">{% if eu_mesmo %}Olá, {{ pessoa.first_name|title }}!{% else %}{{ pessoa.full_name }}{% endif %}</h1>
                         <p class="text-sm opacity-90">{% if pessoa.sector %}{{ pessoa.sector.name }} · {% endif %}{{ pessoa.job_title|default:"Consultor"|title }}</p>
                     </div>

@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Progresso · Painel{% endblock %}
+{% block title %}Plano de Carreira · Painel{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -28,7 +28,7 @@
 <div class="max-w-7xl mx-auto space-y-6" data-painel-progresso>
     <section class="pp-topo p-5 sm:p-7 flex flex-col lg:flex-row lg:items-center gap-5">
         <div class="flex-1 min-w-0">
-            <p class="text-xs uppercase tracking-widest opacity-80 font-semibold">Progresso · plano de carreira</p>
+            <p class="text-xs uppercase tracking-widest opacity-80 font-semibold">Plano de Carreira</p>
             <h1 class="text-2xl sm:text-3xl font-extrabold">O caminho do consultor até Pleno</h1>
             <p class="text-sm opacity-90 mt-1 max-w-2xl">Cada consultor do comercial vê os requisitos e o que falta. Quem cumpre todos cai aqui para você decidir a promoção.</p>
         </div>
@@ -37,10 +37,10 @@
             <input type="hidden" name="liberado" value="{% if config.liberado %}0{% else %}1{% endif %}">
             <div class="text-sm">
                 <p class="font-bold">{% if config.liberado %}Liberado para o comercial{% else %}Só o SUPERADMIN vê{% endif %}</p>
-                <p class="text-xs opacity-80">{% if config.liberado %}Os consultores veem "Progresso" no menu.{% else %}Libere quando quiser mostrar aos consultores.{% endif %}</p>
+                <p class="text-xs opacity-80">{% if config.liberado %}Os consultores veem "Plano de Carreira" no menu.{% else %}Libere quando quiser mostrar aos consultores.{% endif %}</p>
             </div>
             <button type="submit" class="pp-chave {% if config.liberado %}ligada{% endif %}" title="{% if config.liberado %}Esconder do comercial{% else %}Liberar para o comercial{% endif %}"
-                    onclick="return confirm('{% if config.liberado %}Esconder o Progresso dos consultores?{% else %}Liberar o Progresso para todo o comercial?{% endif %}')"><span class="sr-only">Alternar</span></button>
+                    onclick="return confirm('{% if config.liberado %}Esconder o Plano de Carreira dos consultores?{% else %}Liberar o Plano de Carreira para todo o comercial?{% endif %}')"><span class="sr-only">Alternar</span></button>
         </form>
     </section>
 
