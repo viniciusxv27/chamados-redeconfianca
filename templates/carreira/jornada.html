@@ -192,7 +192,7 @@
             <div class="pg-trilha {% if modo_superadmin %}pg-trilha-simples{% endif %} space-y-5 lg:space-y-6">
                 {% for r in requisitos %}
                 <article class="pg-estacao {{ r.situacao }} {% cycle 'esquerda' 'direita' %}" style="--c:{{ r.cor }}" data-requisito="{{ r.chave }}" data-situacao="{{ r.situacao }}">
-                    <div class="pg-no {% if r.situacao == 'ok' %}pg-brilho{% endif %}" title="{{ r.titulo }}"><i class="fas {{ r.icone }}"></i></div>
+                    <div class="pg-no" title="{{ r.titulo }}"><i class="fas {{ r.icone }}"></i></div>
                     <div class="pg-cartao">
                         <div class="flex items-start justify-between gap-2">
                             <div class="min-w-0">

@@ -1,335 +1,290 @@
 {% extends 'base.html' %}
 {% load static %}
+{% comment %}
+Minhas notificações (/notifications/my/) — visual novo em 24/11/2026, na identidade do portal:
+topo no degradê laranja da home (rc-hero), números em vidro, filtros por situação e por tipo
+(cada tipo com a sua cor), lista agrupada por dia, "Carregar mais" e marcar como lida sem
+recarregar. A lista mora em notifications/_lista_minhas.html.
+{% endcomment %}
 
 {% block title %}Notificações{% endblock %}
 
 {% block extra_css %}
+{% include '_rc_animacoes.html' %}
 <style>
-    .notification-item {
-        transition: all 0.3s ease;
-        border-left: 4px solid transparent;
-    }
-    
-    .notification-item.unread {
-        background-color: #f0f9ff;
-        border-left-color: #3b82f6;
-    }
-    
-    .notification-item:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    }
-    
-    .notification-badge {
-        position: absolute;
-        top: -5px;
-        right: -5px;
-        background: #ef4444;
-        color: white;
-        border-radius: 50%;
-        width: 20px;
-        height: 20px;
-        font-size: 12px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    
-    .priority-high {
-        border-left-color: #f59e0b !important;
-    }
-    
-    .priority-urgent {
-        border-left-color: #ef4444 !important;
-        animation: pulse 2s infinite;
-    }
-    
-    @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.7; }
-    }
-    
-    /* Responsive improvements */
+    .nt-stat { border-radius: 1rem; padding: .7rem .9rem; min-width: 0; }
+    .nt-stat strong { display: block; font-size: 1.5rem; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+    .nt-stat span { font-size: .72rem; color: rgba(255, 255, 255, .86); }
+    .nt-sino { position: relative; }
+    .nt-sino-badge[hidden], .nt-num[hidden] { display: none !important; }
+    .nt-sino-badge { position: absolute; top: -.4rem; right: -.4rem; min-width: 1.4rem; height: 1.4rem; padding: 0 .35rem; border-radius: 999px;
+                     background: #fff; color: #EA580C; font-size: .72rem; font-weight: 800; display: flex; align-items: center; justify-content: center;
+                     box-shadow: 0 4px 10px -4px rgba(0, 0, 0, .35); }
+    .nt-sino i { transform-origin: 50% 0; }
+    .nt-sino.tem i { animation: ntBalanca 2.4s ease-in-out .6s 2; }
+    @keyframes ntBalanca { 0%, 50%, 100% { transform: rotate(0); } 10%, 30% { transform: rotate(14deg); } 20%, 40% { transform: rotate(-10deg); } }
+
+    /* Filtros */
+    .nt-filtros { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+    .nt-seg { display: inline-flex; padding: .25rem; border-radius: .9rem; background: #F1F5F9; gap: .15rem; }
+    .nt-seg a { padding: .4rem .8rem; border-radius: .7rem; font-size: .82rem; font-weight: 700; color: #475569; white-space: nowrap;
+                display: inline-flex; align-items: center; gap: .35rem; transition: background .15s ease, color .15s ease; }
+    .nt-seg a:hover { color: #0F172A; }
+    .nt-seg a.on { background: #fff; color: #EA580C; box-shadow: 0 1px 3px rgba(15, 23, 42, .12); }
+    .nt-seg .nt-num { font-size: .68rem; padding: 0 .4rem; border-radius: 999px; background: #FF6B35; color: #fff; }
+    .nt-tipo { display: inline-flex; align-items: center; gap: .4rem; padding: .4rem .75rem; border-radius: 999px; font-size: .8rem; font-weight: 700;
+               border: 1px solid #E2E8F0; background: #fff; color: #334155; white-space: nowrap; transition: border-color .15s, box-shadow .15s, background .15s; }
+    .nt-tipo i { color: var(--c); }
+    .nt-tipo:hover { border-color: var(--c); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 15%, transparent); }
+    .nt-tipo.on { background: var(--c); border-color: var(--c); color: #fff; }
+    .nt-tipo.on i { color: #fff; }
+    .nt-tipo small { font-size: .68rem; font-weight: 800; opacity: .75; }
+
+    /* Lista */
+    .nt-dia { position: sticky; top: 4.5rem; z-index: 2; margin: 1.1rem 0 .5rem; display: flex; }
+    .nt-dia:first-child { margin-top: 0; }
+    .nt-dia span { font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: #64748B;
+                   background: #F1F5F9; padding: .25rem .7rem; border-radius: 999px; box-shadow: 0 0 0 4px var(--nt-fundo, #f6f7f9); }
+    .nt-item { position: relative; display: flex; gap: .9rem; padding: 1rem 1.1rem; margin-bottom: .6rem; border-radius: 1.1rem; background: #fff;
+               border: 1px solid #EEF0F4; box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
+               transition: box-shadow .25s ease, transform .25s cubic-bezier(.2, .8, .2, 1), background .3s ease, border-color .3s ease; }
+    .nt-item:hover { box-shadow: 0 14px 30px -22px rgba(15, 23, 42, .45); transform: translateY(-1px); }
+    .nt-item.nt-nao-lida { background: linear-gradient(90deg, #FFF7ED, #fff 55%); border-color: #FED7AA; }
+    .nt-item.nt-nao-lida::before { content: ''; position: absolute; left: -1px; top: .9rem; bottom: .9rem; width: 4px; border-radius: 0 4px 4px 0; background: #FF6B35; }
+    .nt-item.nt-urgente.nt-nao-lida::before { background: #EF4444; }
+    .nt-icone { flex: none; width: 2.75rem; height: 2.75rem; border-radius: .9rem; display: flex; align-items: center; justify-content: center;
+                color: #fff; font-size: 1.05rem; background: var(--c); box-shadow: 0 8px 16px -10px var(--c); }
+    .nt-item:not(.nt-nao-lida) .nt-icone { background: color-mix(in srgb, var(--c) 14%, #fff); color: var(--c); box-shadow: none; }
+    .nt-titulo { font-size: .95rem; font-weight: 700; color: #0F172A; line-height: 1.3; overflow-wrap: anywhere; }
+    .nt-item:not(.nt-nao-lida) .nt-titulo { font-weight: 600; color: #334155; }
+    .nt-hora { flex: none; display: inline-flex; align-items: center; gap: .35rem; font-size: .72rem; color: #94A3B8; white-space: nowrap; margin-top: .15rem; }
+    .nt-ponto { width: .5rem; height: .5rem; border-radius: 999px; background: #FF6B35; box-shadow: 0 0 0 3px rgba(255, 107, 53, .18); }
+    .nt-msg { margin-top: .3rem; font-size: .85rem; color: #475569; line-height: 1.5; overflow-wrap: anywhere; }
+    .nt-msg a { color: #EA580C; text-decoration: underline; }
+    .nt-rodape { margin-top: .65rem; display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+    .nt-chip { display: inline-flex; align-items: center; gap: .3rem; padding: .12rem .55rem; border-radius: 999px; font-size: .7rem; font-weight: 700;
+               background: #F1F5F9; color: #475569; }
+    .nt-chip-tipo { background: color-mix(in srgb, var(--c) 12%, #fff); color: color-mix(in srgb, var(--c) 75%, #0F172A); }
+    .nt-chip-alta { background: #FFEDD5; color: #9A3412; }
+    .nt-chip-urgente { background: #FEE2E2; color: #B91C1C; }
+    .nt-lida { display: inline-flex; align-items: center; gap: .3rem; font-size: .7rem; font-weight: 600; color: #16A34A; }
+    .nt-acoes { margin-left: auto; display: inline-flex; align-items: center; gap: .4rem; }
+    .nt-botao { display: inline-flex; align-items: center; gap: .4rem; padding: .4rem .85rem; border-radius: .7rem; font-size: .78rem; font-weight: 700;
+                color: #fff; background: linear-gradient(135deg, #FF6B35, #F59E0B); box-shadow: 0 6px 14px -8px #FF6B35; transition: transform .15s ease, box-shadow .15s ease; }
+    .nt-botao:hover { transform: translateY(-1px); box-shadow: 0 10px 18px -10px #FF6B35; }
+    .nt-botao i { font-size: .7rem; transition: transform .2s ease; }
+    .nt-botao:hover i { transform: translateX(2px); }
+    .nt-botao-sec { display: inline-flex; align-items: center; gap: .35rem; padding: .4rem .7rem; border-radius: .7rem; font-size: .78rem; font-weight: 700;
+                    color: #475569; background: #fff; border: 1px solid #E2E8F0; transition: background .15s, color .15s, border-color .15s; }
+    .nt-botao-sec:hover { color: #EA580C; border-color: #FDBA74; background: #FFF7ED; }
+    .nt-item.nt-saindo { background: #fff; border-color: #EEF0F4; }
+    .nt-mais-caixa { text-align: center; padding: .75rem 0 .25rem; }
+    .nt-mais { display: inline-flex; align-items: center; gap: .5rem; padding: .6rem 1.2rem; border-radius: .9rem; font-size: .85rem; font-weight: 700;
+               color: #EA580C; background: #fff; border: 1px solid #FED7AA; transition: background .15s, transform .15s; }
+    .nt-mais:hover { background: #FFF7ED; transform: translateY(-1px); }
+    .nt-vazio-icone { width: 5rem; height: 5rem; border-radius: 1.75rem; display: flex; align-items: center; justify-content: center; margin: 0 auto;
+                      font-size: 2rem; color: #fff; background: linear-gradient(135deg, #FF6B35, #F59E0B); box-shadow: 0 16px 30px -16px #FF6B35; }
     @media (max-width: 640px) {
-        .notification-item {
-            border-left-width: 3px;
-        }
-        
-        .notification-item:hover {
-            transform: none;
-        }
-        
-        .notification-badge {
-            width: 16px;
-            height: 16px;
-            font-size: 10px;
-        }
+        .nt-stat { padding: .55rem .6rem; }
+        .nt-stat strong { font-size: 1.1rem; }
+        .nt-item { padding: .85rem; gap: .7rem; }
+        .nt-icone { width: 2.35rem; height: 2.35rem; font-size: .9rem; border-radius: .75rem; }
+        .nt-botao-sec span { display: none; }
+        .nt-acoes { margin-left: 0; width: 100%; justify-content: flex-end; }
+        .nt-dia { top: 4rem; }
     }
-    
-    @media (max-width: 480px) {
-        .notification-item {
-            padding: 12px !important;
-        }
-    }
+    @media (prefers-reduced-motion: reduce) { .nt-sino.tem i { animation: none; } }
+
+    html.dark .nt-seg { background: var(--tema-superficie-2); }
+    html.dark .nt-seg a { color: var(--tema-texto-2); }
+    html.dark .nt-seg a.on { background: var(--tema-superficie); color: #fdba74; }
+    html.dark .nt-tipo { background: var(--tema-superficie); border-color: var(--tema-borda); color: var(--tema-texto); }
+    html.dark .nt-tipo.on { background: var(--c); color: #fff; }
+    html.dark .nt-dia span { background: var(--tema-superficie-2); color: var(--tema-texto-2); box-shadow: 0 0 0 4px var(--tema-fundo, #0b0f17); }
+    html.dark .nt-item { background: var(--tema-superficie); border-color: var(--tema-borda); }
+    html.dark .nt-item.nt-nao-lida { background: linear-gradient(90deg, rgba(255, 107, 53, .12), var(--tema-superficie) 55%); border-color: rgba(255, 107, 53, .35); }
+    html.dark .nt-item:not(.nt-nao-lida) .nt-icone { background: color-mix(in srgb, var(--c) 22%, transparent); }
+    html.dark .nt-titulo { color: var(--tema-texto); }
+    html.dark .nt-item:not(.nt-nao-lida) .nt-titulo, html.dark .nt-msg { color: var(--tema-texto-2); }
+    html.dark .nt-chip { background: var(--tema-superficie-2); color: var(--tema-texto-2); }
+    html.dark .nt-chip-tipo { background: color-mix(in srgb, var(--c) 22%, transparent); color: var(--tema-texto); }
+    html.dark .nt-botao-sec, html.dark .nt-mais { background: var(--tema-superficie); border-color: var(--tema-borda); color: var(--tema-texto); }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="p-4 sm:p-6">
-    <!-- Header -->
-    <div class="flex flex-col lg:flex-row lg:justify-between lg:items-center mb-6 gap-4">
-        <div>
-            <h1 class="text-2xl lg:text-3xl font-bold text-gray-900">
-                <i class="fas fa-bell text-blue-500 mr-2"></i>
-                Notificações
-            </h1>
-            <p class="text-gray-600 mt-1">Central de notificações do sistema</p>
-        </div>
-        
-        <div class="flex flex-col sm:flex-row gap-3">
-            {% if unread_count > 0 %}
-            <button onclick="markAllAsRead()" 
-                    class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm lg:text-base">
-                <i class="fas fa-check-double mr-2"></i>
-                <span class="hidden sm:inline">Marcar Todas como Lidas</span>
-                <span class="sm:hidden">Marcar Lidas</span>
-            </button>
-            {% endif %}
-            
-            {% if user.hierarchy == 'SUPERADMIN' %}
-            <a href="{% url 'notifications:truepush_dashboard' %}" 
-               class="bg-purple-500 hover:bg-purple-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm lg:text-base text-center">
-                <i class="fas fa-broadcast-tower mr-2"></i>Truepush
-            </a>
-            <a href="{% url 'notifications:settings' %}" 
-               class="bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm lg:text-base text-center">
-                <i class="fas fa-cogs mr-2"></i>Gerenciar
-            </a>
-            {% endif %}
-        </div>
-    </div>
+{% csrf_token %}
+<div class="max-w-5xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
 
-    <!-- Estatísticas -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6 mb-6 lg:mb-8">
-        <div class="bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg p-6">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h3 class="text-2xl font-bold">{{ total_notifications }}</h3>
-                    <p class="opacity-90">Total de Notificações</p>
-                </div>
-                <i class="fas fa-bell text-3xl opacity-75"></i>
-            </div>
-        </div>
-        
-        <div class="bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg p-6">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h3 class="text-2xl font-bold">{{ unread_count }}</h3>
-                    <p class="opacity-90">Não Lidas</p>
-                </div>
-                <div class="relative">
-                    <i class="fas fa-envelope text-3xl opacity-75"></i>
-                    {% if unread_count > 0 %}
-                    <div class="notification-badge">{{ unread_count }}</div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Lista de Notificações -->
-    <div class="bg-white rounded-lg shadow-lg">
-        <div class="px-4 sm:px-6 py-4 border-b border-gray-200">
-            <h2 class="text-xl font-semibold">
-                <i class="fas fa-list text-gray-500 mr-2"></i>
-                Suas Notificações
-            </h2>
-        </div>
-        
-        <div class="p-4 sm:p-6">
-            {% if user_notifications %}
-            <div class="space-y-4">
-                {% for notification in user_notifications %}
-                <div class="notification-item {% if not notification.is_read %}unread{% endif %} 
-                            {% if notification.notification.priority == 'HIGH' %}priority-high{% endif %}
-                            {% if notification.notification.priority == 'URGENT' %}priority-urgent{% endif %}
-                            bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all"
-                     data-notification-id="{{ notification.id }}">
-                    
-                    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                        <div class="flex items-start space-x-3 sm:space-x-4 flex-1">
-                            <!-- Ícone -->
-                            <div class="flex-shrink-0">
-                                <div class="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                                    <i class="{{ notification.notification.icon }} text-blue-600 text-sm sm:text-base"></i>
-                                </div>
-                            </div>
-                            
-                            <!-- Conteúdo -->
-                            <div class="flex-1 min-w-0">
-                                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2 gap-2">
-                                    <h3 class="text-base sm:text-lg font-semibold text-gray-900">
-                                        {{ notification.notification.title }}
-                                    </h3>
-                                    
-                                    <div class="flex items-center space-x-2 sm:ml-4">
-                                        <!-- Categoria -->
-                                        {% if notification.notification.category %}
-                                        <span class="bg-gray-100 text-gray-800 px-2 py-1 rounded-full text-xs font-medium">
-                                            {{ notification.notification.category.name }}
-                                        </span>
-                                        {% endif %}
-                                        
-                                        <!-- Prioridade -->
-                                        {% if notification.notification.priority == 'HIGH' %}
-                                        <span class="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
-                                            <i class="fas fa-exclamation mr-1"></i>Alta
-                                        </span>
-                                        {% elif notification.notification.priority == 'URGENT' %}
-                                        <span class="bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs font-medium">
-                                            <i class="fas fa-exclamation-triangle mr-1"></i>Urgente
-                                        </span>
-                                        {% endif %}
-                                        
-                                        <!-- Status não lida -->
-                                        {% if not notification.is_read %}
-                                        <div class="w-3 h-3 bg-blue-500 rounded-full"></div>
-                                        {% endif %}
-                                    </div>
-                                </div>
-
-                                <section>
-                                    <p class="text-gray-600 mb-3">{{ notification.notification.message|safe }}</p>
-                                </section>
-
-                                <div class="flex items-center justify-between">
-                                    <div class="flex items-center text-sm text-gray-500 space-x-4">
-                                        <span class="flex items-center">
-                                            <i class="fas fa-clock mr-1"></i>
-                                            {{ notification.created_at|date:"d/m/Y H:i" }}
-                                        </span>
-                                        
-                                        {% if notification.is_read %}
-                                        <span class="flex items-center text-green-600">
-                                            <i class="fas fa-check mr-1"></i>
-                                            Lida em {{ notification.read_at|date:"d/m H:i" }}
-                                        </span>
-                                        {% endif %}
-                                    </div>
-                                    
-                                    <div class="flex items-center space-x-2">
-                                        <!-- Botão de ação -->
-                                        {% if notification.notification.action_url %}
-                                        <a href="{{ notification.notification.action_url }}" 
-                                           onclick="markAsClicked({{ notification.id }})"
-                                           class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium hover:bg-blue-200 transition-colors">
-                                            {{ notification.notification.action_text|default:"Ver Mais" }}
-                                        </a>
-                                        {% endif %}
-                                        
-                                        <!-- Marcar como lida -->
-                                        {% if not notification.is_read %}
-                                        <button onclick="markAsRead({{ notification.id }})" 
-                                                class="text-gray-400 hover:text-blue-600 transition-colors"
-                                                title="Marcar como lida">
-                                            <i class="fas fa-check"></i>
-                                        </button>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+    {# ---------------------------------------------------------------- topo #}
+    <section class="rc-hero rc-surge relative overflow-hidden rounded-3xl text-white shadow-lg mb-5">
+        <span class="rc-forma rc-forma-1" aria-hidden="true"></span>
+        <span class="rc-forma rc-forma-2" aria-hidden="true"></span>
+        <span class="rc-forma rc-forma-3" aria-hidden="true"></span>
+        <div class="relative p-5 sm:p-7">
+            <div class="flex flex-col lg:flex-row lg:items-center gap-5">
+                <div class="flex items-center gap-4 flex-1 min-w-0">
+                    <div class="nt-sino rc-hero-avatar w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center flex-shrink-0 {% if unread_count %}tem{% endif %}">
+                        <i class="fas fa-bell text-2xl sm:text-3xl"></i>
+                        <span class="nt-sino-badge" data-nao-lidas {% if not unread_count %}hidden{% endif %}>{{ unread_count }}</span>
+                    </div>
+                    <div class="min-w-0">
+                        <h1 class="text-2xl sm:text-3xl font-extrabold leading-tight">Notificações</h1>
+                        <p class="rc-hero-suave text-sm mt-0.5" data-frase>
+                            {% if unread_count %}Você tem <strong data-nao-lidas>{{ unread_count }}</strong> não lida{{ unread_count|pluralize }}.{% else %}Tudo em dia — nenhuma notificação pendente.{% endif %}
+                        </p>
                     </div>
                 </div>
-                {% endfor %}
+                <div class="grid grid-cols-3 gap-2 sm:gap-3 lg:w-[26rem]">
+                    <div class="nt-stat rc-vidro"><strong data-nao-lidas data-rc-conta>{{ unread_count }}</strong><span>Não lidas</span></div>
+                    <div class="nt-stat rc-vidro"><strong data-rc-conta>{{ hoje_count }}</strong><span>Hoje</span></div>
+                    <div class="nt-stat rc-vidro"><strong>{{ total_notifications|floatformat:"0g" }}</strong><span>No total</span></div>
+                </div>
             </div>
-            {% else %}
-            <div class="text-center py-12">
-                <i class="fas fa-bell-slash text-gray-300 text-6xl mb-4"></i>
-                <h3 class="text-xl font-medium text-gray-500 mb-2">Nenhuma notificação</h3>
-                <p class="text-gray-400">Você não possui notificações no momento.</p>
+            <div class="mt-5 flex flex-wrap gap-2">
+                <button type="button" class="rc-hero-acao inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold {% if not unread_count %}hidden{% endif %}" data-marcar-todas>
+                    <i class="fas fa-check-double"></i>Marcar todas como lidas
+                </button>
+                {% if user.hierarchy == 'SUPERADMIN' %}
+                <a href="{% url 'notifications:settings' %}" class="rc-hero-acao inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold">
+                    <i class="fas fa-sliders"></i>Gerenciar
+                </a>
+                <a href="{% url 'notifications:truepush_dashboard' %}" class="rc-hero-acao inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold">
+                    <i class="fas fa-tower-broadcast"></i>Truepush
+                </a>
+                {% endif %}
             </div>
-            {% endif %}
+        </div>
+    </section>
+
+    {# ------------------------------------------------------------- filtros #}
+    <div class="nt-filtros mb-4 rc-sobe" style="--i:1">
+        <nav class="nt-seg" aria-label="Situação">
+            <a href="?{% if tipo %}tipo={{ tipo }}{% endif %}" class="{% if not filtro %}on{% endif %}">Todas</a>
+            <a href="?filtro=nao_lidas{% if tipo %}&tipo={{ tipo }}{% endif %}" class="{% if filtro == 'nao_lidas' %}on{% endif %}">Não lidas{% if unread_count %}<span class="nt-num" data-nao-lidas>{{ unread_count }}</span>{% endif %}</a>
+            <a href="?filtro=lidas{% if tipo %}&tipo={{ tipo }}{% endif %}" class="{% if filtro == 'lidas' %}on{% endif %}">Lidas</a>
+        </nav>
+        <div class="flex gap-2 overflow-x-auto pb-1 max-w-full">
+            {% for t in tipos %}
+            <a href="?{% if filtro %}filtro={{ filtro }}&{% endif %}{% if tipo != t.chave %}tipo={{ t.chave }}{% endif %}" class="nt-tipo {% if tipo == t.chave %}on{% endif %}" style="--c:{{ t.cor }}"
+               title="{% if tipo == t.chave %}Tirar o filtro{% else %}Só {{ t.rotulo|lower }}{% endif %}">
+                <i class="{{ t.icone }}"></i>{{ t.rotulo }}<small>{{ t.total|floatformat:"0g" }}</small>
+            </a>
+            {% endfor %}
         </div>
     </div>
+
+    {# --------------------------------------------------------------- lista #}
+    {% if itens %}
+    <div id="ntLista" data-mark-url="{% url 'notifications:mark_read' 0 %}" data-mark-all-url="{% url 'notifications:mark_all_read' %}">
+        {% include 'notifications/_lista_minhas.html' %}
+    </div>
+    {% else %}
+    <div class="sap-card rounded-3xl bg-white border border-gray-100 py-14 px-6 text-center rc-sobe" style="--i:2">
+        <div class="nt-vazio-icone"><i class="fas {% if filtro == 'nao_lidas' %}fa-check{% else %}fa-bell-slash{% endif %}"></i></div>
+        <h3 class="mt-5 text-lg font-bold text-gray-900">{% if filtro == 'nao_lidas' %}Tudo lido!{% else %}Nenhuma notificação aqui{% endif %}</h3>
+        <p class="mt-1 text-sm text-gray-500">{% if filtro or tipo %}Nada com esse filtro. <a href="?" class="font-semibold text-primary hover:underline">Ver todas</a>{% else %}Quando algo acontecer, você fica sabendo por aqui.{% endif %}</p>
+    </div>
+    {% endif %}
 </div>
 
 <script>
-function markAsRead(notificationId) {
-    fetch(`/notifications/mark-read/${notificationId}/`, {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
-            'Content-Type': 'application/json'
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            location.reload();
-        } else {
-            alert('Erro ao marcar notificação como lida');
-        }
-    })
-    .catch(error => {
-        console.error('Erro:', error);
-        alert('Erro ao marcar notificação como lida');
-    });
-}
+(function () {
+    var lista = document.getElementById('ntLista');
+    var csrf = (document.querySelector('[name=csrfmiddlewaretoken]') || {}).value || '';
+    var naoLidas = {{ unread_count|default:0 }};
 
-function markAllAsRead() {
-    if (confirm('Marcar todas as notificações como lidas?')) {
-        fetch('/notifications/mark-all-read/', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
-                'Content-Type': 'application/json'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                location.reload();
-            } else {
-                alert('Erro ao marcar notificações como lidas');
-            }
-        })
-        .catch(error => {
-            console.error('Erro:', error);
-            alert('Erro ao marcar notificações como lidas');
-        });
+    function post(url) {
+        return fetch(url, {method: 'POST', credentials: 'same-origin',
+                           headers: {'X-CSRFToken': csrf, 'X-Requested-With': 'XMLHttpRequest'}})
+            .then(function (r) { return r.json(); });
     }
-}
-
-function markAsClicked(notificationId) {
-    // Marcar como clicada (automaticamente marca como lida também)
-    fetch(`/notifications/mark-read/${notificationId}/`, {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
-            'Content-Type': 'application/json'
+    function atualizarContadores() {
+        document.querySelectorAll('[data-nao-lidas]').forEach(function (el) {
+            el.textContent = naoLidas.toLocaleString('pt-BR');
+            if (el.classList.contains('nt-sino-badge') || el.classList.contains('nt-num')) el.hidden = naoLidas <= 0;
+        });
+        if (naoLidas <= 0) {
+            var frase = document.querySelector('[data-frase]');
+            if (frase) frase.textContent = 'Tudo em dia — nenhuma notificação pendente.';
+            var todas = document.querySelector('[data-marcar-todas]');
+            if (todas) todas.classList.add('hidden');
+            var sino = document.querySelector('.nt-sino'); if (sino) sino.classList.remove('tem');
         }
-    });
-}
+    }
+    function virarLida(item) {
+        if (!item || !item.classList.contains('nt-nao-lida')) return;
+        item.classList.remove('nt-nao-lida');
+        var ponto = item.querySelector('.nt-ponto'); if (ponto) ponto.remove();
+        var botao = item.querySelector('[data-marcar-lida]'); if (botao) botao.remove();
+        var acoes = item.querySelector('.nt-acoes');
+        if (acoes && !item.querySelector('.nt-lida')) {
+            var lida = document.createElement('span');
+            lida.className = 'nt-lida';
+            lida.innerHTML = '<i class="fas fa-check-double"></i>Lida';
+            acoes.parentNode.insertBefore(lida, acoes);
+        }
+        naoLidas = Math.max(0, naoLidas - 1);
+        atualizarContadores();
+    }
+    function urlMarcar(id) { return lista.getAttribute('data-mark-url').replace('/0/', '/' + id + '/'); }
 
-// Atualizar contador de notificações na navbar
-function updateNotificationCount() {
-    fetch('/notifications/count/')
-    .then(response => response.json())
-    .then(data => {
-        const badge = document.querySelector('.notification-count-badge');
-        if (badge) {
-            if (data.unread_count > 0) {
-                badge.textContent = data.unread_count;
-                badge.classList.remove('hidden');
-            } else {
-                badge.classList.add('hidden');
+    if (lista) lista.addEventListener('click', function (e) {
+        var botao = e.target.closest('[data-marcar-lida]');
+        if (botao) {
+            var item = botao.closest('[data-notificacao]');
+            botao.disabled = true;
+            post(urlMarcar(item.getAttribute('data-notificacao')))
+                .then(function (d) { if (d.success) virarLida(item); else botao.disabled = false; })
+                .catch(function () { botao.disabled = false; });
+            return;
+        }
+        var abrir = e.target.closest('[data-abrir]');
+        if (abrir) {
+            // Abrir também marca como lida (sem segurar a navegação).
+            var it = abrir.closest('[data-notificacao]');
+            if (it && it.classList.contains('nt-nao-lida')) {
+                fetch(urlMarcar(it.getAttribute('data-notificacao')), {method: 'POST', credentials: 'same-origin', keepalive: true,
+                      headers: {'X-CSRFToken': csrf, 'X-Requested-With': 'XMLHttpRequest'}}).catch(function () {});
             }
+            return;
+        }
+        var mais = e.target.closest('[data-mais]');
+        if (mais) {
+            mais.disabled = true;
+            mais.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>Carregando…';
+            fetch(mais.getAttribute('data-mais'), {credentials: 'same-origin', headers: {'X-Requested-With': 'XMLHttpRequest'}})
+                .then(function (r) { if (!r.ok) throw new Error(); return r.text(); })
+                .then(function (html) {
+                    var caixa = mais.closest('[data-mais-caixa]');
+                    var antes = lista.querySelectorAll('.nt-dia');
+                    var ultimoDia = antes.length ? antes[antes.length - 1].getAttribute('data-dia') : '';
+                    var tmp = document.createElement('div');
+                    tmp.innerHTML = html;
+                    var primeiro = tmp.querySelector('.nt-dia');
+                    if (primeiro && primeiro.getAttribute('data-dia') === ultimoDia) primeiro.remove();
+                    caixa.replaceWith.apply(caixa, Array.prototype.slice.call(tmp.childNodes));
+                })
+                .catch(function () {
+                    mais.disabled = false;
+                    mais.innerHTML = '<i class="fas fa-rotate-right"></i>Tentar de novo';
+                });
         }
     });
-}
 
-// Atualizar contador a cada 30 segundos
-setInterval(updateNotificationCount, 30000);
+    var todas = document.querySelector('[data-marcar-todas]');
+    if (todas && lista) todas.addEventListener('click', function () {
+        if (!confirm('Marcar todas as notificações como lidas?')) return;
+        todas.disabled = true;
+        post(lista.getAttribute('data-mark-all-url')).then(function (d) {
+            todas.disabled = false;
+            if (!d.success) return;
+            lista.querySelectorAll('.nt-nao-lida').forEach(function (item) { virarLida(item); });
+            naoLidas = 0;
+            atualizarContadores();
+        }).catch(function () { todas.disabled = false; });
+    });
+})();
 </script>
+{% include '_rc_animacoes_script.html' %}
 {% endblock %}

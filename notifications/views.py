@@ -12,6 +12,7 @@ from .models import PushNotification, NotificationCategory, UserNotification, De
 from users.models import Sector, User
 import json
 import logging
+from datetime import timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -119,25 +120,99 @@ def api_mark_all_as_read(request):
 
 @login_required
 def notifications_dashboard(request):
-    """Dashboard de notificações do usuário"""
+    """Minhas notificações (/notifications/my/) — visual novo em 24/11/2026.
+
+    Topo no degradê do portal com os números, filtro por situação (todas / não lidas)
+    e por tipo, lista agrupada por dia e "Carregar mais" (cada um tem ~25 mil
+    notificações; antes a tela cortava nas 50 mais recentes). Marcar como lida não
+    recarrega a página.
+    """
     user = request.user
-    
-    # Notificações do usuário (últimas 50)
-    user_notifications = UserNotification.objects.filter(
-        user=user
-    ).select_related('notification', 'notification__category').order_by('-created_at')[:50]
-    
-    # Estatísticas
-    total_notifications = UserNotification.objects.filter(user=user).count()
-    unread_count = UserNotification.objects.filter(user=user, is_read=False).count()
-    
-    context = {
-        'user_notifications': user_notifications,
-        'total_notifications': total_notifications,
-        'unread_count': unread_count,
+    base = UserNotification.objects.filter(user=user)
+    filtro = request.GET.get('filtro') if request.GET.get('filtro') in ('nao_lidas', 'lidas') else ''
+    tipo = request.GET.get('tipo') if request.GET.get('tipo') in TIPOS_DE_NOTIFICACAO else ''
+    lista = base
+    if filtro == 'nao_lidas':
+        lista = lista.filter(is_read=False)
+    elif filtro == 'lidas':
+        lista = lista.filter(is_read=True)
+    if tipo:
+        lista = lista.filter(notification__notification_type=tipo)
+    lista = lista.select_related('notification', 'notification__category').order_by('-created_at', '-id')
+    pagina = Paginator(lista, NOTIFICACOES_POR_PAGINA).get_page(request.GET.get('pagina'))
+    itens = [_notificacao_para_tela(un) for un in pagina.object_list]
+    contexto = {
+        'itens': itens, 'pagina': pagina, 'filtro': filtro, 'tipo': tipo,
+        'mais_url': (f'?pagina={pagina.next_page_number()}' + (f'&filtro={filtro}' if filtro else '')
+                     + (f'&tipo={tipo}' if tipo else '')) if pagina.has_next() else '',
     }
-    
-    return render(request, 'notifications/dashboard.html', context)
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        # "Carregar mais": só os próximos itens.
+        return render(request, 'notifications/_lista_minhas.html', contexto)
+
+    hoje = timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
+    por_tipo = dict(base.values_list('notification__notification_type').annotate(n=Count('id')))
+    nao_lidas_por_tipo = dict(base.filter(is_read=False).values_list('notification__notification_type')
+                              .annotate(n=Count('id')))
+    contexto.update({
+        'total_notifications': sum(por_tipo.values()),
+        'unread_count': sum(nao_lidas_por_tipo.values()),
+        'hoje_count': base.filter(created_at__gte=hoje).count(),
+        'tipos': [{'chave': chave, 'rotulo': rotulo, 'icone': icone, 'cor': cor,
+                   'total': por_tipo.get(chave, 0), 'nao_lidas': nao_lidas_por_tipo.get(chave, 0)}
+                  for chave, (rotulo, icone, cor) in TIPOS_DE_NOTIFICACAO.items() if por_tipo.get(chave)],
+    })
+    return render(request, 'notifications/dashboard.html', contexto)
+
+
+# Cor e ícone de cada tipo (o ícone próprio da notificação, quando tem, vale mais).
+TIPOS_DE_NOTIFICACAO = {
+    'TICKET': ('Chamados', 'fas fa-ticket-alt', '#0EA5E9'),
+    'TASK': ('Tarefas', 'fas fa-list-check', '#8B5CF6'),
+    'COMMUNICATION': ('Comunicados', 'fas fa-bullhorn', '#FF6B35'),
+    'CUSTOM': ('Avisos', 'fas fa-bell', '#EC4899'),
+    'SYSTEM': ('Sistema', 'fas fa-gear', '#64748B'),
+}
+NOTIFICACOES_POR_PAGINA = 40
+_DIAS_DA_SEMANA = ('segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo')
+
+
+def _dia_da_notificacao(quando, hoje):
+    dia = quando.date()
+    if dia == hoje:
+        return 'Hoje'
+    if dia == hoje - timedelta(days=1):
+        return 'Ontem'
+    if dia > hoje - timedelta(days=7):
+        return _DIAS_DA_SEMANA[dia.weekday()].capitalize()
+    return quando.strftime('%d/%m/%Y')
+
+
+def _ha_quanto(quando, agora):
+    segundos = (agora - quando).total_seconds()
+    if segundos < 60:
+        return 'agora'
+    if segundos < 3600:
+        return f'há {int(segundos // 60)} min'
+    if quando.date() == agora.date():
+        return f'há {int(segundos // 3600)} h'
+    return quando.strftime('%H:%M')
+
+
+def _notificacao_para_tela(un):
+    agora = timezone.localtime()
+    quando = timezone.localtime(un.created_at)
+    n = un.notification
+    rotulo, icone_tipo, cor = TIPOS_DE_NOTIFICACAO.get(n.notification_type, ('Avisos', 'fas fa-bell', '#EC4899'))
+    icone = n.icon if n.icon and n.icon not in ('fas fa-bell',) else icone_tipo
+    prioridade = {'ALTA': 'HIGH'}.get(n.priority, n.priority)
+    return {
+        'un': un, 'n': n, 'tipo': rotulo, 'cor': cor, 'icone': icone, 'prioridade': prioridade,
+        # A categoria só aparece quando diz algo além do tipo ("Chamados" + "Chamados" repetia).
+        'categoria': (n.category.name if n.category and n.category.name.strip().lower() != rotulo.lower() else ''),
+        'dia': _dia_da_notificacao(quando, agora.date()), 'quando': _ha_quanto(quando, agora),
+        'quando_completo': quando.strftime('%d/%m/%Y às %H:%M'),
+    }
 
 
 @login_required

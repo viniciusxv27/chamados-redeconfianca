@@ -1,0 +1,40 @@
+{% comment %}
+Itens de /notifications/my/ (24/11/2026). A página inclui este pedaço e o "Carregar mais"
+pede só ele de novo (X-Requested-With), com a próxima página. O título do dia repete na
+emenda das páginas; o JS da página tira o repetido.
+{% endcomment %}
+{% for i in itens %}
+{% ifchanged i.dia %}<h3 class="nt-dia" data-dia="{{ i.dia }}"><span>{{ i.dia }}</span></h3>{% endifchanged %}
+<article class="nt-item{% if not i.un.is_read %} nt-nao-lida{% endif %}{% if i.prioridade == 'URGENT' %} nt-urgente{% endif %}{% if forloop.counter <= 12 %} rc-sobe{% endif %}"
+         style="--c:{{ i.cor }};--i:{{ forloop.counter0 }}" data-notificacao="{{ i.un.id }}" data-dia="{{ i.dia }}">
+    <div class="nt-icone" aria-hidden="true"><i class="{{ i.icone }}"></i></div>
+    <div class="min-w-0 flex-1">
+        <div class="flex items-start justify-between gap-3">
+            <h4 class="nt-titulo">{{ i.n.title }}</h4>
+            <span class="nt-hora" title="{{ i.quando_completo }}">{% if not i.un.is_read %}<span class="nt-ponto" aria-label="Não lida"></span>{% endif %}{{ i.quando }}</span>
+        </div>
+        {% if i.n.message %}<div class="nt-msg">{{ i.n.message|safe|linebreaksbr }}</div>{% endif %}
+        <div class="nt-rodape">
+            <span class="nt-chip nt-chip-tipo">{{ i.tipo }}</span>
+            {% if i.categoria %}<span class="nt-chip">{{ i.categoria }}</span>{% endif %}
+            {% if i.prioridade == 'URGENT' %}<span class="nt-chip nt-chip-urgente"><i class="fas fa-triangle-exclamation"></i>Urgente</span>
+            {% elif i.prioridade == 'HIGH' %}<span class="nt-chip nt-chip-alta"><i class="fas fa-arrow-up"></i>Alta</span>{% endif %}
+            {% if i.un.is_read and i.un.read_at %}<span class="nt-lida" title="Lida em {{ i.un.read_at|date:'d/m/Y H:i' }}"><i class="fas fa-check-double"></i>Lida</span>{% endif %}
+            <span class="nt-acoes">
+                {% if not i.un.is_read %}
+                <button type="button" class="nt-botao-sec" data-marcar-lida title="Marcar como lida"><i class="fas fa-check"></i><span>Marcar como lida</span></button>
+                {% endif %}
+                {% if i.n.action_url %}
+                <a href="{{ i.n.action_url }}" class="nt-botao" data-abrir>{{ i.n.action_text|default:"Abrir" }}<i class="fas fa-arrow-right"></i></a>
+                {% endif %}
+            </span>
+        </div>
+    </div>
+</article>
+{% endfor %}
+{% if mais_url %}
+<div class="nt-mais-caixa" data-mais-caixa>
+    <button type="button" class="nt-mais" data-mais="{{ mais_url }}"><i class="fas fa-chevron-down"></i>Carregar mais</button>
+    <p class="text-[11px] text-gray-400 mt-1.5">Mostrando {{ pagina.end_index }} de {{ pagina.paginator.count }}</p>
+</div>
+{% endif %}
