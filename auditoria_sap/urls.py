@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views, views_automacao
+from . import views, views_automacao, views_estoque
 
 app_name = 'auditoria_sap'
 
@@ -11,6 +11,9 @@ urlpatterns = [
     path('linha/<int:linha_id>/', views.detalhe, name='detalhe'),
     path('linha/<int:linha_id>/marcar/', views.marcar, name='marcar'),
     path('gestores/', views.gestores, name='gestores'),
+    # Estoque (23/11/2026): disponível, em trânsito, reposição, detalhado e produtos.
+    path('estoque/', views_estoque.estoque, name='estoque'),
+    path('estoque/unidades/', views_estoque.estoque_unidades, name='estoque_unidades'),
     path('renova/', views.renova, name='renova'),
     path('renova/<int:venda_id>/marcar/', views.renova_marcar, name='renova_marcar'),
     path('renova/configurar/', views.renova_config, name='renova_config'),

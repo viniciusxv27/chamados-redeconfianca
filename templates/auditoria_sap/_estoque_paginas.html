@@ -1,0 +1,7 @@
+{% if pagina.has_other_pages %}
+<div class="px-4 py-3 border-t border-gray-100 flex items-center justify-between text-sm">
+    {% if pagina.has_previous %}<a href="?{{ q_atual }}&pagina={{ pagina.previous_page_number }}" class="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"><i class="fas fa-chevron-left mr-1"></i>Anterior</a>{% else %}<span></span>{% endif %}
+    <span class="text-xs text-gray-500">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }} · {{ pagina.paginator.count }} linha{{ pagina.paginator.count|pluralize }}</span>
+    {% if pagina.has_next %}<a href="?{{ q_atual }}&pagina={{ pagina.next_page_number }}" class="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50">Próxima<i class="fas fa-chevron-right ml-1"></i></a>{% else %}<span></span>{% endif %}
+</div>
+{% endif %}

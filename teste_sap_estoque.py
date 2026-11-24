@@ -1,0 +1,307 @@
+"""/sap/estoque/ (23/11/2026): a visão de estoque — disponível, em trânsito, reposição,
+detalhado e produtos, com a distância entre lojas.
+
+Pedido: "criar uma visão de estoque, use como referência de funcionalidade o Power BI
+(Consulta de Estoque), porém o layout precisa ser intuitivo ao máximo [...] interprete a
+distância entre lojas".
+
+Cobre: a leitura das cargas (só a última, linha de total da MB52 fora, trânsito pelas
+linhas sem depósito, data do Excel), as vizinhas por distância, a matriz, "mais perto com
+saldo", a reposição (crítico/ruptura/insuficiente, transferência só até 200 km), as telas,
+a gaveta de seriais, a busca por serial, o CSV, quem entra e o SAP fora do ar.
+
+Banco descartável (sqlite, syncdb) e MySQL do SAP dublê: nada sai daqui.
+"""
+import os
+import pathlib
+import sys
+import tempfile
+from datetime import timedelta
+from decimal import Decimal
+from unittest import mock
+
+import django
+
+PASTA = pathlib.Path(tempfile.mkdtemp(prefix='zz-sap-estoque-'))
+(PASTA / 'zz_sap_estoque_settings.py').write_text(f"""
+from redeconfianca.settings import *              # noqa: F401,F403
+
+DATABASES = {{'default': {{'ENGINE': 'django.db.backends.sqlite3',
+                          'NAME': r'{PASTA}/banco.sqlite3'}}}}
+
+
+class SemMigrations:
+    def __contains__(self, item):
+        return True
+
+    def __getitem__(self, item):
+        return None
+
+
+MIGRATION_MODULES = SemMigrations()
+
+USE_S3 = False
+MEDIA_ROOT = r'{PASTA}/media'
+MEDIA_URL = '/media/'
+STORAGES = {{
+    'default': {{'BACKEND': 'django.core.files.storage.FileSystemStorage'}},
+    'staticfiles': {{'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}},
+}}
+DEBUG = False
+OPENAI_API_KEY = ''
+ALLOWED_HOSTS = ['testserver', 'localhost', '127.0.0.1']
+CACHES = {{
+    'default': {{'BACKEND': 'django.core.cache.backends.locmem.LocMemCache', 'LOCATION': 'zz-sapest'}},
+    'local': {{'BACKEND': 'django.core.cache.backends.locmem.LocMemCache', 'LOCATION': 'zz-sapest-2'}},
+}}
+""")
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, str(PASTA))
+os.environ['DJANGO_SETTINGS_MODULE'] = 'zz_sap_estoque_settings'
+os.environ.setdefault('RC_VARREDURA_ROTINA', '0')
+
+django.setup()
+
+from django.core.management import call_command
+from django.test import Client
+from django.test.utils import setup_test_environment
+
+setup_test_environment()
+call_command('migrate', run_syncdb=True, verbosity=0)
+
+import json
+from datetime import date, timedelta
+
+import requests
+from django.contrib.auth import get_user_model
+from django.core.cache import cache
+
+from auditoria_sap import estoque as est
+from auditoria_sap import mysql
+from communications.models import CommunicationGroup
+from users.models import Sector
+
+User = get_user_model()
+ok = fail = 0
+
+
+def t(nome, cond, extra=''):
+    global ok, fail
+    if cond:
+        ok += 1
+        print(f'  OK   {nome}')
+    else:
+        fail += 1
+        print(f'  FALHA {nome} {extra}')
+
+
+def sem_rede(*a, **k):
+    raise AssertionError('teste tentou sair para a rede')
+
+
+for nome in ('get', 'post', 'request'):
+    mock.patch.object(requests, nome, sem_rede).start()
+mock.patch.object(mysql, 'conexao', side_effect=AssertionError('teste tentou ler o MySQL do SAP')).start()
+
+IQ, MB = 'iq09_20261123_175754', 'mb52_20261123_175858'
+EXCEL_HA_10_DIAS = str((date.today() - timedelta(days=10) - date(1899, 12, 30)).days)
+EXCEL_HA_120_DIAS = str((date.today() - timedelta(days=120) - date(1899, 12, 30)).days)
+
+
+def mb(centro, dep, material, livre=0, transito=0, texto=''):
+    return {'centro': centro, 'nome_1': f'EA MASTERCEL {centro}', 'deposito': dep, 'material': material,
+            'texto_breve_material': texto or f'DESC SAP {material}', 'utilizacao_livre': str(livre),
+            'transito_e_te': str(transito), 'bloqueado': '0', 'em_contr_qualidade': '0'}
+
+
+def iq(material, serial, centro, dep, tipo='01', quando=EXCEL_HA_10_DIAS, status='DEPS'):
+    return {'material': material, 'denominacao': f'DESC SAP {material}', 'n_de_serie': serial, 'centro': centro,
+            'deposito': dep, 'tipo_de_estoque': tipo, 'status_sistema': status, 'status_usuario': None,
+            'modificado_em': quando}
+
+
+GALAXY, PELICULA, CARREGADOR, BOOMBOX, TV = 'TGSA609C2000', '22023386', '22019815', '22025654', '22099999'
+MB52 = [
+    {'centro': None, 'nome_1': None, 'deposito': None, 'material': None, 'texto_breve_material': None,
+     'utilizacao_livre': '999', 'transito_e_te': '999', 'bloqueado': '0', 'em_contr_qualidade': '0'},
+    mb('064E', 'LVUT', GALAXY, livre=2), mb('220L', 'LVUT', GALAXY, livre=5),
+    mb('057E', None, GALAXY, transito=1),
+    mb('057E', 'LVUT', PELICULA, livre=10),
+    mb('057E', 'LVUT', CARREGADOR, livre=1), mb('057E', 'RPAR', CARREGADOR, livre=1),
+    mb('045E', 'LVUT', CARREGADOR, livre=3), mb('220L', 'LVUT', CARREGADOR, livre=10),
+    mb('045E', 'EXPO', TV, livre=1),
+]
+IQ09 = [
+    iq(GALAXY, '350000000000001', '064E', 'LVUT', quando=EXCEL_HA_120_DIAS),
+    iq(GALAXY, '350000000000002', '064E', 'LVUT'),
+    *[iq(GALAXY, f'35000000000010{i}', '220L', 'LVUT') for i in range(5)],
+    iq(GALAXY, '350000000000099', '057E', None, tipo='06', status='DEPS NREM'),
+    iq(CARREGADOR, 'SC4H00000001', '057E', 'LVUT'),
+    iq(CARREGADOR, 'SC4H00000002', '057E', 'RPAR'),
+    iq(TV, 'TV000000000001', '045E', 'EXPO'),
+]
+CATALOGO = [
+    {'cod_sap': GALAXY, 'cor': 'Azul', 'nome_comercial': 'Samsung Galaxy A57 5G 256GB', 'fabricante': 'Samsung',
+     'categoria': 'Smartphones', 'subcategoria': 'Android', 'gama': 'Média'},
+    {'cod_sap': PELICULA, 'cor': '', 'nome_comercial': 'Película Máquina Transparente Ovvi GS',
+     'fabricante': 'Ovvi', 'categoria': 'Essenciais', 'subcategoria': 'Películas', 'gama': None},
+    {'cod_sap': CARREGADOR, 'cor': 'Branco', 'nome_comercial': 'Carregador USB-C de 20W', 'fabricante': 'Geonav',
+     'categoria': 'Essenciais', 'subcategoria': 'Carregadores', 'gama': None},
+]
+VENDAS = [
+    {'PDV': 'ANCHIETA', 'SKU': GALAXY, 'd30': 7, 'd90': 15, 'nome': 'Samsung Galaxy A57 5G 256GB'},
+    {'PDV': 'ANCHIETA', 'SKU': PELICULA, 'd30': 4, 'd90': 9, 'nome': 'Película'},
+    {'PDV': 'ANCHIETA', 'SKU': CARREGADOR, 'd30': 3, 'd90': 5, 'nome': 'Carregador'},
+    {'PDV': 'ANCHIETA', 'SKU': BOOMBOX, 'd30': 3, 'd90': 3, 'nome': 'Caixa de Som JBL Boombox 4'},
+    {'PDV': 'SEDE ADMINISTRATIVA', 'SKU': GALAXY, 'd30': 1, 'd90': 1, 'nome': 'x'},
+]
+leituras = []
+
+
+def dublê(sql, parametros=()):
+    leituras.append(sql)
+    if 'MAX(execucao_id)' in sql:
+        return [{'iq09': IQ, 'mb52': MB}]
+    if 'FROM estoque_mb52' in sql:
+        assert parametros == (MB,), parametros
+        return [dict(r) for r in MB52]
+    if 'FROM estoque_iq09' in sql:
+        assert parametros == (IQ,), parametros
+        return [dict(r) for r in IQ09]
+    if 'produtos_nome_comercial' in sql:
+        return [dict(r) for r in CATALOGO]
+    if 'vw_vivogo_produtos_historico' in sql:
+        return [dict(r) for r in VENDAS]
+    raise AssertionError(sql)
+
+
+mock.patch.object(mysql, '_consultar', side_effect=dublê).start()
+
+print('== 1) A LEITURA DA CARGA ==')
+foto = est.fotografia(forcar=True)
+t('só a última carga, nas duas tabelas', foto['iq09'] == IQ and foto['mb52'] == MB)
+t('a linha de total da MB52 fica de fora', all(c for (c, _m) in foto['saldos']) and 999 not in foto['transito'].values())
+t('trânsito vem das linhas sem depósito', foto['transito'] == {('057E', GALAXY): 1.0}, foto['transito'])
+t('livre por depósito', est.livre_para_venda(foto, '057E', CARREGADOR) == 1
+  and foto['saldos'][('057E', CARREGADOR)]['RPAR'][0] == 1)
+t('data da carga', foto['quando_mb52'] and foto['quando_mb52'].strftime('%d/%m %H:%M') == '23/11 17:58')
+u = est.unidades_de(foto, '064E', GALAXY)
+t('data do Excel vira dia e dias parados', u[0]['dias'] == 120 and u[1]['dias'] == 10, [x['dias'] for x in u])
+t('vendas por centro (PDV do Vivo GO → centro), sem a sede', foto['vendas'][('057E', GALAXY)] == [7, 15]
+  and not any(c == '' for c, _m in foto['vendas']))
+t('nome comercial; sem cadastro usa o nome da venda', est.produto(foto, GALAXY)['nome'] == 'Samsung Galaxy A57 5G 256GB'
+  and est.produto(foto, BOOMBOX)['nome'] == 'Caixa de Som JBL Boombox 4')
+t('a segunda vez não lê o SAP de novo', (lambda n: (est.fotografia(), len(leituras) == n)[1])(len(leituras)))
+
+print('\n== 2) DISTÂNCIA ENTRE LOJAS ==')
+t('loja do portal → centro', est.centro_da_loja('Loja Anchieta') == '057E' and est.centro_da_loja('Loja Glória') == '065E'
+  and est.centro_da_loja('Loja Itacibá') == '060E' and est.centro_da_loja('057E') == '057E')
+km = est.distancia_km(est.POR_CENTRO['057E'], est.POR_CENTRO['064E'])
+t('Anchieta → Piúma ~9 km', 5 < km < 15, km)
+cols = est.colunas_da_matriz(foto, '057E')
+t('matriz: a loja escolhida primeiro e as outras da mais perto para a mais longe',
+  [c['centro'] for c in cols] == ['057E', '064E', '045E', '220L'], [c['centro'] for c in cols])
+t('a de SP fica longe (centenas de km)', cols[-1]['km'] > 600, cols[-1]['km'])
+t('todas as lojas da rede têm posição', all(c in est.POR_CENTRO for c in est.centros_da_foto(foto)))
+
+print('\n== 3) MATRIZ ==')
+linhas = {l['produto']['material']: l for l in est.matriz(foto, cols)}
+t('Galaxy: 0 na minha, 2 em Piúma, 5 em SP', linhas[GALAXY]['qtds'] == [0, 2, 0, 5], linhas[GALAXY]['qtds'])
+t('exposição não conta como livre para venda', TV not in linhas)
+perto = est.mais_perto_com_saldo(foto, '057E', GALAXY)
+t('mais perto com saldo: Piúma', perto and perto['centro'] == '064E' and perto['qtd'] == 2, perto)
+trans = {l['produto']['material']: l for l in est.matriz(foto, cols, modo='transito')}
+t('em trânsito: o Galaxy chegando em Anchieta', list(trans) == [GALAXY] and trans[GALAXY]['qtds'][0] == 1)
+t('busca por nome sem acento', [l['produto']['material'] for l in est.matriz(foto, cols, busca='pelicula')] == [PELICULA])
+
+print('\n== 4) REPOSIÇÃO ==')
+rep = {l['produto']['material']: l for l in est.reposicao(foto, '057E')}
+g = rep[GALAXY]
+t('Galaxy zerado com 7 vendas: crítico, sugestão 6 (já tem 1 chegando)', g['situacao'] == 'critico'
+  and g['estoque'] == 1 and g['sugestao'] == 6, (g['situacao'], g['estoque'], g['sugestao']))
+t('transferir de Piúma (mais perto com sobra)', g['buscar_em'] and g['buscar_em']['centro'] == '064E'
+  and g['buscar_em']['sobra'] == 2, g['buscar_em'])
+c = rep[CARREGADOR]
+t('carregador: 1 livre para 3 vendas = insuficiente, sugestão 2', c['situacao'] == 'insuficiente' and c['sugestao'] == 2)
+t('transferência de Iconha (17 km), nunca de SP mesmo com 10 sobrando', c['buscar_em'] and c['buscar_em']['centro'] == '045E')
+t('película coberta', rep[PELICULA]['situacao'] == 'ok' and rep[PELICULA]['sugestao'] == 0)
+t('vendido sem estoque nenhum: ruptura e "pedir"', rep[BOOMBOX]['situacao'] == 'ruptura' and rep[BOOMBOX]['buscar_em'] is None)
+t('ordem: crítico primeiro', est.reposicao(foto, '057E')[0]['situacao'] == 'critico')
+t('filtro de situação', [l['produto']['material'] for l in est.reposicao(foto, '057E', status='ruptura')] == [BOOMBOX])
+
+print('\n== 5) A TELA ==')
+loja = Sector.objects.create(name='Loja Anchieta')
+outra = Sector.objects.create(name='Loja Piúma')
+chefe = User.objects.create_user(username='zzest.chefe', email='zzest.chefe@exemplo-teste.local', password='S3nha!teste',
+                                 first_name='Chefe', last_name='ZZ', hierarchy='SUPERADMIN', is_superuser=True, sector=loja)
+grupo, _ = CommunicationGroup.objects.get_or_create(name='GERENTES', defaults={'created_by': chefe})
+gerente = User.objects.create_user(username='zzest.gerente', email='zzest.ger@exemplo-teste.local', password='S3nha!teste',
+                                   first_name='Gerente', last_name='Piúma', hierarchy='PADRAO', sector=outra)
+gerente.communication_groups.add(grupo)
+vendedor = User.objects.create_user(username='zzest.cn', email='zzest.cn@exemplo-teste.local', password='S3nha!teste',
+                                    first_name='Vendedor', last_name='ZZ', hierarchy='PADRAO', sector=loja)
+cc, cg, cv = Client(), Client(), Client()
+cc.force_login(chefe); cg.force_login(gerente); cv.force_login(vendedor)
+
+r = cc.get('/sap/estoque/')
+html = r.content.decode()
+t('abre', r.status_code == 200, r.status_code)
+t('abre na loja de quem entra (Anchieta)', r.context['f']['loja'] == '057E')
+t('números do topo da loja', r.context['resumo'] == {'livre': 11, 'transito': 1, 'ruptura': 2, 'criticos': 1, 'sugestao': 11},
+  r.context['resumo'])
+t('cabeçalho: lojas com km e a data do SAP', 'Piúma' in html and ' km' in html and '23/11' in html)
+t('linha zerada mostra onde buscar', 'Mais perto com saldo' in html and 'sem saldo na rede' not in html.split('Samsung Galaxy A57')[1][:2000] if 'Samsung Galaxy A57' in html else False)
+t('aba Estoque no topo do /sap/', '/sap/estoque/' in html and 'fa-warehouse' in html)
+for aba in ('transito', 'reposicao', 'detalhado', 'produtos'):
+    r = cc.get(f'/sap/estoque/?aba={aba}&loja=057E')
+    t(f'aba {aba} abre', r.status_code == 200, r.status_code)
+r = cc.get('/sap/estoque/?aba=reposicao&loja=057E')
+t('reposição mostra "Transferir de" Piúma', 'Transferir de' in r.content.decode() and 'Piúma' in r.content.decode())
+r = cc.get('/sap/estoque/?loja=todas')
+t('rede inteira: todas as lojas viram coluna', r.status_code == 200 and len(r.context['colunas']) == 4
+  and r.context['resumo']['livre'] == 31, r.context['resumo'])
+r = cc.get('/sap/estoque/?aba=detalhado&loja=todas&deposito=RPAR')
+t('detalhado por depósito', [u['serial'] for u in r.context['pagina']] == ['SC4H00000002'])
+r = cc.get('/sap/estoque/?aba=detalhado&loja=057E&formato=csv')
+corpo = r.content.decode('utf-8-sig')
+t('CSV do detalhado', r.status_code == 200 and 'IMEI / serial' in corpo and 'SC4H00000001' in corpo
+  and '350000000000099' in corpo, corpo[:200])
+r = cc.get('/sap/estoque/?serial=0000000000002')
+t('busca por serial acha a unidade e a loja', [a['loja'] for a in r.context['achados']] == ['Piúma'], r.context.get('achados'))
+
+print('\n== 6) A GAVETA DE SERIAIS ==')
+j = cc.get(f'/sap/estoque/unidades/?centro=064E&material={GALAXY}&modo=disponivel&minha=057E').json()
+t('Piúma: 2 seriais, a mais parada primeiro, com km da minha loja', j['ok'] and [u['serial'] for u in j['unidades']]
+  == ['350000000000001', '350000000000002'] and j['unidades'][0]['dias'] == 120 and 5 < j['km'] < 15, j)
+j = cc.get(f'/sap/estoque/unidades/?centro=057E&material={GALAXY}&modo=transito').json()
+t('em trânsito: a unidade chegando', [u['serial'] for u in j['unidades']] == ['350000000000099'])
+j = cc.get(f'/sap/estoque/unidades/?centro=057E&material={PELICULA}&modo=disponivel').json()
+t('item sem serial: diz quantas, sem lista', j['unidades'] == [] and j['sem_serial'] == 10)
+t('loja inválida: 400', cc.get(f'/sap/estoque/unidades/?centro=XXXX&material={GALAXY}').status_code == 400)
+
+print('\n== 7) QUEM ENTRA ==')
+r = cg.get('/sap/estoque/')
+t('gerente de loja entra e abre na loja dele, vendo a rede', r.status_code == 200 and r.context['f']['loja'] == '064E'
+  and len(r.context['colunas']) == 4)
+t('quem não é da Visão SAP não entra', cv.get('/sap/estoque/').status_code == 302)
+t('nem na gaveta', cv.get(f'/sap/estoque/unidades/?centro=064E&material={GALAXY}',
+                          HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code == 403)
+
+print('\n== 8) SAP FORA DO AR ==')
+est._MEMORIA.clear(); cache.clear()
+with mock.patch.object(mysql, '_consultar', side_effect=mysql.SapIndisponivel('fora do ar')):
+    r = cc.get('/sap/estoque/')
+t('a tela avisa em vez de quebrar', r.status_code == 200 and 'Não deu para ler o estoque do SAP' in r.content.decode())
+est._MEMORIA.clear(); cache.clear()
+def sem_vendas(sql, parametros=()):
+    if 'vw_vivogo' in sql:
+        raise mysql.SapIndisponivel('view lenta')
+    return dublê(sql, parametros)
+with mock.patch.object(mysql, '_consultar', side_effect=sem_vendas):
+    r = cc.get('/sap/estoque/?aba=reposicao')
+t('sem as vendas: estoque abre e avisa na reposição', r.status_code == 200
+  and 'Vendas do Vivo GO indisponíveis agora' in r.content.decode())
+
+print(f'\n{ok} OK / {fail} falhas')
+sys.exit(1 if fail else 0)

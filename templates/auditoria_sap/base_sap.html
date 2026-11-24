@@ -102,6 +102,7 @@
             {% endif %}
         </div>
 
+        {% block sap_acoes %}
         <div class="flex items-end gap-3 flex-wrap">
             <div class="text-right">
                 <p class="text-[11px] text-gray-400">Dados de</p>
@@ -126,6 +127,7 @@
             </form>
             {% endif %}
         </div>
+        {% endblock %}
     </div>
 
     <nav class="flex items-center gap-1 mt-4 overflow-x-auto -mb-px">
@@ -136,6 +138,10 @@
         <a href="{% url 'auditoria_sap:painel' %}{% if query %}?{{ query }}{% endif %}"
            class="sap-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'painel' %}sap-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
             <i class="fas fa-chart-pie mr-1.5"></i>Painel
+        </a>
+        <a href="{% url 'auditoria_sap:estoque' %}"
+           class="sap-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'estoque' %}sap-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+            <i class="fas fa-warehouse mr-1.5"></i>Estoque
         </a>
         <a href="{% url 'auditoria_sap:renova' %}"
            class="sap-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'renova' %}sap-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">

@@ -173,7 +173,8 @@ auditoria = [
     sap('222.222.222-22', 'YBSC001J4000', '89551132269005843386', 'NF-CHIP', '13.00'),
     # 3) mesmo SKU, um dia depois.
     sap('333.333.333-33', '22023388', '220233880107102', 'NF-SKU', '69.00', DATA_VENDA=ONTEM),
-    # 4) serial parecido, mas OUTRO cliente: não é par.
+    # 4) outro cliente, mas o serial a um dígito do SAP na mesma loja: é serial
+    #    incorreto (23/11/2026 — antes "não é par").
     sap('444.444.444-44', '22022764', '220227640000268', 'NF-OUTRO-CLIENTE', '44.11'),
     # 5) mesmo cliente, 10 dias antes: não é par.
     sap('555.555.555-55', 'TGMO61852000', '354332912808853', 'NF-LONGE', '1229.00', DATA_VENDA=DIA - timedelta(days=10)),
@@ -213,8 +214,9 @@ for venda, nf, nome in (('V-GALAXY', 'NF-GALAXY', 'serial com um dígito a mais 
     t(f'par: {nome}', a and b, (a, b))
 t('a marca diz o outro lado do par', 'NF-GALAXY' in marcada(id_venda='V-GALAXY')[1].dados[MARCA_POSSIVEL_SERIAL]
   and 'V-GALAXY' in marcada(num_fat_sap='NF-GALAXY')[1].dados[MARCA_POSSIVEL_SERIAL])
-for venda, nf, nome in (('V-OUTRO-CLIENTE', 'NF-OUTRO-CLIENTE', 'outro cliente'),
-                        ('V-LONGE', 'NF-LONGE', '10 dias de distância'),
+t('par: outro cliente, serial a um dígito na mesma loja (serial incorreto)',
+  marcada(id_venda='V-OUTRO-CLIENTE')[0] and marcada(num_fat_sap='NF-OUTRO-CLIENTE')[0])
+for venda, nf, nome in (('V-LONGE', 'NF-LONGE', '10 dias de distância'),
                         ('V-OUTRO-PRODUTO', 'NF-OUTRO-PRODUTO', 'outro produto e outro valor')):
     t(f'não é par: {nome}', not marcada(id_venda=venda)[0] and not marcada(num_fat_sap=nf)[0])
 chips = [marcada(id_venda=v)[0] for v in ('V-CHIP-A', 'V-CHIP-B')]
@@ -229,20 +231,20 @@ def na_aba(grupo):
 
 r, nao_sap = na_aba('nao_sap')
 t('a aba "Lançadas no Vivo GO e não no SAP" não mostra os pares',
-  not {'V-GALAXY', 'V-CHIP', 'V-SKU', 'V-CHIP-A'} & nao_sap, nao_sap)
-t('e continua mostrando o resto', {'V-OUTRO-CLIENTE', 'V-LONGE', 'V-OUTRO-PRODUTO', 'V-CHIP-B'} <= nao_sap, nao_sap)
+  not {'V-GALAXY', 'V-CHIP', 'V-SKU', 'V-CHIP-A', 'V-OUTRO-CLIENTE'} & nao_sap, nao_sap)
+t('e continua mostrando o resto', {'V-LONGE', 'V-OUTRO-PRODUTO', 'V-CHIP-B'} <= nao_sap, nao_sap)
 r, vivogo = na_aba('vivogo')
 t('a aba "Lançado no SAP e não no Vivo GO" não mostra os pares',
-  not {'NF-GALAXY', 'NF-CHIP', 'NF-SKU', 'NF-UM-CHIP'} & vivogo, vivogo)
-t('e continua mostrando o resto', {'NF-OUTRO-CLIENTE', 'NF-LONGE', 'NF-OUTRO-PRODUTO'} <= vivogo, vivogo)
+  not {'NF-GALAXY', 'NF-CHIP', 'NF-SKU', 'NF-UM-CHIP', 'NF-OUTRO-CLIENTE'} & vivogo, vivogo)
+t('e continua mostrando o resto', {'NF-LONGE', 'NF-OUTRO-PRODUTO'} <= vivogo, vivogo)
 grupos = {g['chave']: g['n'] for g in r.context['grupos']}
-t('as contagens das abas já vêm sem os pares', grupos.get('nao_sap') == 4 and grupos.get('vivogo') == 3, grupos)
+t('as contagens das abas já vêm sem os pares', grupos.get('nao_sap') == 3 and grupos.get('vivogo') == 2, grupos)
 r, sem_nf = na_aba('sem_nf')
 t('par sem NF: o lado do SAP continua em "Sem NF" (a nota é outro problema)', 'NF-SEM-NF' in sem_nf, sem_nf)
 t('e o lado do Vivo GO sai como os outros', 'V-SEM-NF' not in sem_nf and 'V-SEM-NF' not in nao_sap)
 html = r.content.decode()
-# 4 pares inteiros + o lado Vivo GO do par sem NF.
-t('a tela diz quantas linhas saíram e por quê', r.context['serial_tirados'] == 9
+# 5 pares inteiros + o lado Vivo GO do par sem NF.
+t('a tela diz quantas linhas saíram e por quê', r.context['serial_tirados'] == 11
   and 'possível erro de serial' in html and 'o D-1 concilia' in html, r.context['serial_tirados'])
 r = cliente.get('/sap/painel/?mes=todos')
 t('o painel abre', r.status_code == 200, r.status_code)
@@ -286,6 +288,54 @@ t('1 indício só: continua na lista', not marcada(num_fat_sap='NF-IND-UM')[0])
 r, vivogo = na_aba('vivogo')
 t('a aba mostra a de 1 indício e não as de 2', 'NF-IND-UM' in vivogo and not {'NF-IND-PAR', 'NF-IND-SO'} & vivogo, vivogo)
 t('os pares de antes continuam marcados', marcada(num_fat_sap='NF-CHIP')[0] and marcada(id_venda='V-SKU')[0])
+
+print('\n== 5) SERIAL INCORRETO: O CHIP VIZINHO DA CARTELA (23/11/2026) ==')
+# "Está interpretando como não lançado no Vivo GO, uma aba sai e corrige a outra": a loja
+# bipou no Vivo GO o chip vizinho. CPFs diferentes, ICCID a dois dígitos.
+vizinhos = [
+    sap('202.020.202-02', 'YBSC001J4000', '89551132269005840465', 'NF-VIZINHO', '13.00', PDV='GLÓRIA'),
+    # IMEI com um dígito trocado, outro cliente, dois dias depois.
+    sap('212.121.212-12', 'TGSA58662000', '357884917661402', 'NF-IMEI-TROCADO', '1099.00', PDV='GLÓRIA'),
+    # três dígitos de diferença: não é par.
+    sap('232.323.232-32', 'YBSC001J4000', '89551132269005840999', 'NF-TRES-DIGITOS', '13.00', PDV='PIUMA'),
+    # chip no SAP × aparelho no Vivo GO: não é par, por mais que o número pareça.
+    sap('242.424.242-42', 'YBSC001J4000', '89551132269005840123', 'NF-CHIP-X-APARELHO', '13.00', PDV='VIANA'),
+    # serial a um dígito, mas em OUTRA loja: não é par.
+    sap('252.525.252-52', '22023388', '220233880107555', 'NF-OUTRA-LOJA', '69.00', PDV='ANCHIETA'),
+    # serial a um dígito, mesma loja, 5 dias depois: não é par.
+    sap('262.626.262-62', '22023388', '220233880107777', 'NF-5-DIAS', '69.00', PDV='MIRACEMA',
+        DATA_VENDA=DIA + timedelta(days=5) if DIA + timedelta(days=5) <= HOJE else DIA - timedelta(days=5)),
+]
+itens_viz = [
+    vg('V-VIZINHO', '303.030.303-03', '', '89551132269005840457', '13.00', PDV='GLÓRIA'),
+    vg('V-IMEI-TROCADO', '313.131.313-13', 'TGSA58662000', '357884917661502', '1099.00', PDV='GLÓRIA',
+       DATA_VENDA=DIA + timedelta(days=2) if DIA + timedelta(days=2) <= HOJE else DIA - timedelta(days=2)),
+    vg('V-TRES-DIGITOS', '333.000.333-33', '', '89551132269005840111', '13.00', PDV='PIUMA'),
+    vg('V-CHIP-X-APARELHO', '343.434.343-43', 'TGSA58662000', '9551132269005840123', '13.00', PDV='VIANA'),
+    vg('V-OUTRA-LOJA', '353.535.353-53', '22023388', '220233880107556', '69.00', PDV='ICONHA'),
+    vg('V-5-DIAS', '363.636.363-63', '22023388', '220233880107778', '69.00', PDV='MIRACEMA'),
+]
+with mock.patch.object(mysql, 'ler_visao_geral', return_value=[dict(b) for b in sem_galaxy + indicios + vizinhos]), \
+        mock.patch.object(mysql, 'ler_vendas_sem_sap', return_value=[dict(i) for i in itens + itens_ind + itens_viz]):
+    sincronizar()
+a_, l = marcada(num_fat_sap='NF-VIZINHO')
+t('chip vizinho (outro CPF, 2 dígitos): os dois lados saem', a_ and marcada(id_venda='V-VIZINHO')[0])
+t('a marca diz que é serial incorreto', l and 'serial incorreto: 2 dígitos' in l.dados[MARCA_POSSIVEL_SERIAL],
+  l and l.dados.get(MARCA_POSSIVEL_SERIAL))
+t('IMEI com um dígito trocado, 2 dias depois: par', marcada(num_fat_sap='NF-IMEI-TROCADO')[0]
+  and marcada(id_venda='V-IMEI-TROCADO')[0])
+for venda, nf, nome in (('V-TRES-DIGITOS', 'NF-TRES-DIGITOS', 'três dígitos de diferença'),
+                        ('V-CHIP-X-APARELHO', 'NF-CHIP-X-APARELHO', 'chip × aparelho'),
+                        ('V-OUTRA-LOJA', 'NF-OUTRA-LOJA', 'outra loja'),
+                        ('V-5-DIAS', 'NF-5-DIAS', '5 dias de distância')):
+    t(f'não é par: {nome}', not marcada(id_venda=venda)[0] and not marcada(num_fat_sap=nf)[0])
+r, vivogo = na_aba('vivogo')
+r, nao_sap = na_aba('nao_sap')
+t('o serial incorreto não aparece mais como "não lançado" em aba nenhuma',
+  not {'NF-VIZINHO', 'NF-IMEI-TROCADO'} & vivogo and not {'V-VIZINHO', 'V-IMEI-TROCADO'} & nao_sap)
+t('os que não são par continuam nas abas', {'NF-TRES-DIGITOS', 'NF-CHIP-X-APARELHO', 'NF-OUTRA-LOJA'} <= vivogo
+  and {'V-TRES-DIGITOS', 'V-CHIP-X-APARELHO', 'V-OUTRA-LOJA'} <= nao_sap, (vivogo, nao_sap))
+t('os pares de antes continuam marcados', marcada(num_fat_sap='NF-CHIP')[0] and marcada(num_fat_sap='NF-IND-PAR')[0])
 
 print(f'\n{ok} OK / {fail} falhas')
 sys.exit(1 if fail else 0)

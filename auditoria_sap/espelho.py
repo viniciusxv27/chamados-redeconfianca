@@ -253,7 +253,8 @@ def marcar_possiveis_erros_de_serial(brutas):
         usados.update((id_vg, id_sap))
         pares += 1
         _marcar_par(vg, sap, motivo)
-    return pares + _marcar_pelos_indicios_da_query(brutas, usados)
+    pelos_indicios = _marcar_pelos_indicios_da_query(brutas, usados)
+    return pares + pelos_indicios + _marcar_seriais_quase_iguais(brutas, usados)
 
 
 def _marcar_par(vg, sap, motivo):
@@ -321,6 +322,79 @@ def _marcar_pelos_indicios_da_query(brutas, usados):
         else:
             sap[MARCA_POSSIVEL_SERIAL] = f'POSSÍVEL ERRO DE SERIAL ({motivo}) | CONCILIADO NO D-1'
     return marcadas
+
+
+# Serial incorreto (23/11/2026): "está interpretando como não lançado no Vivo GO, uma aba
+# sai e corrige a outra". A loja bipa no Vivo GO o chip vizinho da cartela (ou digita um
+# IMEI com um dígito trocado): o SAP fica com uma venda "não encontrada no Vivo GO" e o
+# Vivo GO com um item "não lançado no SAP" — a mesma unidade, duas linhas, e corrigir o
+# serial apaga as duas. O CPF não ajuda (no chip trocado é muitas vezes o de outra venda),
+# então a prova é o próprio serial: mesma loja, até ``DIAS_DO_PAR`` dias, até
+# ``DIGITOS_DO_SERIAL`` dígitos de diferença e o mesmo tipo de peça (chip × chip ou
+# aparelho/acessório × aparelho/acessório). Medido em 23/11/2026: ~615 linhas da aba
+# "Lançado no SAP e não no Vivo GO" com o par a 1–2 dígitos na mesma loja.
+DIGITOS_DO_SERIAL = 2
+SERIAL_MINIMO = 12          # serial curto demais (código interno, "1") não prova nada
+
+
+def _distancia_ate(a, b, limite):
+    """Distância de edição entre ``a`` e ``b``, ou ``limite + 1`` se passar do limite."""
+    if abs(len(a) - len(b)) > limite:
+        return limite + 1
+    anterior = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        atual = [i] + [0] * len(b)
+        menor = atual[0]
+        for j, cb in enumerate(b, 1):
+            atual[j] = min(anterior[j] + 1, atual[j - 1] + 1, anterior[j - 1] + (ca != cb))
+            menor = min(menor, atual[j])
+        if menor > limite:
+            return limite + 1
+        anterior = atual
+    return min(anterior[-1], limite + 1)
+
+
+def _marcar_seriais_quase_iguais(brutas, usados):
+    """Pares que sobraram com o serial a até ``DIGITOS_DO_SERIAL`` dígitos — um para um,
+    o mais parecido (e mais perto no tempo) primeiro. Devolve quantos."""
+    from .permissions import normalizar_loja
+
+    vg_por_loja = {}
+    for vg in brutas:
+        if (_texto(vg.get('TIPO_ERRO')) == TIPO_NAO_LANCADA_NO_SAP and id(vg) not in usados
+                and MARCA_POSSIVEL_SERIAL not in vg):
+            serial = _so_letras_e_numeros(vg.get('SERIAL_VIVOGO'))
+            if len(serial) >= SERIAL_MINIMO:
+                vg_por_loja.setdefault(normalizar_loja(vg.get('PDV')), []).append((serial, vg))
+    candidatos = []
+    for sap in brutas:
+        if (_texto(sap.get('TIPO_ERRO')) != TIPO_NAO_ENCONTRADA_NO_VIVOGO or id(sap) in usados
+                or MARCA_POSSIVEL_SERIAL in sap):
+            continue
+        serial_sap = _so_letras_e_numeros(sap.get('SERIAL_SAP'))
+        dia_sap = _data(sap.get('DATA_VENDA')) or _data(sap.get('DATA_FATURA_SAP'))
+        if len(serial_sap) < SERIAL_MINIMO or not dia_sap:
+            continue
+        chip_sap = serial_sap.startswith('8955')
+        for serial_vg, vg in vg_por_loja.get(normalizar_loja(sap.get('PDV')), ()):
+            dia_vg = _data(vg.get('DATA_VENDA'))
+            if not dia_vg or abs((dia_vg - dia_sap).days) > DIAS_DO_PAR:
+                continue
+            if serial_vg.startswith('8955') != chip_sap:
+                continue
+            distancia = _distancia_ate(serial_sap, serial_vg, DIGITOS_DO_SERIAL)
+            if 0 < distancia <= DIGITOS_DO_SERIAL:
+                candidatos.append((distancia, abs((dia_vg - dia_sap).days), id(vg), id(sap), vg, sap))
+    candidatos.sort(key=lambda c: (c[0], c[1]))
+    pares = 0
+    for distancia, _dias, id_vg, id_sap, vg, sap in candidatos:
+        if id_vg in usados or id_sap in usados:
+            continue
+        usados.update((id_vg, id_sap))
+        pares += 1
+        _marcar_par(vg, sap, f'serial incorreto: {distancia} dígito{"s" if distancia > 1 else ""} '
+                             f'de diferença na mesma loja')
+    return pares
 
 
 def _mudou(linha, valores):

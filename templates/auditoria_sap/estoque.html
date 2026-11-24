@@ -1,0 +1,528 @@
+{% extends 'auditoria_sap/base_sap.html' %}
+{% comment %}
+Estoque da Visão SAP (23/11/2026). A regra mora em auditoria_sap/estoque.py; a
+view em auditoria_sap/views_estoque.py. Uma loja no topo ("Minha loja"), quatro
+números dela e cinco abas. Clicar numa quantidade abre a gaveta com os seriais.
+{% endcomment %}
+
+{% block sap_titulo %}Estoque · Visão SAP{% endblock %}
+{% block sap_cabecalho %}Estoque{% endblock %}
+{% block sap_subtitulo %}Onde está cada produto, o que está chegando e o que pedir{% endblock %}
+
+{% block sap_acoes %}
+{% if foto %}
+<div class="text-right text-xs leading-relaxed">
+    <p class="text-gray-500"><i class="fas fa-warehouse mr-1 text-gray-400"></i>Estoque SAP de <strong class="text-gray-700">{{ foto.quando_mb52|date:"d/m \à\s H\hi" }}</strong></p>
+    {% if sem_vendas %}
+    <p class="text-amber-600"><i class="fas fa-triangle-exclamation mr-1"></i>Vendas do Vivo GO indisponíveis agora</p>
+    {% else %}
+    <p class="text-gray-500"><i class="fas fa-cash-register mr-1 text-gray-400"></i>Vendas Vivo GO até <strong class="text-gray-700">{{ foto.hoje|date:"d/m" }}</strong></p>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block sap_conteudo %}
+<style>
+    .est-q { display:inline-flex; min-width:2.1rem; justify-content:center; padding:.2rem .45rem; border-radius:.5rem;
+             font-weight:700; font-size:.8rem; font-variant-numeric:tabular-nums; cursor:pointer;
+             transition:transform .1s ease, box-shadow .1s ease; border:1px solid transparent; }
+    .est-q:hover { transform:translateY(-1px); box-shadow:0 2px 6px rgba(15,23,42,.12); }
+    .est-q-1 { background:#FFEDD5; color:#9A3412; border-color:#FED7AA; }   /* 1–2 unidades */
+    .est-q-3 { background:#DCFCE7; color:#166534; border-color:#BBF7D0; }   /* 3 ou mais */
+    .est-q-t { background:#E0F2FE; color:#075985; border-color:#BAE6FD; }   /* em trânsito */
+    .est-zero { color:#CBD5E1; }
+    .est-minha { background:#F0F9FF; }
+    .est-tabela th, .est-tabela td { white-space:nowrap; }
+    .est-fixa { position:sticky; left:0; z-index:1; background:#fff; box-shadow:1px 0 0 #EEF2F6; white-space:normal !important; }
+    .est-tabela thead .est-fixa { z-index:2; background:#F8FAFC; }
+    .est-pill { padding:.4rem .8rem; border-radius:999px; font-size:.82rem; font-weight:600; white-space:nowrap; }
+    .est-pill-on { background:#0284C7; color:#fff; }
+    .est-pill-off { background:#F1F5F9; color:#475569; }
+    .est-pill-off:hover { background:#E2E8F0; }
+    .est-sit { display:inline-flex; align-items:center; gap:.3rem; padding:.1rem .5rem; border-radius:999px; font-size:11px; font-weight:700; }
+    .est-sit-critico { background:#FEE2E2; color:#B91C1C; }
+    .est-sit-ruptura { background:#FCE7F3; color:#9D174D; }
+    .est-sit-insuficiente { background:#FFEDD5; color:#9A3412; }
+    .est-sit-ok { background:#DCFCE7; color:#166534; }
+    #estGaveta { transition: transform .2s ease; }
+    #estGaveta.fechada { transform: translateX(105%); }
+    html.dark .est-q-1 { background:rgba(249,115,22,.18); color:#fdba74; border-color:rgba(249,115,22,.35); }
+    html.dark .est-q-3 { background:rgba(34,197,94,.16); color:#86efac; border-color:rgba(34,197,94,.35); }
+    html.dark .est-q-t { background:rgba(14,165,233,.16); color:#7dd3fc; border-color:rgba(14,165,233,.35); }
+    html.dark .est-zero { color:var(--tema-texto-3); }
+    html.dark .est-minha { background:rgba(14,165,233,.10); }
+    html.dark .est-fixa { background:var(--tema-superficie); box-shadow:1px 0 0 var(--tema-borda); }
+    html.dark .est-tabela thead .est-fixa { background:var(--tema-superficie-2); }
+    html.dark .est-pill-off { background:var(--tema-superficie-2); color:var(--tema-texto-2); }
+    html.dark .est-sit-critico { background:rgba(239,68,68,.18); color:#fca5a5; }
+    html.dark .est-sit-ruptura { background:rgba(236,72,153,.18); color:#f9a8d4; }
+    html.dark .est-sit-insuficiente { background:rgba(249,115,22,.18); color:#fdba74; }
+    html.dark .est-sit-ok { background:rgba(34,197,94,.16); color:#86efac; }
+</style>
+
+{% if erro %}
+<div class="sap-card p-6 text-center">
+    <i class="fas fa-plug-circle-xmark text-3xl text-amber-500"></i>
+    <p class="mt-3 font-semibold text-gray-800">Não deu para ler o estoque do SAP agora.</p>
+    <p class="mt-1 text-sm text-gray-500">{{ erro }}</p>
+    <a href="{% url 'auditoria_sap:estoque' %}" class="inline-flex mt-4 px-4 py-2 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700"><i class="fas fa-rotate mr-1.5"></i>Tentar de novo</a>
+</div>
+{% else %}
+
+{# ------------------------------------------------------------- filtros #}
+<form method="get" id="estFiltros" class="sap-card p-3 sm:p-4 mb-4">
+    <input type="hidden" name="aba" value="{{ f.aba }}">
+    {% if f.situacao %}<input type="hidden" name="situacao" value="{{ f.situacao }}">{% endif %}
+    {% if f.ordem == 'rede' %}<input type="hidden" name="ordem" value="rede">{% endif %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-end">
+        <label class="block lg:col-span-3">
+            <span class="sap-rotulo">Minha loja</span>
+            <select name="loja" onchange="this.form.submit()" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-sky-200 focus:border-sky-400">
+                <option value="todas" {% if not f.loja %}selected{% endif %}>Todas as lojas (rede)</option>
+                {% for uf, lojas_uf in lojas %}
+                <optgroup label="{{ uf }}">
+                    {% for l in lojas_uf %}
+                    <option value="{{ l.centro }}" {% if l.centro == f.loja %}selected{% endif %}>{{ l.nome }}{% if l.centro == minha_loja %} (minha){% endif %}</option>
+                    {% endfor %}
+                </optgroup>
+                {% endfor %}
+            </select>
+        </label>
+        <label class="block lg:col-span-4">
+            <span class="sap-rotulo">Produto</span>
+            <div class="relative mt-1">
+                <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+                <input type="search" name="q" value="{{ f.q }}" placeholder="Nome, cor, material ou fabricante"
+                       class="w-full rounded-lg border border-gray-200 pl-8 pr-3 py-2 text-sm focus:ring-2 focus:ring-sky-200 focus:border-sky-400">
+            </div>
+        </label>
+        <label class="block lg:col-span-2">
+            <span class="sap-rotulo">Categoria</span>
+            <select name="categoria" onchange="this.form.submit()" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white">
+                <option value="">Todas</option>
+                {% for c in categorias %}<option value="{{ c }}" {% if c == f.categoria %}selected{% endif %}>{{ c }}</option>{% endfor %}
+            </select>
+        </label>
+        <label class="block lg:col-span-2">
+            <span class="sap-rotulo">IMEI / serial</span>
+            <input type="search" name="serial" value="{{ f.serial }}" placeholder="Achar uma unidade" inputmode="numeric"
+                   class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-sky-200 focus:border-sky-400">
+        </label>
+        <div class="flex gap-2 lg:col-span-1">
+            <button type="submit" class="flex-1 px-3 py-2 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700" title="Buscar"><i class="fas fa-search"></i><span class="lg:hidden ml-1.5">Buscar</span></button>
+            {% if f.q or f.categoria or f.serial %}
+            <a href="?aba={{ f.aba }}&loja={{ f.loja|default:'todas' }}" class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50" title="Limpar a busca"><i class="fas fa-xmark"></i></a>
+            {% endif %}
+        </div>
+    </div>
+    {% if loja_info %}
+    <p class="mt-2 text-xs text-gray-500"><i class="fas fa-location-dot mr-1 text-sky-500"></i>{{ loja_nome }} · {{ loja_info.cidade }}/{{ loja_info.uf }} · centro {{ f.loja }}</p>
+    {% endif %}
+</form>
+
+{# --------------------------------------------------- achou pelo serial #}
+{% if f.serial %}
+<div class="sap-card p-4 mb-4">
+    <p class="text-sm font-semibold text-gray-800"><i class="fas fa-barcode mr-1.5 text-sky-600"></i>Serial "{{ f.serial }}"</p>
+    {% if achados %}
+    <ul class="mt-2 divide-y divide-gray-100">
+        {% for u in achados %}
+        <li class="py-2 flex flex-wrap items-center justify-between gap-2 text-sm">
+            <span class="font-mono text-gray-800">{{ u.serial }}</span>
+            <span class="text-gray-700">{{ u.loja }} <span class="text-gray-400">· {{ u.deposito_nome }}</span></span>
+            <span class="text-xs text-gray-500">{{ u.tipo_nome }}{% if u.desde %} · desde {{ u.desde|date:"d/m/Y" }} ({{ u.dias }} dia{{ u.dias|pluralize }}){% endif %}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="mt-1 text-sm text-gray-500">Nenhuma unidade com esse serial no estoque do SAP (pode ter sido vendida ou não ter entrado ainda).</p>
+    {% endif %}
+</div>
+{% endif %}
+
+{# ------------------------------------------------------------ números #}
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+    <a href="?{{ q_base }}&aba=disponivel" class="sap-card p-4 hover:ring-2 hover:ring-sky-100 transition">
+        <p class="sap-rotulo">Livre para venda</p>
+        <p class="text-2xl font-bold text-gray-900 tabular mt-1">{{ resumo.livre }}</p>
+        <p class="text-xs text-gray-500">{% if f.loja %}unidades em {{ loja_nome }}{% else %}unidades na rede{% endif %}</p>
+    </a>
+    <a href="?{{ q_base }}&aba=transito" class="sap-card p-4 hover:ring-2 hover:ring-sky-100 transition">
+        <p class="sap-rotulo">Em trânsito</p>
+        <p class="text-2xl font-bold text-sky-700 tabular mt-1">{{ resumo.transito }}</p>
+        <p class="text-xs text-gray-500">{% if f.loja %}a caminho de {{ loja_nome }}{% else %}a caminho das lojas{% endif %}</p>
+    </a>
+    <a href="?{{ q_base }}&aba=reposicao&situacao=ruptura" class="sap-card p-4 hover:ring-2 hover:ring-sky-100 transition {% if resumo.criticos %}ring-1 ring-red-200{% endif %}">
+        <p class="sap-rotulo">Em ruptura</p>
+        <p class="text-2xl font-bold {% if resumo.ruptura %}text-red-600{% else %}text-gray-900{% endif %} tabular mt-1">{{ resumo.ruptura }}</p>
+        <p class="text-xs text-gray-500">zerados que vendem{% if resumo.criticos %} · <strong class="text-red-600">{{ resumo.criticos }} crítico{{ resumo.criticos|pluralize }}</strong>{% endif %}</p>
+    </a>
+    <a href="?{{ q_base }}&aba=reposicao" class="sap-card p-4 hover:ring-2 hover:ring-sky-100 transition">
+        <p class="sap-rotulo">Sugestão de pedido</p>
+        <p class="text-2xl font-bold text-gray-900 tabular mt-1">{{ resumo.sugestao }}</p>
+        <p class="text-xs text-gray-500">unidades para cobrir 30 dias</p>
+    </a>
+</div>
+
+{# --------------------------------------------------------------- abas #}
+<div class="flex gap-2 overflow-x-auto pb-1 mb-3">
+    {% for chave, rotulo, icone in abas %}
+    <a href="?{{ q_base }}&aba={{ chave }}" class="est-pill {% if f.aba == chave %}est-pill-on{% else %}est-pill-off{% endif %}">
+        <i class="fas {{ icone }} mr-1"></i>{{ rotulo }}
+    </a>
+    {% endfor %}
+</div>
+
+{% if f.aba == 'disponivel' or f.aba == 'transito' %}
+{# ------------------------------------------ matriz: produto × loja #}
+<div class="sap-card overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
+        <div class="text-sm text-gray-700">
+            {% if f.aba == 'disponivel' %}
+                {% if f.loja %}<strong>{{ loja_nome }}</strong> e as {{ colunas|length|add:"-1" }} lojas mais perto{% else %}Todas as lojas{% endif %}
+                · livre para venda
+            {% else %}
+                A caminho {% if f.loja %}de <strong>{{ loja_nome }}</strong> e das lojas mais perto{% else %}de cada loja (coluna = destino){% endif %}
+            {% endif %}
+            <span class="text-gray-400">· {{ total_linhas }} produto{{ total_linhas|pluralize }}</span>
+        </div>
+        <div class="flex items-center gap-3 text-xs text-gray-500">
+            {% if f.aba == 'disponivel' %}
+            <span class="inline-flex items-center gap-1"><span class="est-q est-q-1" style="cursor:default;min-width:1.4rem">1</span>1–2</span>
+            <span class="inline-flex items-center gap-1"><span class="est-q est-q-3" style="cursor:default;min-width:1.4rem">3</span>3 ou mais</span>
+            {% endif %}
+            <a href="?{{ q_atual }}&ordem={% if f.ordem == 'rede' %}nome{% else %}rede{% endif %}" class="font-semibold text-sky-700 hover:underline">
+                <i class="fas fa-arrow-down-wide-short mr-1"></i>{% if f.ordem == 'rede' %}Ordem: mais na rede{% else %}Ordem: A–Z{% endif %}
+            </a>
+        </div>
+    </div>
+    {% if pagina.object_list %}
+    <div class="overflow-x-auto">
+        <table class="est-tabela min-w-full text-sm">
+            <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
+                <tr>
+                    <th class="est-fixa text-left px-3 py-2 min-w-[14rem]">Produto</th>
+                    {% for c in colunas %}
+                    <th class="px-2 py-2 text-center {% if c.minha %}est-minha{% endif %}" title="{{ c.nome }}">
+                        <span class="block normal-case text-[12px] font-semibold text-gray-700 max-w-[7.5rem] truncate mx-auto">{{ c.nome }}</span>
+                        {% if c.minha %}<span class="block normal-case text-[10px] text-sky-600">sua loja</span>
+                        {% elif c.km is not None %}<span class="block normal-case text-[10px] text-gray-400">{{ c.km|floatformat:0 }} km</span>{% endif %}
+                    </th>
+                    {% endfor %}
+                    <th class="px-3 py-2 text-center">Rede</th>
+                    {% if f.aba == 'disponivel' and f.loja %}<th class="px-3 py-2 text-left">Mais perto com saldo</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for linha in pagina %}
+                <tr class="hover:bg-gray-50/60">
+                    <td class="est-fixa px-3 py-2">
+                        <p class="font-medium text-gray-900 leading-snug">{{ linha.produto.nome }}</p>
+                        <p class="text-[11px] text-gray-500">{% if linha.produto.cor %}{{ linha.produto.cor }} · {% endif %}{{ linha.produto.material }}{% if linha.produto.categoria %} · {{ linha.produto.categoria }}{% endif %}</p>
+                    </td>
+                    {% for qtd in linha.qtds %}
+                    <td class="px-2 py-2 text-center {% if forloop.first and f.loja %}est-minha{% endif %}">
+                        {% if qtd %}
+                        <button type="button" class="est-q {% if f.aba == 'transito' %}est-q-t{% elif qtd >= 3 %}est-q-3{% else %}est-q-1{% endif %}"
+                                data-material="{{ linha.produto.material }}" data-indice="{{ forloop.counter0 }}"
+                                data-modo="{{ f.aba }}" title="Ver os seriais">{{ qtd|floatformat:0 }}</button>
+                        {% else %}<span class="est-zero">·</span>{% endif %}
+                    </td>
+                    {% endfor %}
+                    <td class="px-3 py-2 text-center font-semibold text-gray-700 tabular">{{ linha.rede|floatformat:0 }}</td>
+                    {% if f.aba == 'disponivel' and f.loja %}
+                    <td class="px-3 py-2 text-xs">
+                        {% if linha.qtds.0 %}<span class="text-gray-300">—</span>
+                        {% elif linha.mais_perto %}
+                        <button type="button" class="text-left text-sky-700 hover:underline font-semibold"
+                                data-material="{{ linha.produto.material }}" data-centro="{{ linha.mais_perto.centro }}" data-modo="disponivel">
+                            {{ linha.mais_perto.nome }}</button>
+                        <span class="text-gray-500">· {{ linha.mais_perto.km|floatformat:0 }} km · {{ linha.mais_perto.qtd|floatformat:0 }} un.</span>
+                        {% else %}<span class="text-gray-400">sem saldo na rede</span>{% endif %}
+                    </td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% include 'auditoria_sap/_estoque_paginas.html' %}
+    {% else %}
+    <div class="p-10 text-center text-gray-500 text-sm">
+        <i class="fas fa-box-open text-3xl text-gray-300"></i>
+        <p class="mt-2">{% if f.aba == 'transito' %}Nada em trânsito{% else %}Nenhum produto com saldo livre{% endif %} {% if f.q or f.categoria %}com essa busca{% else %}nessas lojas{% endif %}.</p>
+    </div>
+    {% endif %}
+</div>
+<script id="estColunas" type="application/json">[{% for c in colunas %}"{{ c.centro }}"{% if not forloop.last %},{% endif %}{% endfor %}]</script>
+
+{% elif f.aba == 'reposicao' %}
+{# ---------------------------------------------------------- reposição #}
+<div class="sap-card overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100">
+        <p class="text-sm text-gray-700">
+            Estoque considerado = <strong>livre + em trânsito</strong>. Sugestão = vendas de 30 dias − estoque.
+            {% if not f.loja %}Na rede, é a soma das sugestões de cada loja.{% endif %}
+            Antes de pedir, veja se a loja mais perto (até 200 km) tem sobra para transferir.
+        </p>
+        <div class="flex gap-2 overflow-x-auto mt-3">
+            {% for chave, rotulo in situacoes %}
+            <a href="?{{ q_base }}&aba=reposicao{% if chave %}&situacao={{ chave }}{% endif %}" class="est-pill text-xs {% if f.situacao == chave %}est-pill-on{% else %}est-pill-off{% endif %}">{{ rotulo }}</a>
+            {% endfor %}
+        </div>
+        {% if sem_vendas %}<p class="mt-2 text-xs text-amber-600"><i class="fas fa-triangle-exclamation mr-1"></i>As vendas do Vivo GO não vieram agora: a reposição fica vazia até a próxima leitura.</p>{% endif %}
+    </div>
+    {% if pagina.object_list %}
+    <div class="overflow-x-auto">
+        <table class="est-tabela min-w-full text-sm">
+            <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
+                <tr>
+                    <th class="est-fixa text-left px-3 py-2 min-w-[14rem]">Produto</th>
+                    {% if not f.loja %}<th class="text-left px-3 py-2">Loja</th>{% endif %}
+                    <th class="px-3 py-2 text-right">Livre</th>
+                    <th class="px-3 py-2 text-right">Trânsito</th>
+                    <th class="px-3 py-2 text-right">Vendas 30d</th>
+                    <th class="px-3 py-2 text-right">90d</th>
+                    <th class="px-3 py-2 text-right">Sugestão</th>
+                    <th class="px-3 py-2 text-left">Situação</th>
+                    <th class="px-3 py-2 text-left">Transferir de</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for l in pagina %}
+                <tr class="hover:bg-gray-50/60">
+                    <td class="est-fixa px-3 py-2">
+                        <p class="font-medium text-gray-900 leading-snug">{{ l.produto.nome }}</p>
+                        <p class="text-[11px] text-gray-500">{% if l.produto.cor %}{{ l.produto.cor }} · {% endif %}{{ l.produto.material }}</p>
+                    </td>
+                    {% if not f.loja %}<td class="px-3 py-2 text-gray-700">{{ l.loja }}</td>{% endif %}
+                    <td class="px-3 py-2 text-right tabular">{{ l.livre|floatformat:0 }}</td>
+                    <td class="px-3 py-2 text-right tabular text-sky-700">{{ l.transito|floatformat:0 }}</td>
+                    <td class="px-3 py-2 text-right tabular font-semibold">{{ l.v30 }}</td>
+                    <td class="px-3 py-2 text-right tabular text-gray-500">{{ l.v90 }}</td>
+                    <td class="px-3 py-2 text-right tabular font-bold {% if l.sugestao %}text-gray-900{% else %}text-gray-300{% endif %}">{{ l.sugestao }}</td>
+                    <td class="px-3 py-2">
+                        <span class="est-sit est-sit-{{ l.situacao }}">
+                            {% if l.situacao == 'critico' %}<i class="fas fa-circle-exclamation"></i>Crítico{% elif l.situacao == 'ruptura' %}Ruptura{% elif l.situacao == 'insuficiente' %}Insuficiente{% else %}Coberto{% endif %}
+                        </span>
+                    </td>
+                    <td class="px-3 py-2 text-xs">
+                        {% if l.buscar_em %}
+                        <button type="button" class="text-sky-700 hover:underline font-semibold"
+                                data-material="{{ l.produto.material }}" data-centro="{{ l.buscar_em.centro }}" data-modo="disponivel" data-minha="{{ l.centro }}">{{ l.buscar_em.nome }}</button>
+                        <span class="text-gray-500">· {{ l.buscar_em.km|floatformat:0 }} km · sobra {{ l.buscar_em.sobra }}</span>
+                        {% elif l.sugestao %}<span class="text-gray-400">pedir</span>{% else %}<span class="text-gray-300">—</span>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="px-4 py-2 text-xs text-gray-500 border-t border-gray-100">Sugestão total desta lista: <strong class="text-gray-800">{{ sugestao_filtrada }}</strong> unidade{{ sugestao_filtrada|pluralize }}.</div>
+    {% include 'auditoria_sap/_estoque_paginas.html' %}
+    {% else %}
+    <div class="p-10 text-center text-gray-500 text-sm"><i class="fas fa-circle-check text-3xl text-emerald-300"></i><p class="mt-2">Nada para repor com esse filtro.</p></div>
+    {% endif %}
+</div>
+
+{% elif f.aba == 'detalhado' %}
+{# ----------------------------------------------------------- detalhado #}
+<div class="sap-card overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
+        <div class="flex gap-2 overflow-x-auto">
+            <a href="?{{ q_base }}&aba=detalhado" class="est-pill text-xs {% if not f.deposito %}est-pill-on{% else %}est-pill-off{% endif %}">Todos os depósitos</a>
+            {% for cod, nome in depositos %}
+            <a href="?{{ q_base }}&aba=detalhado&deposito={{ cod }}" class="est-pill text-xs {% if f.deposito == cod %}est-pill-on{% else %}est-pill-off{% endif %}" title="{{ cod }}">{{ nome }}</a>
+            {% endfor %}
+        </div>
+        <a href="?{{ q_atual }}&formato=csv" class="text-xs font-semibold text-sky-700 hover:underline"><i class="fas fa-file-csv mr-1"></i>Baixar CSV ({{ total_linhas }})</a>
+    </div>
+    {% if pagina.object_list %}
+    <div class="overflow-x-auto">
+        <table class="est-tabela min-w-full text-sm">
+            <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
+                <tr>
+                    <th class="est-fixa text-left px-3 py-2 min-w-[13rem]">Produto</th>
+                    <th class="text-left px-3 py-2">Loja</th>
+                    <th class="text-left px-3 py-2">IMEI / serial</th>
+                    <th class="text-left px-3 py-2">Depósito</th>
+                    <th class="text-left px-3 py-2">Tipo de estoque</th>
+                    <th class="text-left px-3 py-2">Status</th>
+                    <th class="text-left px-3 py-2">Última mov.</th>
+                    <th class="text-right px-3 py-2">Dias</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for u in pagina %}
+                <tr class="hover:bg-gray-50/60">
+                    <td class="est-fixa px-3 py-2">
+                        <p class="font-medium text-gray-900 leading-snug">{{ u.produto.nome }}</p>
+                        <p class="text-[11px] text-gray-500">{% if u.produto.cor %}{{ u.produto.cor }} · {% endif %}{{ u.material }}</p>
+                    </td>
+                    <td class="px-3 py-2 text-gray-700">{{ u.loja }}</td>
+                    <td class="px-3 py-2 font-mono text-xs">{{ u.serial }}</td>
+                    <td class="px-3 py-2 text-xs"><span class="font-semibold">{{ u.deposito }}</span> <span class="text-gray-500">{{ u.deposito_nome }}</span></td>
+                    <td class="px-3 py-2 text-xs">{{ u.tipo_nome }}</td>
+                    <td class="px-3 py-2 text-xs text-gray-600">{{ u.status_sistema }}{% if u.status_usuario %} · {{ u.status_usuario }}{% endif %}</td>
+                    <td class="px-3 py-2 text-xs">{{ u.desde|date:"d/m/Y"|default:"—" }}</td>
+                    <td class="px-3 py-2 text-right tabular {% if u.dias and u.dias > 90 %}text-amber-700 font-semibold{% endif %}">{{ u.dias|default_if_none:"—" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% include 'auditoria_sap/_estoque_paginas.html' %}
+    {% else %}
+    <div class="p-10 text-center text-gray-500 text-sm"><i class="fas fa-box-open text-3xl text-gray-300"></i><p class="mt-2">Nenhuma unidade com esse filtro.</p></div>
+    {% endif %}
+</div>
+
+{% else %}
+{# ------------------------------------------------------------ produtos #}
+<div class="sap-card overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center gap-3">
+        <form method="get" class="flex items-center gap-2">
+            <input type="hidden" name="aba" value="produtos"><input type="hidden" name="loja" value="{{ f.loja|default:'todas' }}">
+            {% if f.q %}<input type="hidden" name="q" value="{{ f.q }}">{% endif %}
+            {% if f.categoria %}<input type="hidden" name="categoria" value="{{ f.categoria }}">{% endif %}
+            <span class="sap-rotulo">Fabricante</span>
+            <select name="fabricante" onchange="this.form.submit()" class="rounded-lg border border-gray-200 px-2 py-1.5 text-sm bg-white">
+                <option value="">Todos</option>
+                {% for fab in fabricantes %}<option value="{{ fab }}" {% if fab == f.fabricante %}selected{% endif %}>{{ fab }}</option>{% endfor %}
+            </select>
+        </form>
+        <span class="text-xs text-gray-500">{{ total_linhas }} produto{{ total_linhas|pluralize }} · saldos da rede</span>
+    </div>
+    {% if pagina.object_list %}
+    <div class="overflow-x-auto">
+        <table class="est-tabela min-w-full text-sm">
+            <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
+                <tr>
+                    <th class="est-fixa text-left px-3 py-2 min-w-[14rem]">Produto</th>
+                    <th class="text-left px-3 py-2">Material</th>
+                    <th class="text-left px-3 py-2">Categoria</th>
+                    <th class="text-left px-3 py-2">Fabricante</th>
+                    <th class="text-left px-3 py-2">Descrição no SAP</th>
+                    <th class="text-right px-3 py-2">Disponível (rede)</th>
+                    <th class="text-right px-3 py-2">Em trânsito (rede)</th>
+                    <th class="px-3 py-2"></th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for l in pagina %}
+                <tr class="hover:bg-gray-50/60">
+                    <td class="est-fixa px-3 py-2">
+                        <p class="font-medium text-gray-900 leading-snug">{{ l.produto.nome }}</p>
+                        <p class="text-[11px] text-gray-500">{{ l.produto.cor|default:"" }}{% if l.produto.gama %} · {{ l.produto.gama }}{% endif %}{% if not l.produto.tem_cadastro %} <span class="text-amber-600">sem nome comercial</span>{% endif %}</p>
+                    </td>
+                    <td class="px-3 py-2 font-mono text-xs">{{ l.produto.material }}</td>
+                    <td class="px-3 py-2 text-xs">{{ l.produto.categoria }}{% if l.produto.subcategoria %} <span class="text-gray-400">· {{ l.produto.subcategoria }}</span>{% endif %}</td>
+                    <td class="px-3 py-2 text-xs">{{ l.produto.fabricante|default:"—" }}</td>
+                    <td class="px-3 py-2 text-xs text-gray-500">{{ l.produto.descricao_sap|default:"—" }}</td>
+                    <td class="px-3 py-2 text-right tabular font-semibold">{{ l.livre|floatformat:0 }}</td>
+                    <td class="px-3 py-2 text-right tabular text-sky-700">{{ l.transito|floatformat:0 }}</td>
+                    <td class="px-3 py-2 text-right">
+                        {% if l.livre %}<a href="?aba=disponivel&loja={{ f.loja|default:'todas' }}&q={{ l.produto.material }}" class="text-xs font-semibold text-sky-700 hover:underline whitespace-nowrap">Onde tem <i class="fas fa-arrow-right"></i></a>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% include 'auditoria_sap/_estoque_paginas.html' %}
+    {% else %}
+    <div class="p-10 text-center text-gray-500 text-sm"><i class="fas fa-tags text-3xl text-gray-300"></i><p class="mt-2">Nenhum produto com essa busca.</p></div>
+    {% endif %}
+</div>
+{% endif %}
+
+{# ------------------------------------------- gaveta: as unidades #}
+<div id="estFundo" class="hidden fixed inset-0 bg-slate-900/30 z-40" onclick="estFechar()"></div>
+<aside id="estGaveta" class="fechada fixed top-0 right-0 h-full w-full sm:w-[26rem] bg-white shadow-2xl z-50 flex flex-col" aria-hidden="true">
+    <div class="px-4 py-3 border-b border-gray-100 flex items-start justify-between gap-3">
+        <div class="min-w-0">
+            <p id="estGavetaTitulo" class="font-semibold text-gray-900 leading-snug"></p>
+            <p id="estGavetaSub" class="text-xs text-gray-500 mt-0.5"></p>
+        </div>
+        <button type="button" onclick="estFechar()" class="p-2 -m-2 text-gray-400 hover:text-gray-700" aria-label="Fechar"><i class="fas fa-xmark text-lg"></i></button>
+    </div>
+    <div id="estGavetaCorpo" class="flex-1 overflow-y-auto px-4 py-3 text-sm"></div>
+    <div id="estGavetaRodape" class="px-4 py-3 border-t border-gray-100 text-xs text-gray-500"></div>
+</aside>
+
+<script>
+(function () {
+    var URL = '{% url "auditoria_sap:estoque_unidades" %}';
+    var MINHA = '{{ f.loja }}';
+    var colunas = [];
+    try { colunas = JSON.parse((document.getElementById('estColunas') || {}).textContent || '[]'); } catch (e) {}
+    var gaveta = document.getElementById('estGaveta'), fundo = document.getElementById('estFundo');
+    function esc(t) { var d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; }
+
+    window.estFechar = function () {
+        gaveta.classList.add('fechada'); gaveta.setAttribute('aria-hidden', 'true'); fundo.classList.add('hidden');
+    };
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') window.estFechar(); });
+
+    function abrir(centro, material, modo, minha) {
+        document.getElementById('estGavetaTitulo').textContent = 'Carregando…';
+        document.getElementById('estGavetaSub').textContent = '';
+        document.getElementById('estGavetaCorpo').innerHTML = '<p class="text-gray-400"><i class="fas fa-circle-notch fa-spin mr-1"></i>Buscando os seriais…</p>';
+        document.getElementById('estGavetaRodape').textContent = '';
+        gaveta.classList.remove('fechada'); gaveta.setAttribute('aria-hidden', 'false'); fundo.classList.remove('hidden');
+        var q = '?centro=' + encodeURIComponent(centro) + '&material=' + encodeURIComponent(material) +
+                '&modo=' + encodeURIComponent(modo) + '&minha=' + encodeURIComponent(minha || MINHA);
+        fetch(URL + q, {headers: {'X-Requested-With': 'XMLHttpRequest'}, credentials: 'same-origin'})
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d.ok) { document.getElementById('estGavetaCorpo').innerHTML = '<p class="text-red-600">' + esc(d.erro || 'Não deu para abrir.') + '</p>'; return; }
+                var transito = d.modo === 'transito';
+                document.getElementById('estGavetaTitulo').textContent = d.produto.nome + (d.produto.cor ? ' · ' + d.produto.cor : '');
+                document.getElementById('estGavetaSub').innerHTML =
+                    (transito ? 'A caminho de ' : '') + '<strong>' + esc(d.loja) + '</strong>' +
+                    (d.km != null ? ' · ' + d.km + ' km da sua loja' : '') + ' · ' + d.quantidade + ' un. · material ' + esc(d.produto.material);
+                var html = '';
+                if (!d.unidades.length) {
+                    html = d.quantidade
+                        ? '<p class="text-gray-500">Item sem serial no SAP: são ' + d.quantidade + ' unidade(s) sem IMEI para listar.</p>'
+                        : '<p class="text-gray-500">Nenhuma unidade ' + (transito ? 'a caminho' : 'livre') + ' aqui na última carga do SAP.</p>';
+                } else {
+                    html = '<ul class="divide-y divide-gray-100">' + d.unidades.map(function (u) {
+                        return '<li class="py-2.5 flex items-start justify-between gap-3">' +
+                            '<div class="min-w-0"><p class="font-mono text-gray-900 break-all">' + esc(u.serial) + '</p>' +
+                            '<p class="text-xs text-gray-500">' + esc(u.deposito) + ' · ' + esc(u.deposito_nome) +
+                            (u.status ? ' · ' + esc(u.status) : '') + '</p>' +
+                            '<p class="text-xs ' + (u.dias > 90 ? 'text-amber-700 font-semibold' : 'text-gray-500') + '">' +
+                            (transito ? 'Saída SAP ' : 'Na loja desde ') + esc(u.desde || '—') +
+                            (u.dias != null ? ' · ' + u.dias + ' dia' + (u.dias === 1 ? '' : 's') : '') + '</p></div>' +
+                            '<button type="button" class="shrink-0 px-2 py-1 rounded-md border border-gray-200 text-xs text-gray-600 hover:bg-gray-50" data-copiar="' + esc(u.serial) + '"><i class="far fa-copy mr-1"></i>Copiar</button></li>';
+                    }).join('') + '</ul>';
+                    if (d.sem_serial) html += '<p class="mt-2 text-xs text-gray-500">+ ' + d.sem_serial + ' unidade(s) sem serial.</p>';
+                }
+                document.getElementById('estGavetaCorpo').innerHTML = html;
+                document.getElementById('estGavetaRodape').innerHTML = transito
+                    ? 'Confirme a chegada antes de oferecer a unidade ao cliente.'
+                    : 'Para transferir, passe à loja de origem o serial da unidade que você quer.';
+            })
+            .catch(function () { document.getElementById('estGavetaCorpo').innerHTML = '<p class="text-red-600">Sem conexão agora. Tente de novo.</p>'; });
+    }
+
+    document.addEventListener('click', function (e) {
+        var copiar = e.target.closest('[data-copiar]');
+        if (copiar) {
+            var texto = copiar.getAttribute('data-copiar');
+            (navigator.clipboard ? navigator.clipboard.writeText(texto) : Promise.reject()).then(function () {
+                copiar.innerHTML = '<i class="fas fa-check mr-1"></i>Copiado';
+            }).catch(function () { window.prompt('Copie o serial:', texto); });
+            return;
+        }
+        var alvo = e.target.closest('[data-material][data-modo]');
+        if (!alvo) return;
+        var centro = alvo.getAttribute('data-centro') || colunas[+alvo.getAttribute('data-indice')];
+        if (centro) abrir(centro, alvo.getAttribute('data-material'), alvo.getAttribute('data-modo'), alvo.getAttribute('data-minha'));
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}
