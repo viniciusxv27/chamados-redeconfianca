@@ -753,6 +753,46 @@ def gasto_analyze(request, pk):
     return JsonResponse(data)
 
 
+# Categoria do gasto (24/11/2026): "deve ser um select para selecionar as que já existem ou
+# criar uma nova". As existentes são as dos gastos já lançados; grafias do mesmo nome
+# ("alimentação", "Alimentacao ", "ALIMENTAÇÃO") viram uma, com a grafia mais usada — e a
+# categoria digitada que já existe com outra grafia é gravada com a de sempre.
+def _chave_categoria(texto):
+    import unicodedata
+    texto = unicodedata.normalize('NFKD', str(texto or ''))
+    texto = ''.join(c for c in texto if not unicodedata.combining(c)).lower()
+    return re.sub(r'[^0-9a-z]', '', texto)
+
+
+def categorias_existentes():
+    """As categorias dos gastos já lançados, uma de cada, em ordem alfabética: {chave: grafia}."""
+    contagem = {}
+    for nome, n in (Gasto.objects.exclude(categoria_gasto='').values_list('categoria_gasto')
+                    .annotate(n=Count('id'))):
+        nome = ' '.join(nome.split())
+        if nome:
+            contagem[nome] = contagem.get(nome, 0) + n
+    por_chave = {}
+    for nome, n in contagem.items():
+        chave = _chave_categoria(nome)
+        if chave:
+            por_chave.setdefault(chave, []).append((n, not nome.isupper(), nome))
+    return {chave: max(grafias)[2] for chave, grafias in por_chave.items()}
+
+
+def padronizar_categoria(texto, existentes=None):
+    """A categoria como vai para o banco: a grafia de sempre, se já existe; senão a digitada."""
+    texto = ' '.join(str(texto or '').split())[:120]
+    if not texto:
+        return ''
+    existentes = categorias_existentes() if existentes is None else existentes
+    return existentes.get(_chave_categoria(texto), texto)
+
+
+def _lista_de_categorias():
+    return sorted(categorias_existentes().values(), key=_chave_categoria)
+
+
 @login_required
 def gasto_create(request, pk):
     cartao = get_object_or_404(Cartao, pk=pk)
@@ -764,7 +804,7 @@ def gasto_create(request, pk):
         estabelecimento = request.POST.get('estabelecimento', '').strip()
         documento_bruto = request.POST.get('documento_estabelecimento', '').strip()
         documento = documento_valido(documento_bruto)
-        categoria_gasto = request.POST.get('categoria_gasto', '').strip()
+        categoria_gasto = padronizar_categoria(request.POST.get('categoria_gasto', ''))
         descricao = request.POST.get('descricao', '').strip()
         data_raw = request.POST.get('data_gasto', '').strip()
         valor_dec = _parse_valor(request.POST.get('valor'))
@@ -804,6 +844,7 @@ def gasto_create(request, pk):
                 'today': timezone.localdate().isoformat(),
                 'form': request.POST,
                 'parcelas_opcoes': range(1, PARCELAS_MAX + 1),
+                'categorias': _lista_de_categorias(),
             }
             return render(request, 'cartoes/gasto_form.html', context)
 
@@ -839,6 +880,7 @@ def gasto_create(request, pk):
         'today': timezone.localdate().isoformat(),
         'form': {},
         'parcelas_opcoes': range(1, PARCELAS_MAX + 1),
+        'categorias': _lista_de_categorias(),
     }
     return render(request, 'cartoes/gasto_form.html', context)
 
@@ -1241,7 +1283,7 @@ def api_lancar_gasto(request):
         aviso = 'Valor não identificado — chamado aberto com "valor a confirmar".'
 
     estabelecimento = (ia.get('estabelecimento') if ia_ok else '') or ''
-    categoria_gasto = (ia.get('categoria') if ia_ok else '') or ''
+    categoria_gasto = padronizar_categoria((ia.get('categoria') if ia_ok else '') or '')
     data_ia = ia.get('data') if ia_ok else ''
     data_gasto = parse_date(data_ia) if data_ia else None
     if not data_gasto:
