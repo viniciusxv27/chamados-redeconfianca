@@ -37,7 +37,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import imagem  # noqa: E402
 import janela  # noqa: E402
 
-VERSAO = '1.0.0'
+VERSAO = '1.1.0'
 PORTA = 47861
 PORTAL_PADRAO = 'https://chamados.redeconfianca.com.br'
 EXE = 'AutomacaoSAP.exe'
@@ -47,6 +47,7 @@ SEM_NINGUEM_SEGUNDOS = 15                   # sem ninguém no portal, o app volt
 QUADROS_POR_SEGUNDO = 15
 QUADROS_PARADO = 4                          # sem mexer e sem mudança: olha a tela menos vezes
 PASTAS_DA_LOJA = ('config', 'logs')         # o que a instalação/atualização nunca apaga
+CONFERIR_VERSAO_SEGUNDOS = 30 * 60          # de quanto em quanto tempo pergunta ao portal a versão publicada
 GUID_WS = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
 
 log = logging.getLogger('ponte')
@@ -123,6 +124,7 @@ class Aplicativo:
         self.parar_vigia = None
         self.trava = threading.RLock()
         self.instalando = None          # {'etapa': ..., 'progresso': 0..100, 'erro': ...}
+        self.publicada = None           # a versão publicada no portal, na última conferência
 
     # Onde está
     def pasta(self):
@@ -322,15 +324,75 @@ def _pedir(url, chave, tempo=30):
     return urllib.request.urlopen(pedido, timeout=tempo)
 
 
+def versao_publicada(config, instalada=None):
+    """O que o portal diz da versão publicada: {'versao', 'url', 'sha256', ...}. Levanta se não der."""
+    chave = config.dados.get('chave')
+    if not chave:
+        raise RuntimeError('A ponte ainda não foi pareada com o portal.')
+    with _pedir(f'{config.portal}/sap/automacao/api/versao/?atual={instalada or 0}', chave) as r:
+        return json.loads(r.read().decode())
+
+
+_trava_instalacao = threading.Lock()
+
+
+def garantir_versao_atual(app, config):
+    """Sempre a versão publicada mais atual (24/11/2026: "está usando versões anteriores").
+
+    Antes a ponte só baixava o app quando alguém clicava em instalar e nunca mais olhava —
+    e uma instalação antiga achada no computador (C:\\AutomacaoSAP, Área de Trabalho, sem
+    versao_ponte.txt) era usada como estava. Agora, com o app fechado, versão instalada
+    diferente da publicada (ou sem número) é trocada pela publicada, na mesma pasta, sem
+    mexer em config/ e logs/. Com o app aberto não fecha nada: atualiza na próxima vez
+    que ele for aberto pelo portal (ou no "Reiniciar"). Sem portal, sem chave ou fora do
+    ar: segue com o que tem. Devolve a versão publicada (ou None).
+    """
+    if config.sem_portal or app.comando or not config.dados.get('chave'):
+        return None
+    if not _trava_instalacao.acquire(blocking=False):
+        return None                     # já tem uma conferência/instalação em andamento
+    try:
+        instalada = app.versao_instalada()
+        try:
+            info = versao_publicada(config, instalada)
+        except Exception as erro:  # noqa: BLE001 — portal fora do ar: segue com a instalada
+            log.info('Não deu para conferir a versão publicada: %s', erro)
+            return None
+        publicada = info.get('versao')
+        app.publicada = publicada
+        if not publicada or (app.instalado() and instalada == publicada) or app.rodando():
+            return publicada
+        log.info('Atualizando o app: instalada %s, publicada %s', instalada or 'sem número', publicada)
+        _instalar(app, config, info)
+        return publicada
+    finally:
+        _trava_instalacao.release()
+
+
 def instalar_app(app, config):
-    """Baixa a versão publicada no portal e põe na pasta da ponte, sem mexer em config/ e logs/."""
+    """Baixa a versão publicada no portal e põe na pasta do app, sem mexer em config/ e logs/."""
+    with _trava_instalacao:
+        # A página e a ponte (ao conectar) podem pedir juntas: quem chegou depois pergunta de
+        # novo ao portal e não baixa se a instalada já é a publicada agora.
+        try:
+            info = versao_publicada(config, app.versao_instalada())
+        except Exception:  # noqa: BLE001 — o _instalar pergunta de novo e mostra o motivo
+            info = None
+        if info and info.get('versao') and app.instalado() and app.versao_instalada() == info['versao']:
+            app.publicada = info['versao']
+            app.instalando = {'etapa': f'Versão {info["versao"]} já instalada', 'progresso': 100, 'erro': ''}
+            return
+        _instalar(app, config, info)
+
+
+def _instalar(app, config, info):
     estado = app.instalando = {'etapa': 'Perguntando ao portal a versão atual', 'progresso': 0, 'erro': ''}
     try:
         chave = config.dados.get('chave')
         if not chave:
             raise RuntimeError('A ponte ainda não foi pareada com o portal.')
-        with _pedir(f'{config.portal}/sap/automacao/api/versao/?atual=0', chave) as r:
-            info = json.loads(r.read().decode())
+        if info is None:
+            info = versao_publicada(config)
         if not info.get('versao'):
             raise RuntimeError('Nenhuma versão publicada no portal.')
         estado['etapa'] = f'Baixando a versão {info["versao"]}'
@@ -538,6 +600,7 @@ class Ponte:
         return {
             'ponte': VERSAO, 'pc': os.environ.get('COMPUTERNAME', ''), 'pareada': bool(self.config.dados.get('chave')),
             'app': {'instalado': app.instalado(), 'pasta': app.pasta(), 'versao': app.versao_instalada(),
+                    'publicada': app.publicada,
                     'rodando': app.rodando(), 'no_portal': app.escondido, 'instalando': app.instalando},
             'em_uso_por': self.usuario if self.visor else '',
         }
@@ -641,7 +704,11 @@ class Ponte:
         app que ficou fora da tela, sem ninguém no portal, volta para a área de trabalho.
         """
         loop = asyncio.get_running_loop()
+        conferida_em = 0
         while True:
+            if time.time() - conferida_em > CONFERIR_VERSAO_SEGUNDOS:
+                conferida_em = time.time()
+                loop.run_in_executor(None, garantir_versao_atual, self.app, self.config)
             if self.visor is None and time.time() - self.sem_ninguem_desde > self.sem_ninguem_segundos:
                 if self.app.escondido or await loop.run_in_executor(None, self.app.ficou_escondida):
                     await loop.run_in_executor(None, self.app.mostrar_na_area_de_trabalho)
@@ -661,6 +728,8 @@ class Sessao:
         self.loop = asyncio.get_running_loop()
 
     async def rodar(self):
+        # O portal chegou: confere a versão publicada (com o app fechado, já atualiza).
+        self.loop.run_in_executor(None, garantir_versao_atual, self.app, self.ponte.config)
         await self.conexao.enviar({'t': 'ola', **self.ponte.estado()})
         recebendo = asyncio.create_task(self._receber())
         try:
@@ -712,9 +781,12 @@ class Sessao:
     def _tratar(self, d):
         app, t = self.app, d.get('t')
         if t == 'iniciar':
+            if not app.rodando():
+                garantir_versao_atual(app, self.ponte.config)   # abre sempre a publicada mais atual
             app.iniciar()
         elif t == 'reiniciar':
             app.encerrar()
+            garantir_versao_atual(app, self.ponte.config)
             app.iniciar()
         elif t == 'tudo':
             self.pediu_tudo = True

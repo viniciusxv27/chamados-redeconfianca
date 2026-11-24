@@ -27,6 +27,16 @@
   var tentando = null, dpr = window.devicePixelRatio || 1, ultimoTamanho = '', apertado = false;
   var filaDesenho = {};
   var abrindoDesde = 0;           // clicou em abrir/reiniciar: mostra "abrindo" até o app aparecer (ou 30 s)
+  // Sempre a versão publicada mais atual (24/11/2026: "está usando versões anteriores"). A página
+  // sabe qual é a publicada; a Ponte diz qual está instalada. Diferente (ou instalação antiga, sem
+  // número) e o app fechado: a página manda a Ponte instalar a publicada antes de abrir. Funciona
+  // com qualquer Ponte (o /app/instalar sempre baixa a publicada). App aberto: avisa e atualiza
+  // assim que ele fechar.
+  var PUBLICADA = raiz.dataset.versao || '';
+  var atualizando = false, abrirDepois = false, falhouEm = '';
+  function desatualizado(e) {
+    return !!(e && e.app && e.app.instalado && PUBLICADA && e.app.versao !== PUBLICADA && falhouEm !== PUBLICADA);
+  }
 
   function el(html) { var d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstChild; }
   function esc(t) { var s = document.createElement('span'); s.textContent = t == null ? '' : String(t); return s.innerHTML; }
@@ -64,6 +74,14 @@
         '<button type="button" class="pn-botao" data-pn-acao="iniciar"><i class="fas fa-play"></i>Abrir aqui no portal</button>';
     },
     abrindo: function () { return '<span class="pn-gira"></span><h3>Abrindo a Automação SAP…</h3>'; },
+    atualizando: function () {
+      var i = estado && estado.app && estado.app.instalando;
+      return '<i class="fas fa-cloud-arrow-down pn-ico"></i><h3>Atualizando a Automação SAP para a ' + esc(PUBLICADA) + '</h3>' +
+        '<p>' + esc((i && i.etapa) || 'Começando…') + '</p>' +
+        '<div class="pn-barra-prog"><span style="width:' + ((i && i.progresso) || 3) + '%"></span></div>' +
+        '<p class="pn-nota">Neste computador: ' + esc((estado && estado.app && estado.app.versao) || 'versão antiga, sem número') +
+        '. As pastas config e logs da loja ficam como estão.</p>';
+    },
     erro: function (texto) {
       return '<i class="fas fa-triangle-exclamation pn-ico pn-ico-erro"></i><h3>' + esc(texto) + '</h3>' +
         '<button type="button" class="pn-botao" data-pn-acao="reconectar"><i class="fas fa-rotate"></i>Conectar de novo</button>';
@@ -86,7 +104,10 @@
     var b = e.target.closest('[data-pn-acao]');
     if (!b) return;
     var acao = b.dataset.pnAcao;
-    if (acao === 'iniciar') { enviar({t: 'iniciar'}); abrindoDesde = Date.now(); mostrarAviso('abrindo'); }
+    if (acao === 'iniciar') {
+      if (desatualizado(estado) && !estado.app.rodando) { atualizarApp(true); return; }
+      enviar({t: 'iniciar'}); abrindoDesde = Date.now(); mostrarAviso('abrindo');
+    }
     else if (acao === 'instalar') {
       fetch(PONTE + '/app/instalar', {method: 'POST', body: '{}', targetAddressSpace: 'loopback'}).then(atualizarEstado);
       mostrarAviso('sem_app');
@@ -102,7 +123,8 @@
   function atualizarEstado() {
     return ponte('/estado').then(function (e) {
       estado = e;
-      rodape.textContent = 'Ponte ' + e.ponte + (e.pc ? ' · computador ' + e.pc : '') + (e.app.versao ? ' · app ' + e.app.versao : '');
+      rodape.textContent = 'Ponte ' + e.ponte + (e.pc ? ' · computador ' + e.pc : '') + (e.app.versao ? ' · app ' + e.app.versao : '') +
+        (PUBLICADA && e.app.versao && e.app.versao !== PUBLICADA ? ' (publicada: ' + PUBLICADA + ')' : '');
       return e;
     });
   }
@@ -124,6 +146,7 @@
       })
       .then(function (e) {
         if (!e.app.instalado) { status('Ponte conectada', 'ok'); mostrarAviso('sem_app'); vigiarInstalacao(); return; }
+        if (desatualizado(e) && !e.app.rodando) { atualizarApp(false); return; }
         abrirWs();
       })
       .catch(function () {
@@ -144,6 +167,35 @@
     }, 1200);
   }
 
+  // Instala a publicada pela Ponte e acompanha; no fim conecta (e abre, se a pessoa tinha pedido).
+  function atualizarApp(abrir) {
+    abrirDepois = abrirDepois || !!abrir;
+    if (atualizando) return;
+    atualizando = true;
+    if (ws) { ws.onclose = null; try { ws.close(); } catch (e) { /* já fechado */ } ws = null; }
+    limparCamadas();
+    status('Atualizando para a ' + PUBLICADA, 'neutro');
+    mostrarAviso('atualizando');
+    ponte('/app/instalar', {method: 'POST', body: '{}'}).catch(function () {}).then(vigiarAtualizacao);
+  }
+
+  function vigiarAtualizacao() {
+    clearTimeout(tentando);
+    tentando = setTimeout(function () {
+      atualizarEstado().then(function (e) {
+        var i = e.app.instalando;
+        if (i && !i.erro && (i.progresso || 0) < 100) { mostrarAviso('atualizando'); vigiarAtualizacao(); return; }
+        atualizando = false;
+        if (i && i.erro) {
+          // Não insiste em loop: segue com a instalada e diz o porquê.
+          falhouEm = PUBLICADA;
+          status('Não atualizou para a ' + PUBLICADA + ': ' + i.erro, 'aviso');
+        }
+        abrirWs();
+      }).catch(function () { atualizando = false; conectar(); });
+    }, 1000);
+  }
+
   function abrirWs() {
     if (ws) { try { ws.close(); } catch (e) { /* já fechado */ } }
     ws = new WebSocket(WS + '?token=' + encodeURIComponent(sessao.token));
@@ -161,7 +213,11 @@
   function enviar(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 
   function mensagem(m) {
-    if (m.t === 'ola') { estado = Object.assign(estado || {}, m); return; }
+    if (m.t === 'ola') {
+      estado = Object.assign(estado || {}, m);
+      if (desatualizado(estado) && !estado.app.rodando) atualizarApp(false);
+      return;
+    }
     if (m.t === 'recusado' || m.t === 'assumido') {
       raiz.dataset.pnFinal = '1';
       status(m.t === 'assumido' ? 'Aberto em outra aba' : 'Recusado', 'erro');
@@ -181,13 +237,20 @@
     if (!m.instalado) { mostrarAviso('sem_app'); return; }
     if (!m.aberto) {
       limparCamadas();
+      var abrindo = Date.now() - abrindoDesde <= 30000;
+      if (abrirDepois && !abrindo) { abrirDepois = false; enviar({t: 'iniciar'}); abrindoDesde = Date.now(); mostrarAviso('abrindo'); return; }
+      // Fechou o app desatualizado: atualiza agora (não no meio de um "abrindo").
+      if (!abrindo && desatualizado(estado)) {
+        atualizarEstado().then(function (e) { if (desatualizado(e) && !e.app.rodando) atualizarApp(false); }).catch(function () {});
+      }
       status('App fechado', 'neutro');
-      if (Date.now() - abrindoDesde > 30000) mostrarAviso('fechado');
+      if (!abrindo) mostrarAviso('fechado');
       return;
     }
     abrindoDesde = 0;
     mostrarAviso(null);
-    status('App aberto', 'ok');
+    if (desatualizado(estado)) status('Nova versão ' + PUBLICADA + ': feche o app para atualizar', 'aviso');
+    else status('App aberto', 'ok');
     var vivos = {};
     m.camadas.forEach(function (c) {
       vivos[c.id] = true;
