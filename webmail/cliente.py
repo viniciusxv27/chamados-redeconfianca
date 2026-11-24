@@ -1,4 +1,4 @@
-"""Conversa com o servidor de e-mail (poste.io): IMAP para ler, SMTP para enviar.
+"""Conversa com o servidor de e-mail (redeconfianca.com na UNI5; .com.br no poste.io): IMAP para ler, SMTP para enviar.
 
 Abrir uma conexão IMAP custa um handshake TLS e um login (~0,5 s). Como cada
 clique na caixa vira uma chamada, a conexão de cada pessoa fica aberta por
@@ -61,12 +61,38 @@ class NaoEncontrada(ErroEmail):
     status = 404
 
 
-def _host_imap():
-    return settings.WEBMAIL_IMAP_HOST, settings.WEBMAIL_IMAP_PORT
+def _host_porta(texto, porta_padrao):
+    host, _, porta = texto.strip().partition(':')
+    return host.strip(), int(porta) if porta.strip().isdigit() else porta_padrao
 
 
-def _host_smtp():
-    return settings.WEBMAIL_SMTP_HOST, settings.WEBMAIL_SMTP_PORT
+def servidores_por_dominio():
+    """{domínio: ((imap, porta), (smtp, porta))} de WEBMAIL_SERVIDORES_POR_DOMINIO."""
+    saida = {}
+    for item in (getattr(settings, 'WEBMAIL_SERVIDORES_POR_DOMINIO', '') or '').split(';'):
+        dominio, _, hosts = item.partition('=')
+        imap, _, smtp = hosts.partition(',')
+        if dominio.strip() and imap.strip():
+            saida[dominio.strip().lower()] = (_host_porta(imap, 993), _host_porta(smtp or imap, 465))
+    return saida
+
+
+def _servidores(email=''):
+    """O servidor do domínio do e-mail; sem regra própria, o principal (redeconfianca.com, UNI5)."""
+    dominio = (email or '').rpartition('@')[2].strip().lower()
+    proprio = servidores_por_dominio().get(dominio)
+    if proprio:
+        return proprio
+    return ((settings.WEBMAIL_IMAP_HOST, settings.WEBMAIL_IMAP_PORT),
+            (settings.WEBMAIL_SMTP_HOST, settings.WEBMAIL_SMTP_PORT))
+
+
+def _host_imap(email=''):
+    return _servidores(email)[0]
+
+
+def _host_smtp(email=''):
+    return _servidores(email)[1]
 
 
 # ── Conexão ───────────────────────────────────────────────────────────────
@@ -106,16 +132,16 @@ def _abrir_tls(abrir_verificado, abrir_pinado, sock_de, host):
     return con
 
 
-def _conectar_imap():
-    host, porta = _host_imap()
+def _conectar_imap(email=''):
+    host, porta = _host_imap(email)
     return _abrir_tls(
         lambda ctx: imaplib.IMAP4_SSL(host, porta, ssl_context=ctx, timeout=TIMEOUT),
         lambda ctx: imaplib.IMAP4_SSL(host, porta, ssl_context=ctx, timeout=TIMEOUT),
         lambda con: con.sock, host)
 
 
-def _conectar_smtp():
-    host, porta = _host_smtp()
+def _conectar_smtp(email=''):
+    host, porta = _host_smtp(email)
     return _abrir_tls(
         lambda ctx: smtplib.SMTP_SSL(host, porta, context=ctx, timeout=TIMEOUT),
         lambda ctx: smtplib.SMTP_SSL(host, porta, context=ctx, timeout=TIMEOUT),
@@ -135,7 +161,7 @@ def _entrar_imap(con, email, senha):
 
 def testar_login(email, senha):
     """Confere a credencial sem guardar nada. Usado na tela de entrar."""
-    con = _conectar_imap()
+    con = _conectar_imap(email)
     try:
         _entrar_imap(con, email, senha)
     finally:
@@ -177,7 +203,7 @@ class Sessao:
     def abrir(self):
         if not self._senha:
             raise SenhaRecusada('A senha guardada não pôde ser lida. Entre de novo.')
-        con = _conectar_imap()
+        con = _conectar_imap(self.email)
         _entrar_imap(con, self.email, self._senha)
         try:
             typ, dados = con.capability()
@@ -882,7 +908,7 @@ def _smtp_entrar(con, email, senha):
 def enviar(conta, msg, destinos):
     """Manda pelo SMTP. A cópia em Enviados é feita depois, pelo IMAP."""
     todos = [e for _n, e in destinos['para'] + destinos['cc'] + destinos['cco']]
-    con = _conectar_smtp()
+    con = _conectar_smtp(conta.email)
     try:
         _smtp_entrar(con, conta.email, conta.senha())
         recusados = con.send_message(msg, from_addr=conta.email, to_addrs=todos)

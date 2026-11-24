@@ -666,6 +666,17 @@ try:
     t('assinatura salva e limpa', r.json()['ok'] and 'onerror' not in conta.assinatura and conta.nome_exibicao == 'Ana S.')
     c.post('/email/desconectar/')
     t('desconectar apaga a conta e a senha', not ContaEmail.objects.filter(usuario=ana).exists())
+    from django.test import override_settings
+    print('\n== SERVIDOR PELO DOMÍNIO (24/11/2026) ==')
+    from webmail import cliente as wc
+    with override_settings(WEBMAIL_IMAP_HOST='imap-vip.uni5.net', WEBMAIL_SMTP_HOST='smtp-vip.uni5.net',
+                           WEBMAIL_IMAP_PORT=993, WEBMAIL_SMTP_PORT=465,
+                           WEBMAIL_SERVIDORES_POR_DOMINIO='redeconfianca.com.br=mail.redeconfianca.com.br:993,mail.redeconfianca.com.br:465'):
+        t('redeconfianca.com vai para a UNI5', wc._host_imap('ana@redeconfianca.com') == ('imap-vip.uni5.net', 993)
+          and wc._host_smtp('ana@redeconfianca.com') == ('smtp-vip.uni5.net', 465))
+        t('redeconfianca.com.br segue no servidor dele', wc._host_imap('ana@redeconfianca.com.br') == ('mail.redeconfianca.com.br', 993)
+          and wc._host_smtp('ANA@RedeConfianca.com.br') == ('mail.redeconfianca.com.br', 465))
+        t('sem e-mail, o principal', wc._host_imap() == ('imap-vip.uni5.net', 993))
 finally:
     imaplib.IMAP4_SSL, smtplib.SMTP_SSL = original_imap, original_smtp
     transaction.set_rollback(True)

@@ -512,15 +512,26 @@ GOOGLE_DRIVE_SA_JSON = config('GOOGLE_DRIVE_SA_JSON', default='')
 # Opcional: e-mail para delegação em todo o domínio (Google Workspace admin).
 GOOGLE_DRIVE_IMPERSONATE = config('GOOGLE_DRIVE_IMPERSONATE', default='')
 
-# ── E-mail institucional (/email/ — cliente IMAP/SMTP do poste.io) ──────────
+# ── E-mail institucional (/email/ — cliente IMAP/SMTP) ──────────────────────
 # Cada pessoa entra com o próprio e-mail e senha; a senha fica cifrada no banco
 # (webmail/seguranca.py). WEBMAIL_CHAVE é a chave Fernet dessa cifra — vazia,
 # ela é derivada do SECRET_KEY. Trocar a chave obriga todos a entrar de novo.
-WEBMAIL_IMAP_HOST = config('WEBMAIL_IMAP_HOST', default='mail.redeconfianca.com.br')
+#
+# 24/11/2026: o domínio principal é o redeconfianca.com, hospedado na UNI5
+# (Dovecot). Os apelidos imap./smtp.redeconfianca.com apontam para lá, mas o
+# certificado é *.uni5.net — por isso o portal fala direto com imap-vip/smtp-vip
+# e o certificado passa na verificação normal, sem pino.
+WEBMAIL_IMAP_HOST = config('WEBMAIL_IMAP_HOST', default='imap-vip.uni5.net')
 WEBMAIL_IMAP_PORT = config('WEBMAIL_IMAP_PORT', default=993, cast=int)
-WEBMAIL_SMTP_HOST = config('WEBMAIL_SMTP_HOST', default='mail.redeconfianca.com.br')
+WEBMAIL_SMTP_HOST = config('WEBMAIL_SMTP_HOST', default='smtp-vip.uni5.net')
 WEBMAIL_SMTP_PORT = config('WEBMAIL_SMTP_PORT', default=465, cast=int)
-WEBMAIL_DOMINIOS = config('WEBMAIL_DOMINIOS', default='redeconfianca.com.br')
+# O primeiro é o que a tela de entrar sugere; os outros continuam aceitos.
+WEBMAIL_DOMINIOS = config('WEBMAIL_DOMINIOS', default='redeconfianca.com,redeconfianca.com.br')
+# Domínio com servidor próprio (fora do principal), "dominio=imap[:porta],smtp[:porta]"
+# separados por ";". O redeconfianca.com.br segue no poste.io de antes.
+WEBMAIL_SERVIDORES_POR_DOMINIO = config(
+    'WEBMAIL_SERVIDORES_POR_DOMINIO',
+    default='redeconfianca.com.br=mail.redeconfianca.com.br:993,mail.redeconfianca.com.br:465')
 WEBMAIL_CHAVE = config('WEBMAIL_CHAVE', default='')
 # Impressão digital SHA-256 do certificado do servidor de e-mail, aceita só
 # enquanto ele não tiver um certificado válido (o poste.io vem com um

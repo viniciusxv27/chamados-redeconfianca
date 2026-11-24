@@ -263,7 +263,9 @@ t('a home tem a seção do feed com a caixa de publicar', 'id="feed-da-rede"' in
 t('a home mostra só 3 posts e o "Ver mais"', h.count('data-sf-post=') == 3 and 'data-sf-mais' in h)
 t('câmera de foto, de vídeo e galeria', 'accept="image/*" capture="environment"' in h and 'accept="video/*" capture="environment"' in h
   and 'accept="image/*,video/*"' in h)
-t('o menu tem o Feed da rede', 'href="/social/"' in h and 'Feed da rede' in h)
+menu = h.split('id="sidebar"', 1)[1].split('</aside>', 1)[0] if 'id="sidebar"' in h else ''
+t('o Feed da rede saiu do menu lateral (24/11/2026)', menu and 'href="/social/"' not in menu and 'Feed da rede' not in menu)
+t('a home continua levando ao feed', 'href="/social/"' in h and 'Abrir o feed' in h)
 t('anônimo não vê o feed', Client().get('/social/').status_code == 302)
 
 print(f'\n{OK} OK, {FALHAS} falha(s)')
