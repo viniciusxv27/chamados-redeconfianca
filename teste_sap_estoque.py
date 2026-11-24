@@ -264,7 +264,13 @@ html_rep = r.content.decode()
 t('reposição: Vendas 30d, 90d e Sugestão ordenáveis (clique no cabeçalho)',
   all(re.search(r'data-ordenar="numero">' + nome, html_rep) for nome in ('Vendas 30d', '90d', 'Sugestão', 'Livre')))
 t('botão de copiar ao lado do material', f'data-copiar="{GALAXY}"' in html_rep)
-t('a tabela rola dentro do cartão (a página não cresce)', 'class="est-rolagem"' in html_rep)
+t('a tabela rola dentro do cartão, sem o embrulho global do portal (overflow-auto)',
+  'class="est-rolagem overflow-auto"' in html_rep)
+t('barra de rolagem de lado no topo, setas, "ir para a loja" e modo compacto',
+  'id="estBarraTopo"' in html_rep and 'data-rolar="1"' in html_rep)
+r_rede = cc.get('/sap/estoque/?loja=todas').content.decode()
+t('"ir para a loja" lista as lojas; com poucas lojas (4) abre no modo normal, com 9+ abre compacta',
+  'id="estIrPara"' in r_rede and 'data-padrao="normal"' in r_rede and '>Itaim Paulista' in r_rede)
 t('chips das lojas mais perto, com a distância pintada', 'est-chip' in html_rep and 'est-km-perto' in html_rep)
 r = cc.get('/sap/estoque/?aba=detalhado&loja=057E')
 t('detalhado: copiar o serial', 'data-copiar="SC4H00000001"' in r.content.decode())

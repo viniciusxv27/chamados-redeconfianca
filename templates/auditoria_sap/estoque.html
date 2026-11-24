@@ -82,7 +82,7 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
     .est-km-longe { background:#F1F5F9; color:#64748B; }
 
     /* Tabela que rola dentro do cartão */
-    .est-rolagem { max-height:min(68vh, 760px); overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; }
+    .est-rolagem { max-height:calc(100vh - 9rem); overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; }
     .est-rolagem::-webkit-scrollbar { width:10px; height:10px; }
     .est-rolagem::-webkit-scrollbar-thumb { background:#CBD5E1; border-radius:999px; border:2px solid #fff; }
     .est-tabela { border-collapse:separate; border-spacing:0; }
@@ -105,6 +105,36 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
     th[data-ordenar] .est-seta { opacity:.35; margin-left:.25rem; font-size:.65rem; }
     th[data-ordenar].ordem-desc .est-seta, th[data-ordenar].ordem-asc .est-seta { opacity:1; color:#0284C7; }
     .est-col-loja { border-top:3px solid var(--c); }
+    /* A barra de rolagem de lado também no topo (a de baixo só aparece descendo a página). */
+    .est-barra-topo { overflow-x:auto; overflow-y:hidden; height:14px; border-bottom:1px solid #EEF2F6; background:#F8FAFC;
+                      scrollbar-width:thin; scrollbar-color:#94A3B8 #F1F5F9; }
+    .est-barra-topo > div { height:1px; }
+    .est-barra-topo::-webkit-scrollbar { height:10px; }
+    .est-barra-topo::-webkit-scrollbar-thumb { background:#94A3B8; border-radius:999px; border:2px solid #F8FAFC; }
+    .est-barra-topo::-webkit-scrollbar-track { background:#F1F5F9; }
+    .est-barra-topo.sem-lado { display:none; }
+    .est-nav { display:inline-flex; align-items:center; gap:.25rem; }
+    .est-nav button, .est-nav select { height:1.9rem; border-radius:.55rem; border:1px solid #E2E8F0; background:#fff; color:#334155;
+                                       font-size:.75rem; font-weight:600; }
+    .est-nav button { width:1.9rem; display:inline-flex; align-items:center; justify-content:center; }
+    .est-nav button:hover:not(:disabled) { background:#F0F9FF; border-color:#7DD3FC; color:#0369A1; }
+    .est-nav button:disabled { opacity:.35; cursor:default; }
+    .est-nav select { padding:0 .5rem; max-width:11rem; }
+    .est-nav .est-modo { width:auto; padding:0 .6rem; gap:.35rem; }
+    .est-nav .est-modo.ligado { background:#0284C7; border-color:#0284C7; color:#fff; }
+    .est-rolagem.arrastando { cursor:grabbing; user-select:none; }
+    /* Coluna em destaque ao "ir para a loja" */
+    .est-destaque { animation: estPisca 1.6s ease; }
+    @keyframes estPisca { 0%,60% { box-shadow: inset 0 0 0 2px var(--c, #0EA5E9); } 100% { box-shadow:none; } }
+    /* Modo compacto: a rede inteira cabe na tela (nome da loja em duas linhas, colunas estreitas). */
+    .est-compacto .est-col-loja { padding-left:.2rem !important; padding-right:.2rem !important; }
+    .est-compacto .est-col-loja .est-nome-loja { max-width:4.6rem !important; font-size:10px !important; line-height:1.15;
+        white-space:normal; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+    .est-compacto .est-col-loja .est-km { font-size:9px; padding:0 .25rem; }
+    .est-compacto td.est-cel-loja { padding:.3rem .15rem !important; }
+    .est-compacto .est-q { min-width:1.6rem; padding:.12rem .3rem; font-size:.72rem; border-radius:.45rem; }
+    .est-compacto .est-fixa > p { max-width:13rem; }
+    .est-compacto td.est-fixa { padding-top:.35rem !important; padding-bottom:.35rem !important; }
     .est-minha { background:color-mix(in srgb, var(--c, #0EA5E9) 8%, #fff) !important; }
     .est-copiar { display:inline-flex; align-items:center; justify-content:center; width:1.35rem; height:1.35rem; border-radius:.4rem;
                   color:#94A3B8; transition:background .15s, color .15s; flex:none; }
@@ -141,6 +171,8 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
     html.dark .est-sit-insuficiente { background:rgba(249,115,22,.18); color:#fdba74; }
     html.dark .est-sit-ok { background:rgba(34,197,94,.16); color:#86efac; }
     html.dark .est-barra { background:var(--tema-superficie-3); }
+    html.dark .est-barra-topo { background:var(--tema-superficie-2); border-color:var(--tema-borda); }
+    html.dark .est-nav button, html.dark .est-nav select { background:var(--tema-superficie); border-color:var(--tema-borda); color:var(--tema-texto); }
     html.dark .est-rolagem::-webkit-scrollbar-thumb { background:var(--tema-superficie-3); border-color:var(--tema-superficie); }
     html.dark #estGaveta { background:var(--tema-superficie); }
 </style>
@@ -289,6 +321,21 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
             {% endif %}
         </div>
         <div class="flex items-center gap-2 flex-wrap">
+            {% if pagina.object_list %}
+            <div class="est-nav" id="estNav">
+                <button type="button" data-rolar="-1" title="Lojas/colunas à esquerda"><i class="fas fa-chevron-left"></i></button>
+                <button type="button" data-rolar="1" title="Lojas/colunas à direita"><i class="fas fa-chevron-right"></i></button>
+                {% if colunas and colunas|length > 1 %}
+                <select id="estIrPara" title="Ir direto para a coluna da loja">
+                    <option value="">Ir para a loja…</option>
+                    {% for c in colunas %}<option value="{{ forloop.counter }}">{{ c.nome }}{% if c.km %} · {{ c.km|floatformat:0 }} km{% endif %}</option>{% endfor %}
+                </select>
+                <button type="button" class="est-modo" id="estModo" data-padrao="{% if colunas|length > 8 %}compacto{% else %}normal{% endif %}" title="Colunas estreitas para ver todas as lojas de uma vez">
+                    <i class="fas fa-compress"></i><span>Compacto</span>
+                </button>
+                {% endif %}
+            </div>
+            {% endif %}
             <div class="relative">
                 <i class="fas fa-filter absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-[11px]"></i>
                 <input type="search" id="estFiltroRapido" placeholder="Filtrar nesta lista…" autocomplete="off"
@@ -329,7 +376,11 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
     </div>
 
     {% if pagina.object_list %}
-    <div class="est-rolagem">
+    <div class="est-barra-topo" id="estBarraTopo" aria-hidden="true"><div></div></div>
+    {% comment %}"overflow-auto": o script global do portal (base.html, wrapTables) embrulha toda tabela
+       numa caixa própria com rolagem de lado — a barra ia parar no pé da tabela, milhares de
+       pixels abaixo. Com a classe, ele entende que a tabela já rola aqui e não mexe.{% endcomment %}
+    <div class="est-rolagem overflow-auto" id="estRolagem">
     {% if f.aba == 'disponivel' or f.aba == 'transito' %}
         <table class="est-tabela min-w-full text-sm" data-tabela>
             <thead class="text-[11px] uppercase tracking-wide text-gray-500">
@@ -337,7 +388,7 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
                     <th class="est-fixa text-left px-3 py-2.5 min-w-[15rem]" data-ordenar="texto">Produto<i class="fas fa-sort est-seta"></i></th>
                     {% for c in colunas %}
                     <th class="px-2 py-2 text-center est-col-loja {% if c.minha %}est-minha{% endif %}" style="--c:{{ c.cor.forte }}" data-ordenar="numero" title="Ordenar por {{ c.nome }}">
-                        <span class="block normal-case text-[12px] font-bold max-w-[8rem] truncate mx-auto" style="color:{{ c.cor.forte }}">{{ c.nome }}</span>
+                        <span class="est-nome-loja block normal-case text-[12px] font-bold max-w-[8rem] truncate mx-auto" style="color:{{ c.cor.forte }}">{{ c.nome }}</span>
                         {% if c.minha %}<span class="block normal-case text-[10px] font-semibold text-sky-600">sua loja<i class="fas fa-sort est-seta"></i></span>
                         {% elif c.km is not None %}<span class="est-km est-km-{{ c.faixa }} normal-case">{{ c.km|floatformat:0 }} km</span><i class="fas fa-sort est-seta"></i>
                         {% else %}<i class="fas fa-sort est-seta"></i>{% endif %}
@@ -359,7 +410,7 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
                         </p>
                     </td>
                     {% for qtd in linha.qtds %}
-                    <td class="px-2 py-2 text-center {% if forloop.first and f.loja %}est-minha{% endif %}" data-v="{{ qtd|floatformat:0 }}">
+                    <td class="est-cel-loja px-2 py-2 text-center {% if forloop.first and f.loja %}est-minha{% endif %}" data-v="{{ qtd|floatformat:0 }}">
                         {% if qtd %}
                         <button type="button" class="est-q {% if f.aba == 'transito' %}est-q-t{% elif qtd >= 3 %}est-q-3{% else %}est-q-1{% endif %}"
                                 data-material="{{ linha.produto.material }}" data-indice="{{ forloop.counter0 }}"
@@ -571,6 +622,99 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
             });
         });
     });
+
+    /* ---- Andar de lado pela tabela sem descer a página ---- */
+    var rolagem = document.getElementById('estRolagem');
+    var topo = document.getElementById('estBarraTopo');
+    var nav = document.getElementById('estNav');
+    if (rolagem && topo) {
+        var tabela = rolagem.querySelector('table');
+        var largFixa = function () { var f = tabela.querySelector('thead th.est-fixa'); return f ? f.offsetWidth : 0; };
+        var ajustar = function () {
+            topo.firstElementChild.style.width = tabela.scrollWidth + 'px';
+            var temLado = tabela.scrollWidth > rolagem.clientWidth + 2;
+            topo.classList.toggle('sem-lado', !temLado);
+            if (nav) nav.querySelectorAll('[data-rolar]').forEach(function (b) {
+                var dir = +b.getAttribute('data-rolar');
+                b.disabled = !temLado || (dir < 0 ? rolagem.scrollLeft <= 0 : rolagem.scrollLeft + rolagem.clientWidth >= rolagem.scrollWidth - 2);
+            });
+        };
+        // Quem manda é quem a pessoa está mexendo: a barra de cima só puxa a tabela
+        // enquanto é ela que está sendo usada; no resto do tempo a tabela puxa a barra.
+        // (Sem isso as duas se corrigem no meio da rolagem suave e a tabela volta.)
+        var fonte = 'tabela';
+        ['pointerdown', 'wheel', 'touchstart'].forEach(function (ev) {
+            topo.addEventListener(ev, function () { fonte = 'topo'; }, {passive: true});
+            rolagem.addEventListener(ev, function () { fonte = 'tabela'; }, {passive: true});
+        });
+        topo.addEventListener('scroll', function () {
+            if (fonte === 'topo') rolagem.scrollLeft = topo.scrollLeft;
+        });
+        rolagem.addEventListener('scroll', function () {
+            if (fonte !== 'topo') topo.scrollLeft = rolagem.scrollLeft;
+            ajustar();
+        });
+        window.addEventListener('resize', ajustar);
+        if (window.ResizeObserver) new ResizeObserver(ajustar).observe(rolagem);
+        if (nav) nav.addEventListener('click', function (e) {
+            var b = e.target.closest('[data-rolar]');
+            if (!b) return;
+            fonte = 'tabela';
+            var passo = Math.max(160, (rolagem.clientWidth - largFixa()) * 0.8);
+            rolagem.scrollBy({left: +b.getAttribute('data-rolar') * passo, behavior: 'smooth'});
+        });
+        /* Ir direto para a coluna de uma loja e piscar a coluna. */
+        var irPara = document.getElementById('estIrPara');
+        if (irPara) irPara.addEventListener('change', function () {
+            var i = +irPara.value; if (!i) return;
+            fonte = 'tabela';
+            var th = tabela.querySelectorAll('thead th')[i];
+            if (th) {
+                rolagem.scrollTo({left: Math.max(0, th.offsetLeft - largFixa() - 8), behavior: 'smooth'});
+                Array.prototype.forEach.call(tabela.rows, function (tr) {
+                    var cel = tr.cells[i]; if (!cel) return;
+                    cel.style.setProperty('--c', th.style.getPropertyValue('--c'));
+                    cel.classList.remove('est-destaque'); void cel.offsetWidth; cel.classList.add('est-destaque');
+                });
+            }
+            irPara.value = '';
+        });
+        /* Compacto: lembra a escolha; abre compacto quando há muitas lojas. */
+        var modo = document.getElementById('estModo');
+        if (modo) {
+            var guardado = null;
+            try { guardado = localStorage.getItem('sapEstoqueModo'); } catch (e) {}
+            var aplicar = function (compacto) {
+                rolagem.classList.toggle('est-compacto', compacto);
+                modo.classList.toggle('ligado', compacto);
+                modo.querySelector('i').className = 'fas ' + (compacto ? 'fa-expand' : 'fa-compress');
+                modo.querySelector('span').textContent = compacto ? 'Confortável' : 'Compacto';
+                modo.title = compacto ? 'Colunas largas, nome inteiro da loja' : 'Colunas estreitas para ver todas as lojas de uma vez';
+                ajustar();
+            };
+            aplicar((guardado || modo.getAttribute('data-padrao')) === 'compacto');
+            modo.addEventListener('click', function () {
+                var compacto = !rolagem.classList.contains('est-compacto');
+                try { localStorage.setItem('sapEstoqueModo', compacto ? 'compacto' : 'normal'); } catch (e) {}
+                aplicar(compacto);
+            });
+        }
+        /* Arrastar com o mouse (fora dos botões) também anda de lado. */
+        var arrastando = null;
+        rolagem.addEventListener('mousedown', function (e) {
+            if (e.button !== 0 || e.target.closest('button, a, input, select, th')) return;
+            arrastando = {x: e.clientX, esq: rolagem.scrollLeft, moveu: false};
+        });
+        window.addEventListener('mousemove', function (e) {
+            if (!arrastando) return;
+            var dx = e.clientX - arrastando.x;
+            if (Math.abs(dx) > 4) { arrastando.moveu = true; rolagem.classList.add('arrastando'); }
+            if (arrastando.moveu) rolagem.scrollLeft = arrastando.esq - dx;
+        });
+        window.addEventListener('mouseup', function () { arrastando = null; rolagem.classList.remove('arrastando'); });
+        ajustar();
+        setTimeout(ajustar, 300);
+    }
 
     /* ---- Filtro rápido: esconde na hora o que não bate, sem recarregar. ---- */
     var filtro = document.getElementById('estFiltroRapido');
