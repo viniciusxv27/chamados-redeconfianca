@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     'power_bi',  # Dashboards Power BI
     'simulator',  # Simulador de comissionamento
     'feedback',  # Módulo de Feedback Geral (FM-005)
+    'social',  # Feed da rede: fotos e vídeos com curtidas e comentários (25/11/2026)
     'fibras',  # Acompanhamento de Fibras
     'validad1',  # Validação D-1
     'portal_popups',  # Popups configuráveis do portal

@@ -1,0 +1,80 @@
+{% comment %}
+Cartão do Impulso na home (25/11/2026) — montado por impulso/resumo_home.py e pedido pela home
+depois de carregar (impulso:resumo_home). Prefixo ihc- no CSS.
+{% endcomment %}
+<article class="ihc" data-impulso-cartao>
+    <style>
+        .ihc { position: relative; overflow: hidden; border-radius: 1.25rem; background: #fff; border: 1px solid #EEF0F4;
+               box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px -12px rgba(37,99,235,.25); }
+        .ihc::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 4px; background: linear-gradient(90deg, #2563EB, #7C3AED, #FF6B35); }
+        .ihc-topo { display: flex; align-items: center; gap: .9rem; padding: 1.1rem 1.1rem .6rem; }
+        .ihc-anel { --p: 0; flex-shrink: 0; width: 4.4rem; height: 4.4rem; border-radius: 50%; display: grid; place-items: center;
+                    background: conic-gradient(var(--ihc-cor) calc(var(--p) * 1%), #EEF2FF 0); animation: ihc-gira 1s cubic-bezier(.2,.8,.2,1) both; }
+        .ihc-anel span { width: 3.5rem; height: 3.5rem; border-radius: 50%; background: #fff; display: grid; place-items: center;
+                         font-weight: 800; font-size: 1rem; color: #111827; font-variant-numeric: tabular-nums; }
+        @keyframes ihc-gira { from { transform: rotate(-90deg) scale(.85); opacity: 0; } }
+        .ihc-sobre { margin: 0; font-size: .66rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #2563EB; }
+        .ihc-faixa { display: inline-flex; align-items: center; gap: .35rem; padding: .2rem .6rem; border-radius: 999px; color: #fff; font-size: .75rem; font-weight: 700; }
+        .ihc-pos { display: inline-flex; align-items: center; gap: .3rem; font-size: .8rem; font-weight: 700; color: #374151; }
+        .ihc-blocos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; padding: 0 1.1rem; }
+        .ihc-bloco { border-radius: .8rem; background: #F8FAFC; padding: .5rem .6rem; min-width: 0; }
+        .ihc-bloco small { display: flex; align-items: center; gap: .3rem; font-size: .68rem; font-weight: 700; color: #6B7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .ihc-bloco b { display: block; font-size: .95rem; color: #111827; font-variant-numeric: tabular-nums; }
+        .ihc-barra { height: 4px; border-radius: 999px; background: #E5E7EB; overflow: hidden; margin-top: .3rem; }
+        .ihc-barra i { display: block; height: 100%; border-radius: 999px; animation: ihc-cresce .9s .15s both; transform-origin: left; }
+        @keyframes ihc-cresce { from { transform: scaleX(0); } }
+        .ihc-dicas { list-style: none; margin: 0; padding: .8rem 1.1rem 1rem; display: flex; flex-direction: column; gap: .45rem; }
+        .ihc-dica { display: flex; align-items: center; gap: .65rem; padding: .55rem .7rem; border-radius: .8rem; text-decoration: none;
+                    background: #FFF7F2; color: #7C2D12; transition: transform .15s; }
+        .ihc-dica:hover { transform: translateX(3px); }
+        .ihc-dica.vermelho { background: #FEF2F2; color: #991B1B; } .ihc-dica.ambar { background: #FFFBEB; color: #92400E; }
+        .ihc-dica.azul { background: #EFF6FF; color: #1E40AF; }
+        .ihc-dica i.ic { width: 1.8rem; height: 1.8rem; border-radius: .6rem; display: grid; place-items: center; background: rgba(255,255,255,.75); flex-shrink: 0; font-size: .8rem; }
+        .ihc-dica span { flex: 1; min-width: 0; font-size: .84rem; font-weight: 600; line-height: 1.3; }
+        .ihc-dica em { font-style: normal; font-size: .7rem; font-weight: 800; white-space: nowrap; opacity: .85; }
+        .ihc-rodape { display: flex; justify-content: space-between; align-items: center; gap: .5rem; padding: .7rem 1.1rem; border-top: 1px solid #F1F2F5; font-size: .78rem; color: #6B7280; }
+        html.dark .ihc { background: var(--tema-superficie, #1a2030); border-color: rgba(255,255,255,.08); }
+        html.dark .ihc-anel span { background: var(--tema-superficie, #1a2030); color: #F3F4F6; }
+        html.dark .ihc-bloco { background: rgba(255,255,255,.05); } html.dark .ihc-bloco b { color: #F3F4F6; }
+        html.dark .ihc-pos { color: #D1D5DB; } html.dark .ihc-rodape { border-color: rgba(255,255,255,.08); }
+        @media (prefers-reduced-motion: reduce) { .ihc-anel, .ihc-barra i { animation: none; } .ihc-dica:hover { transform: none; } }
+    </style>
+    <div class="ihc-topo">
+        <div class="ihc-anel" style="--p: {{ cartao.percentual|floatformat:0 }}; --ihc-cor: {{ cartao.faixa.cor }}"><span>{{ cartao.percentual|floatformat:0 }}%</span></div>
+        <div class="min-w-0 flex-1">
+            <p class="ihc-sobre"><i class="fas fa-rocket mr-1"></i>Seu Impulso · {{ cartao.mes }}{% if cartao.em_conferencia %} (em conferência){% endif %}</p>
+            <div class="flex flex-wrap items-center gap-2 mt-1">
+                <span class="ihc-faixa" style="background: {{ cartao.faixa.cor }}"><i class="{{ cartao.faixa.icone }}"></i>{{ cartao.faixa.nome }}</span>
+                {% if cartao.posicao %}<span class="ihc-pos" data-ihc-posicao><i class="fas fa-trophy text-amber-500"></i>{{ cartao.posicao }}º de {{ cartao.participantes }} no ranking</span>{% endif %}
+            </div>
+            <p class="text-xs text-gray-500 mt-1">
+                {{ cartao.total|floatformat:"-1" }} de {{ cartao.maximo|floatformat:"-1" }} pts
+                {% if cartao.proxima %}· faltam <b class="text-gray-800">{{ cartao.proxima.falta|floatformat:"-1" }}%</b> para {{ cartao.proxima.nome }}{% else %}· nível máximo! 🚀{% endif %}
+            </p>
+        </div>
+    </div>
+    <div class="ihc-blocos">
+        {% for b in cartao.blocos %}
+        <div class="ihc-bloco">
+            <small><i class="fas {{ b.icone }}" style="color: {{ b.cor }}"></i>{{ b.nome }}</small>
+            <b>{{ b.valor|floatformat:"-1" }}<span class="text-[11px] text-gray-400 font-semibold">/{{ b.max|floatformat:"-1" }}</span></b>
+            <div class="ihc-barra"><i style="width: {{ b.pct|floatformat:0 }}%; background: {{ b.cor }}"></i></div>
+        </div>
+        {% endfor %}
+    </div>
+    {% if cartao.dicas %}
+    <ul class="ihc-dicas" aria-label="Próximos passos">
+        {% for d in cartao.dicas %}
+        <li><a class="ihc-dica {{ d.tom }}" href="{{ d.url|default:'#' }}">
+            <i class="ic fas {{ d.icone }}"></i><span>{{ d.texto }}</span>{% if d.pontos %}<em>+{{ d.pontos }} pts</em>{% endif %}
+            <i class="fas fa-chevron-right text-[10px] opacity-60"></i></a></li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="px-5 py-3 text-sm text-gray-600"><i class="fas fa-circle-check text-emerald-500 mr-1"></i>Tudo em dia por aqui. Continue assim!</p>
+    {% endif %}
+    <div class="ihc-rodape">
+        <span>{{ cartao.metas.abertas }} meta{{ cartao.metas.abertas|pluralize }} em aberto</span>
+        <a href="{% url 'impulso:dashboard' %}" class="font-semibold text-blue-600 hover:underline">Abrir o Impulso <i class="fas fa-arrow-right text-[10px]"></i></a>
+    </div>
+</article>

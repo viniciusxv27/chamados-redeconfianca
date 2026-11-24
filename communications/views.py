@@ -182,6 +182,15 @@ def home_feed(request):
         # App de elogios não disponível
         pass
     
+    # Feed da rede (25/11/2026): as publicações mais recentes, com a caixa de publicar.
+    feed_posts, feed_tem_mais = [], False
+    try:
+        from social.servicos import pagina_do_feed
+        feed_posts, feed_tem_mais = pagina_do_feed(request.user, limite=3)
+    except Exception:  # noqa: BLE001 — a home não cai por causa do feed
+        import logging
+        logging.getLogger(__name__).warning('Home: feed da rede não carregou', exc_info=True)
+
     # Paginação
     paginator = Paginator(communications_list, 10)
     page_number = request.GET.get('page')
@@ -218,6 +227,9 @@ def home_feed(request):
         'communications': communications,
         'recent_compliments': recent_compliments,
         'total_reconhecimentos': total_reconhecimentos,
+        'feed_posts': feed_posts,
+        'feed_tem_mais': feed_tem_mais,
+        'feed_ultimo': feed_posts[-1].pk if feed_posts else '',
         'avisos_ocultos': _avisos_ocultos(request.user),
         'saudacao': _saudacao(),
         'pickup_redemptions': pickup_redemptions,

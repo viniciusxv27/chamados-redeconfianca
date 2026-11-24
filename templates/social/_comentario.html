@@ -1,0 +1,10 @@
+{% comment %}Um comentário do feed. Parâmetros: c, p (o post) e user.{% endcomment %}
+<li class="sf-comentario" data-sf-comentario="{{ c.id }}">
+    {% include 'social/_avatar.html' with u=c.autor tam='w-7 h-7' %}
+    <div class="sf-balao">
+        <p><b>{{ c.autor.get_full_name|default:c.autor.username }}</b> <span class="whitespace-pre-line break-words">{{ c.texto }}</span></p>
+        <small><time datetime="{{ c.criado_em|date:'c' }}" data-sf-quando>{{ c.criado_em|date:"d/m H:i" }}</time>
+            {% if c.autor_id == user.id or p.autor_id == user.id or user.is_superuser or user.hierarchy == 'SUPERADMIN' %}
+            · <button type="button" data-sf-apagar-comentario="{% url 'social:apagar_comentario' c.id %}">apagar</button>{% endif %}</small>
+    </div>
+</li>

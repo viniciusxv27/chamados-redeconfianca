@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}Feed da rede · Rede Confiança{% endblock %}
+{% block content %}
+{% comment %}Feed da rede (25/11/2026): fotos e vídeos de todo mundo, com curtidas e comentários (social/).{% endcomment %}
+<div class="max-w-xl mx-auto px-0 sm:px-2 py-4 sm:py-6">
+    <div class="flex items-center justify-between gap-3 mb-4 px-1">
+        <div>
+            <h1 class="text-2xl font-extrabold text-gray-900 leading-tight">Feed da rede</h1>
+            <p class="text-sm text-gray-500">Momentos de quem faz a Rede Confiança</p>
+        </div>
+        <a href="{% url 'home' %}" class="text-sm font-semibold text-gray-500 hover:text-gray-800"><i class="fas fa-arrow-left mr-1"></i>Home</a>
+    </div>
+    {% include 'social/_composer.html' with sufixo='Feed' %}
+    <div data-sf-lista>
+        {% for p in posts %}{% include 'social/_post.html' with p=p %}{% empty %}
+        <div class="sf-vazio sf-post"><i class="fas fa-camera-retro text-3xl text-gray-300 block mb-2"></i>Ninguém postou ainda. Que tal ser o primeiro?</div>
+        {% endfor %}
+    </div>
+    {% if tem_mais %}
+    <div class="sf-mais" data-sf-mais data-automatico="1" data-url="{% url 'social:mais' %}" data-antes="{{ ultimo }}">
+        <button type="button">Ver mais publicações</button>
+    </div>
+    {% endif %}
+</div>
+{% include 'social/_script.html' %}
+{% endblock %}

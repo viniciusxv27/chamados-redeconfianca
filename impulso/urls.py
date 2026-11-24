@@ -1,11 +1,12 @@
 from django.urls import path
 
-from . import views, views_projetos_intel
+from . import views, views_home, views_projetos_intel
 
 app_name = 'impulso'
 
 urlpatterns = [
     path('', views.dashboard, name='dashboard'),
+    path('resumo-home/', views_home.resumo_home, name='resumo_home'),
 
     # CONFIAR — metas / kanban
     path('metas/', views.metas_kanban, name='metas_kanban'),

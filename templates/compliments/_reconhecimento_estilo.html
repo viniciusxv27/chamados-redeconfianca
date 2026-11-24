@@ -14,6 +14,9 @@ Estilo do cartão de reconhecimento (home e mural). Cores próprias também no t
     .rc-reco-avatar { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #ffd5c2; }
     .rc-reco-iniciais { background: linear-gradient(135deg, #ff6b35, #f59e0b); color: #fff; font-weight: 700; font-size: .85rem; }
     .rc-estrela-cheia { color: #f59e0b; }
+    .rc-reco-fala { background: #fff7f2; position: relative; }
+    .rc-reco-fala::before { content: ''; position: absolute; top: -6px; left: 14px; width: 12px; height: 12px; background: inherit; transform: rotate(45deg); border-radius: 2px; }
+    html.dark .rc-reco-fala { background: rgba(255, 107, 53, .1); }
     html.dark .rc-reco-avatar { box-shadow: 0 0 0 2px var(--tema-superficie), 0 0 0 4px #7c3a1d; }
     html.dark .rc-reco:hover { box-shadow: 0 14px 30px -12px rgba(0, 0, 0, .6); }
 

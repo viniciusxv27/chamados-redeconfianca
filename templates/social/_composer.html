@@ -1,0 +1,28 @@
+{% comment %}
+Caixa de publicar do feed da rede: câmera (foto), gravar vídeo ou escolher da galeria; prévia, descrição
+opcional e envio com barra de progresso. A foto é reduzida no navegador antes de subir (social/_script.html).
+{% endcomment %}
+<div class="sf-composer" data-sf-composer data-url="{% url 'social:publicar' %}">
+    <div class="sf-composer-topo">
+        {% include 'social/_avatar.html' with u=user tam='w-10 h-10' %}
+        <label class="sf-composer-convite" for="sfGaleria{{ sufixo|default:'' }}">Compartilhe uma foto ou um vídeo, {{ user.first_name|default:"colega" }}…</label>
+    </div>
+    <div class="sf-composer-botoes">
+        <label class="sf-botao-midia"><i class="fas fa-camera text-orange-500"></i><span>Foto</span>
+            <input type="file" accept="image/*" capture="environment" class="sr-only" data-sf-arquivo></label>
+        <label class="sf-botao-midia"><i class="fas fa-video text-pink-500"></i><span>Vídeo</span>
+            <input type="file" accept="video/*" capture="environment" class="sr-only" data-sf-arquivo></label>
+        <label class="sf-botao-midia"><i class="fas fa-images text-emerald-500"></i><span>Galeria</span>
+            <input type="file" accept="image/*,video/*" class="sr-only" id="sfGaleria{{ sufixo|default:'' }}" data-sf-arquivo></label>
+    </div>
+    <div class="sf-previa hidden" data-sf-previa>
+        <div class="sf-previa-midia" data-sf-previa-midia></div>
+        <textarea rows="2" maxlength="2200" placeholder="Escreva uma descrição (opcional)…" data-sf-legenda-nova></textarea>
+        <div class="sf-progresso hidden" data-sf-progresso><i></i></div>
+        <p class="sf-erro hidden" data-sf-erro role="alert"></p>
+        <div class="sf-previa-acoes">
+            <button type="button" class="sf-cancelar" data-sf-cancelar>Cancelar</button>
+            <button type="button" class="sf-publicar" data-sf-publicar><i class="fas fa-paper-plane"></i>Publicar</button>
+        </div>
+    </div>
+</div>

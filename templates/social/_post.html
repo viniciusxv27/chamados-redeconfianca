@@ -1,0 +1,52 @@
+{% comment %}
+Um post do feed da rede. Parâmetros: p (com curti e ultimos — social.servicos) e user.
+O espaço da mídia é reservado pela proporção (nada pula ao carregar); vídeo só baixa ao tocar.
+{% endcomment %}
+<article class="sf-post" data-sf-post="{{ p.id }}">
+    <header class="sf-cabeca">
+        {% include 'social/_avatar.html' with u=p.autor tam='w-10 h-10' %}
+        <div class="min-w-0 flex-1">
+            <p class="sf-nome">{{ p.autor.get_full_name|default:p.autor.username }}</p>
+            <p class="sf-sub">{% if p.autor.sector %}{{ p.autor.sector.name }} · {% endif %}<time datetime="{{ p.criado_em|date:'c' }}" title="{{ p.criado_em|date:'d/m/Y H:i' }}" data-sf-quando>{{ p.criado_em|date:"d/m H:i" }}</time></p>
+        </div>
+        {% if p.autor_id == user.id or user.is_superuser or user.hierarchy == 'SUPERADMIN' %}
+        <button type="button" class="sf-menu" data-sf-apagar="{% url 'social:apagar' p.id %}" title="Apagar publicação" aria-label="Apagar publicação"><i class="far fa-trash-can"></i></button>
+        {% endif %}
+    </header>
+
+    <div class="sf-midia" style="padding-top: {{ p.proporcao|stringformat:'s' }}%" data-sf-midia>
+        {% if p.tipo == 'VIDEO' %}
+        <video src="{{ p.midia.url }}#t=0.1" controls playsinline preload="metadata" class="sf-midia-el"{% if p.largura %} width="{{ p.largura }}" height="{{ p.altura }}"{% endif %}></video>
+        {% else %}
+        <img src="{{ p.midia.url }}" alt="{{ p.legenda|truncatechars:80|default:'Foto publicada' }}" loading="lazy" decoding="async" class="sf-midia-el"
+             {% if p.largura %}width="{{ p.largura }}" height="{{ p.altura }}"{% endif %} data-sf-duplo>
+        <span class="sf-coracao-grande" aria-hidden="true"><i class="fas fa-heart"></i></span>
+        {% endif %}
+    </div>
+
+    <div class="sf-acoes">
+        <button type="button" class="sf-acao{% if p.curti %} curti{% endif %}" data-sf-curtir="{% url 'social:curtir' p.id %}" aria-pressed="{% if p.curti %}true{% else %}false{% endif %}" aria-label="Curtir">
+            <i class="{% if p.curti %}fas{% else %}far{% endif %} fa-heart"></i></button>
+        <button type="button" class="sf-acao" data-sf-focar-comentario aria-label="Comentar"><i class="far fa-comment"></i></button>
+        <span class="sf-curtidas" data-sf-total-curtidas="{{ p.total_curtidas }}">{% if p.total_curtidas %}<b>{{ p.total_curtidas }}</b> curtida{{ p.total_curtidas|pluralize }}{% endif %}</span>
+    </div>
+
+    {% if p.legenda %}
+    <p class="sf-legenda"><b>{{ p.autor.first_name|default:p.autor.username }}</b> <span class="whitespace-pre-line break-words" data-sf-legenda>{{ p.legenda }}</span></p>
+    {% endif %}
+
+    <div class="sf-conversa">
+        {% if not abrir_todos and p.total_comentarios > p.ultimos|length %}
+        <button type="button" class="sf-ver-todos" data-sf-ver-todos="{% url 'social:comentarios' p.id %}">Ver todos os {{ p.total_comentarios }} comentários</button>
+        {% endif %}
+        <ul class="sf-comentarios" data-sf-comentarios data-total="{{ p.total_comentarios }}">
+            {% if abrir_todos %}{% for c in comentarios %}{% include 'social/_comentario.html' with c=c p=p user=user %}{% endfor %}
+            {% else %}{% for c in p.ultimos %}{% include 'social/_comentario.html' with c=c p=p user=user %}{% endfor %}{% endif %}
+        </ul>
+        <form class="sf-comentar" data-sf-comentar="{% url 'social:comentar' p.id %}">
+            {% include 'social/_avatar.html' with u=user tam='w-7 h-7' %}
+            <input type="text" name="texto" maxlength="1000" placeholder="Adicione um comentário…" autocomplete="off" aria-label="Comentário" enterkeyhint="send">
+            <button type="submit" disabled>Publicar</button>
+        </form>
+    </div>
+</article>

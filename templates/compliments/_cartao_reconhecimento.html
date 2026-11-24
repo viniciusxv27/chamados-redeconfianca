@@ -1,13 +1,43 @@
 {% comment %}
 Um reconhecimento (Compliment). Usado na faixa da home e no mural (compliments:mural).
 Parâmetro: c. O "Ler tudo" só aparece quando o texto não cabe (script em _reconhecimento_script.html).
+Ordem (25/11/2026): quem reconheceu (foto e nome) → o comentário → quem foi reconhecido (foto e nome).
 {% endcomment %}
 <article class="rc-reco h-full" data-rc-reco>
     <div class="rc-reco-miolo h-full bg-white rounded-2xl p-4 flex flex-col gap-3">
-        <div class="flex items-start gap-3">
+        {# Quem reconheceu #}
+        <div class="flex items-center gap-2.5 min-w-0" data-rc-reco-de>
+            {% if c.from_user.profile_picture %}
+            <img src="{{ c.from_user.profile_picture.url }}" alt="" loading="lazy" decoding="async"
+                 class="w-9 h-9 rounded-full object-cover flex-shrink-0 rc-reco-avatar">
+            {% else %}
+            <span class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 rc-reco-avatar rc-reco-iniciais text-xs">
+                {{ c.from_user.first_name|slice:":1"|upper }}{{ c.from_user.last_name|slice:":1"|upper }}
+            </span>
+            {% endif %}
+            <div class="min-w-0 flex-1">
+                <p class="text-sm font-semibold text-gray-900 leading-tight truncate">{{ c.from_user.get_full_name }}</p>
+                <p class="text-[11px] text-gray-500 leading-tight"><i class="fas fa-heart text-pink-400 mr-0.5"></i>reconheceu ·
+                    <time datetime="{{ c.created_at|date:'c' }}" title="{{ c.created_at|date:'d/m/Y H:i' }}" data-rc-quando>{{ c.created_at|date:"d/m" }}</time></p>
+            </div>
+        </div>
+
+        {# O comentário #}
+        <div class="flex-1 rc-reco-fala rounded-xl px-3 py-2.5">
+            <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-line line-clamp-4" data-rc-reco-texto>{{ c.comment }}</p>
+            <button type="button" class="hidden mt-1 text-xs font-semibold text-primary hover:underline" data-rc-reco-mais>Ler tudo</button>
+            <div class="flex items-center gap-0.5 mt-1.5" aria-label="{{ c.rating }} de 5 estrelas">
+                {% for i in "12345" %}
+                <i class="fas fa-star text-[11px] {% if forloop.counter <= c.rating %}rc-estrela-cheia{% else %}text-gray-300{% endif %}"></i>
+                {% endfor %}
+            </div>
+        </div>
+
+        {# Quem foi reconhecido #}
+        <div class="flex items-center gap-3 pt-2 border-t border-gray-100 min-w-0" data-rc-reco-para>
             {% if c.to_user %}
                 {% if c.to_user.profile_picture %}
-                <img src="{{ c.to_user.profile_picture.url }}" alt="" loading="lazy"
+                <img src="{{ c.to_user.profile_picture.url }}" alt="" loading="lazy" decoding="async"
                      class="w-11 h-11 rounded-full object-cover flex-shrink-0 rc-reco-avatar">
                 {% else %}
                 <span class="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 rc-reco-avatar rc-reco-iniciais">
@@ -20,29 +50,14 @@ Parâmetro: c. O "Ler tudo" só aparece quando o texto não cabe (script em _rec
             </span>
             {% endif %}
             <div class="min-w-0 flex-1">
+                <p class="text-[10px] font-bold uppercase tracking-wider text-orange-500 leading-none mb-0.5">Reconhecido{% if not c.to_user %}s{% endif %}</p>
                 <p class="font-semibold text-gray-900 leading-tight truncate">
                     {% if c.to_user %}{{ c.to_user.get_full_name }}{% else %}Setor {{ c.to_sector.name }}{% endif %}
                 </p>
                 <p class="text-xs text-gray-500 truncate">
                     {% if c.to_user %}{{ c.to_user.sector.name|default:"Rede Confiança" }}{% else %}Reconhecimento para a equipe{% endif %}
                 </p>
-                <div class="flex items-center gap-0.5 mt-1" aria-label="{{ c.rating }} de 5 estrelas">
-                    {% for i in "12345" %}
-                    <i class="fas fa-star text-[11px] {% if forloop.counter <= c.rating %}rc-estrela-cheia{% else %}text-gray-300{% endif %}"></i>
-                    {% endfor %}
-                </div>
             </div>
-        </div>
-
-        <div class="flex-1">
-            <p class="text-sm text-gray-600 leading-relaxed whitespace-pre-line line-clamp-4" data-rc-reco-texto>{{ c.comment }}</p>
-            <button type="button" class="hidden mt-1 text-xs font-semibold text-primary hover:underline" data-rc-reco-mais>Ler tudo</button>
-        </div>
-
-        <div class="flex items-center justify-between gap-2 pt-2 border-t border-gray-100 text-xs text-gray-500">
-            <span class="truncate"><i class="fas fa-heart text-pink-400 mr-1"></i>por <span class="font-medium text-gray-700">{{ c.from_user.get_full_name }}</span></span>
-            <time datetime="{{ c.created_at|date:'c' }}" title="{{ c.created_at|date:'d/m/Y H:i' }}" data-rc-quando
-                  class="whitespace-nowrap">{{ c.created_at|date:"d/m" }}</time>
         </div>
     </div>
 </article>

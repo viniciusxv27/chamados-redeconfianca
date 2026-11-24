@@ -1,0 +1,319 @@
+{% comment %}
+Estilo e comportamento do feed da rede (incluir uma vez por página; prefixo sf- e window.SocialFeed).
+- Publicar: foto reduzida no navegador (máx. 1600 px, JPEG) antes de subir; vídeo até 100 MB; barra de progresso.
+- Curtir (botão ou dois toques na foto), comentar, ver todos os comentários, apagar: tudo sem recarregar.
+- Rolagem infinita pelo [data-sf-mais] (com botão de reserva) e horário relativo ("5 min", "ontem").
+{% endcomment %}
+<style>
+    .sf-post, .sf-composer { background: #fff; border: 1px solid #EEF0F4; border-radius: 1.1rem; overflow: hidden;
+        box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 6px 18px -10px rgba(16,24,40,.12); }
+    .sf-post + .sf-post { margin-top: 1rem; }
+    .sf-post { animation: sf-entra .35s ease both; }
+    @keyframes sf-entra { from { opacity: 0; transform: translateY(8px); } }
+    .sf-avatar { box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px #FFD5C2; }
+    .sf-iniciais { background: linear-gradient(135deg, #FF6B35, #F59E0B); color: #fff; font-weight: 700; font-size: .72rem; }
+    .sf-cabeca { display: flex; align-items: center; gap: .7rem; padding: .75rem .9rem; }
+    .sf-nome { font-size: .9rem; font-weight: 700; color: #111827; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sf-sub { font-size: .72rem; color: #6B7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sf-menu { width: 2rem; height: 2rem; border-radius: 999px; color: #9CA3AF; }
+    .sf-menu:hover { background: #F3F4F6; color: #EF4444; }
+    .sf-midia { position: relative; background: #0B0F19; overflow: hidden; }
+    .sf-midia-el { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #0B0F19; }
+    video.sf-midia-el { object-fit: contain; }
+    .sf-coracao-grande { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; color: #fff; font-size: 5rem;
+        opacity: 0; filter: drop-shadow(0 6px 18px rgba(0,0,0,.35)); }
+    .sf-coracao-grande.pulsa { animation: sf-coracao .8s ease; }
+    @keyframes sf-coracao { 15% { opacity: .95; transform: scale(1.15); } 35% { transform: scale(.95); } 60% { opacity: .95; transform: scale(1); } 100% { opacity: 0; transform: scale(1); } }
+    .sf-acoes { display: flex; align-items: center; gap: .2rem; padding: .45rem .55rem .1rem; }
+    .sf-acao { width: 2.4rem; height: 2.4rem; border-radius: 999px; font-size: 1.35rem; color: #1F2937; display: grid; place-items: center; transition: transform .15s; }
+    .sf-acao:active { transform: scale(.85); }
+    .sf-acao.curti { color: #EF4444; }
+    .sf-acao.curti i { animation: sf-bate .4s ease; }
+    @keyframes sf-bate { 40% { transform: scale(1.3); } }
+    .sf-curtidas { font-size: .82rem; color: #111827; margin-left: .3rem; }
+    .sf-legenda { padding: .1rem .95rem .2rem; font-size: .88rem; color: #1F2937; line-height: 1.45; }
+    .sf-conversa { padding: .15rem .95rem .8rem; }
+    .sf-ver-todos { font-size: .82rem; color: #6B7280; margin: .2rem 0 .1rem; }
+    .sf-ver-todos:hover { color: #111827; }
+    .sf-comentarios { list-style: none; margin: .2rem 0 0; padding: 0; display: flex; flex-direction: column; gap: .45rem; }
+    .sf-comentario { display: flex; gap: .5rem; align-items: flex-start; animation: sf-entra .25s ease both; }
+    .sf-balao { min-width: 0; flex: 1; }
+    .sf-balao p { font-size: .84rem; color: #1F2937; line-height: 1.4; background: #F6F7F9; border-radius: .9rem; padding: .4rem .7rem; display: inline-block; max-width: 100%; }
+    .sf-balao b { font-weight: 700; margin-right: .15rem; }
+    .sf-balao small { display: block; font-size: .7rem; color: #9CA3AF; padding: .15rem .7rem 0; }
+    .sf-balao small button { color: #9CA3AF; } .sf-balao small button:hover { color: #EF4444; }
+    .sf-comentar { display: flex; align-items: center; gap: .5rem; margin-top: .65rem; padding-top: .6rem; border-top: 1px solid #F1F2F5; }
+    .sf-comentar input { flex: 1; min-width: 0; border: 0; background: transparent; font-size: .86rem; outline: none; padding: .35rem 0; color: #111827; }
+    .sf-comentar button { font-size: .84rem; font-weight: 700; color: #FF6B35; }
+    .sf-comentar button:disabled { opacity: .4; }
+
+    .sf-composer { padding: .85rem .9rem; margin-bottom: 1rem; }
+    .sf-composer-topo { display: flex; align-items: center; gap: .7rem; }
+    .sf-composer-convite { flex: 1; min-width: 0; cursor: pointer; background: #F6F7F9; border-radius: 999px; padding: .65rem 1rem; font-size: .88rem;
+        color: #6B7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: background .15s; }
+    .sf-composer-convite:hover { background: #EEF0F4; }
+    .sf-composer-botoes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .4rem; margin-top: .65rem; padding-top: .6rem; border-top: 1px solid #F1F2F5; }
+    .sf-botao-midia { display: flex; align-items: center; justify-content: center; gap: .45rem; padding: .5rem; border-radius: .7rem; cursor: pointer;
+        font-size: .84rem; font-weight: 600; color: #4B5563; transition: background .15s; }
+    .sf-botao-midia:hover { background: #F6F7F9; }
+    .sf-previa { margin-top: .75rem; display: flex; flex-direction: column; gap: .6rem; }
+    .sf-previa.hidden, .sf-progresso.hidden, .sf-erro.hidden { display: none; }
+    .sf-previa-midia { border-radius: .9rem; overflow: hidden; background: #0B0F19; max-height: 60vh; display: flex; justify-content: center; }
+    .sf-previa-midia img, .sf-previa-midia video { max-height: 60vh; width: auto; max-width: 100%; object-fit: contain; }
+    .sf-previa textarea { width: 100%; border: 1px solid #E5E7EB; border-radius: .8rem; padding: .6rem .8rem; font-size: .88rem; resize: vertical; outline: none; }
+    .sf-previa textarea:focus { border-color: #FF6B35; box-shadow: 0 0 0 3px rgba(255,107,53,.15); }
+    .sf-progresso { height: 6px; border-radius: 999px; background: #F1F2F5; overflow: hidden; }
+    .sf-progresso i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #FF6B35, #EC4899); transition: width .2s; }
+    .sf-erro { font-size: .82rem; color: #B91C1C; background: #FEF2F2; border-radius: .6rem; padding: .45rem .7rem; }
+    .sf-previa-acoes { display: flex; justify-content: flex-end; gap: .5rem; }
+    .sf-cancelar { padding: .55rem 1rem; border-radius: .8rem; font-size: .86rem; font-weight: 600; color: #4B5563; background: #F3F4F6; }
+    .sf-publicar { display: inline-flex; align-items: center; gap: .45rem; padding: .55rem 1.1rem; border-radius: .8rem; font-size: .86rem; font-weight: 700;
+        color: #fff; background: linear-gradient(135deg, #FF6B35, #EC4899); box-shadow: 0 6px 16px -6px rgba(236,72,153,.6); }
+    .sf-publicar:disabled { opacity: .6; cursor: wait; }
+    .sf-mais { display: flex; justify-content: center; padding: 1rem 0 .5rem; }
+    .sf-mais button { font-size: .86rem; font-weight: 600; color: #FF6B35; padding: .55rem 1.1rem; border-radius: .8rem; background: #FFF7F2; }
+    .sf-vazio { text-align: center; padding: 2rem 1rem; color: #6B7280; font-size: .9rem; }
+
+    html.dark .sf-post, html.dark .sf-composer { background: var(--tema-superficie, #1a2030); border-color: rgba(255,255,255,.08); }
+    html.dark .sf-nome, html.dark .sf-legenda, html.dark .sf-curtidas, html.dark .sf-acao, html.dark .sf-comentar input { color: #F3F4F6; }
+    html.dark .sf-balao p, html.dark .sf-composer-convite { background: rgba(255,255,255,.06); color: #E5E7EB; }
+    html.dark .sf-comentar, html.dark .sf-composer-botoes { border-color: rgba(255,255,255,.08); }
+    html.dark .sf-avatar { box-shadow: 0 0 0 2px var(--tema-superficie, #1a2030), 0 0 0 3.5px #7c3a1d; }
+    @media (prefers-reduced-motion: reduce) { .sf-post, .sf-comentario, .sf-acao.curti i, .sf-coracao-grande.pulsa { animation: none; } }
+</style>
+<script>
+(function () {
+    if (window.SocialFeed) return;
+    var csrf = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
+    var MAX_LADO = 1600, LIMITE_FOTO = 20 * 1024 * 1024, LIMITE_VIDEO = 100 * 1024 * 1024;
+
+    function postar(url, dados) {
+        return fetch(url, {method: 'POST', credentials: 'same-origin',
+            headers: {'X-CSRFToken': csrf, 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+            body: JSON.stringify(dados || {})}).then(function (r) { return r.json(); });
+    }
+    function html(texto) { var t = document.createElement('template'); t.innerHTML = texto.trim(); return t.content; }
+
+    // Horário relativo: "agora", "5 min", "3 h", "ontem", "12/11".
+    function quando(raiz) {
+        var agora = Date.now();
+        (raiz || document).querySelectorAll('[data-sf-quando]').forEach(function (el) {
+            var d = new Date(el.getAttribute('datetime')); if (isNaN(d)) return;
+            var s = Math.max(0, (agora - d) / 1000), txt;
+            if (s < 60) txt = 'agora'; else if (s < 3600) txt = Math.floor(s / 60) + ' min';
+            else if (s < 86400) txt = Math.floor(s / 3600) + ' h'; else if (s < 172800) txt = 'ontem';
+            else if (s < 604800) txt = Math.floor(s / 86400) + ' dias';
+            else txt = ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2);
+            el.textContent = txt;
+        });
+    }
+
+    function textoCurtidas(n) { return n ? '<b>' + n + '</b> curtida' + (n > 1 ? 's' : '') : ''; }
+    function curtir(post, forcar) {
+        var b = post.querySelector('[data-sf-curtir]'); if (!b || b.disabled) return;
+        var ja = b.classList.contains('curti');
+        if (forcar && ja) return;                         // dois toques numa foto já curtida: só o coração
+        var total = post.querySelector('[data-sf-total-curtidas]'), n = Number(total.dataset.sfTotalCurtidas) || 0;
+        function pintar(curti, qtd) {
+            b.classList.toggle('curti', curti); b.setAttribute('aria-pressed', curti ? 'true' : 'false');
+            b.querySelector('i').className = (curti ? 'fas' : 'far') + ' fa-heart';
+            total.dataset.sfTotalCurtidas = qtd; total.innerHTML = textoCurtidas(qtd);
+        }
+        pintar(!ja, n + (ja ? -1 : 1)); b.disabled = true;
+        postar(b.dataset.sfCurtir).then(function (j) { if (j.ok) pintar(j.curti, j.total); else pintar(ja, n); })
+            .catch(function () { pintar(ja, n); }).then(function () { b.disabled = false; });
+    }
+
+    document.addEventListener('click', function (e) {
+        var alvo;
+        if ((alvo = e.target.closest('[data-sf-curtir]'))) { curtir(alvo.closest('[data-sf-post]')); return; }
+        if ((alvo = e.target.closest('[data-sf-focar-comentario]'))) {
+            alvo.closest('[data-sf-post]').querySelector('[data-sf-comentar] input').focus(); return;
+        }
+        if ((alvo = e.target.closest('[data-sf-ver-todos]'))) {
+            var lista = alvo.parentNode.querySelector('[data-sf-comentarios]');
+            alvo.disabled = true; alvo.textContent = 'Carregando…';
+            fetch(alvo.dataset.sfVerTodos, {credentials: 'same-origin'}).then(function (r) { return r.text(); })
+                .then(function (t) { lista.innerHTML = t; quando(lista); alvo.remove(); })
+                .catch(function () { alvo.disabled = false; alvo.textContent = 'Tentar de novo'; });
+            return;
+        }
+        if ((alvo = e.target.closest('[data-sf-apagar]'))) {
+            if (!confirm('Apagar esta publicação?')) return;
+            postar(alvo.dataset.sfApagar).then(function (j) {
+                if (!j.ok) { alert(j.erro || 'Não deu para apagar.'); return; }
+                var p = alvo.closest('[data-sf-post]'); p.style.transition = 'opacity .25s'; p.style.opacity = 0;
+                setTimeout(function () { p.remove(); }, 260);
+            });
+            return;
+        }
+        if ((alvo = e.target.closest('[data-sf-apagar-comentario]'))) {
+            if (!confirm('Apagar este comentário?')) return;
+            postar(alvo.dataset.sfApagarComentario).then(function (j) {
+                if (!j.ok) { alert(j.erro || 'Não deu para apagar.'); return; }
+                alvo.closest('[data-sf-comentario]').remove();
+            });
+        }
+    });
+
+    // Dois toques na foto curtem (como nas redes).
+    var ultimoToque = 0;
+    document.addEventListener('click', function (e) {
+        var img = e.target.closest('[data-sf-duplo]'); if (!img) return;
+        var agora = Date.now();
+        if (agora - ultimoToque < 320) {
+            var post = img.closest('[data-sf-post]'), cor = post.querySelector('.sf-coracao-grande');
+            cor.classList.remove('pulsa'); void cor.offsetWidth; cor.classList.add('pulsa');
+            curtir(post, true); ultimoToque = 0;
+        } else { ultimoToque = agora; }
+    });
+
+    // Comentar.
+    document.addEventListener('input', function (e) {
+        var f = e.target.closest('[data-sf-comentar]');
+        if (f) f.querySelector('button').disabled = !e.target.value.trim();
+    });
+    document.addEventListener('submit', function (e) {
+        var f = e.target.closest('[data-sf-comentar]'); if (!f) return;
+        e.preventDefault();
+        var campo = f.querySelector('input'), botao = f.querySelector('button'), texto = campo.value.trim();
+        if (!texto) return;
+        botao.disabled = true; campo.disabled = true;
+        postar(f.dataset.sfComentar, {texto: texto}).then(function (j) {
+            if (!j.ok) { alert(j.erro || 'Não deu para comentar.'); return; }
+            var lista = f.parentNode.querySelector('[data-sf-comentarios]');
+            lista.appendChild(html(j.html)); quando(lista); campo.value = '';
+        }).catch(function () { alert('Sem conexão — tente de novo.'); })
+          .then(function () { campo.disabled = false; botao.disabled = !campo.value.trim(); });
+    });
+
+    // Um vídeo tocando por vez.
+    document.addEventListener('play', function (e) {
+        if (e.target.tagName !== 'VIDEO' || !e.target.closest('[data-sf-post]')) return;
+        document.querySelectorAll('[data-sf-post] video').forEach(function (v) { if (v !== e.target) v.pause(); });
+    }, true);
+
+    // ── Publicar ──
+    function reduzirFoto(arquivo) {
+        // GIF fica como está (perderia a animação); foto que o navegador não abre (HEIC fora do Safari) sobe original.
+        if (!/^image\//.test(arquivo.type) || arquivo.type === 'image/gif' || !window.createImageBitmap) {
+            return Promise.resolve({arquivo: arquivo});
+        }
+        return createImageBitmap(arquivo, {imageOrientation: 'from-image'}).then(function (bmp) {
+            var escala = Math.min(1, MAX_LADO / Math.max(bmp.width, bmp.height));
+            var w = Math.round(bmp.width * escala), h = Math.round(bmp.height * escala);
+            if (escala === 1 && arquivo.size < 1.5 * 1024 * 1024 && arquivo.type === 'image/jpeg') {
+                return {arquivo: arquivo, largura: w, altura: h};
+            }
+            var tela = document.createElement('canvas'); tela.width = w; tela.height = h;
+            tela.getContext('2d').drawImage(bmp, 0, 0, w, h);
+            return new Promise(function (ok) {
+                tela.toBlob(function (blob) {
+                    if (!blob) { ok({arquivo: arquivo, largura: w, altura: h}); return; }
+                    var nome = (arquivo.name || 'foto').replace(/\.[^.]+$/, '') + '.jpg';
+                    ok({arquivo: new File([blob], nome, {type: 'image/jpeg'}), largura: w, altura: h});
+                }, 'image/jpeg', 0.85);
+            });
+        }).catch(function () { return {arquivo: arquivo}; });
+    }
+
+    function iniciarComposer(caixa) {
+        var previa = caixa.querySelector('[data-sf-previa]'), lugar = caixa.querySelector('[data-sf-previa-midia]');
+        var legenda = caixa.querySelector('[data-sf-legenda-nova]'), erro = caixa.querySelector('[data-sf-erro]');
+        var barra = caixa.querySelector('[data-sf-progresso]'), publicarBtn = caixa.querySelector('[data-sf-publicar]');
+        var escolhido = null, urlPrevia = null;
+        function mostrarErro(t) { erro.textContent = t || ''; erro.classList.toggle('hidden', !t); }
+        function limpar() {
+            if (urlPrevia) URL.revokeObjectURL(urlPrevia);
+            escolhido = urlPrevia = null; lugar.innerHTML = ''; legenda.value = '';
+            previa.classList.add('hidden'); barra.classList.add('hidden'); barra.firstElementChild.style.width = '0';
+            mostrarErro(''); publicarBtn.disabled = false;
+            caixa.querySelectorAll('[data-sf-arquivo]').forEach(function (i) { i.value = ''; });
+        }
+        caixa.querySelectorAll('[data-sf-arquivo]').forEach(function (entrada) {
+            entrada.addEventListener('change', function () {
+                var f = entrada.files && entrada.files[0]; if (!f) return;
+                limpar(); previa.classList.remove('hidden');
+                var video = /^video\//.test(f.type) || /\.(mp4|mov|m4v|webm|3gp)$/i.test(f.name);
+                if (video && f.size > LIMITE_VIDEO) { mostrarErro('Vídeo grande demais: o limite é 100 MB. Grave um trecho menor.'); publicarBtn.disabled = true; return; }
+                if (!video && f.size > LIMITE_FOTO * 3) { mostrarErro('Foto grande demais.'); publicarBtn.disabled = true; return; }
+                urlPrevia = URL.createObjectURL(f);
+                if (video) {
+                    var v = document.createElement('video'); v.src = urlPrevia; v.controls = true; v.playsInline = true; v.muted = true;
+                    v.addEventListener('loadedmetadata', function () { escolhido.largura = v.videoWidth; escolhido.altura = v.videoHeight; });
+                    lugar.appendChild(v); escolhido = {arquivo: f};
+                } else {
+                    var img = document.createElement('img'); img.src = urlPrevia; img.alt = 'Prévia';
+                    lugar.appendChild(img);
+                    publicarBtn.disabled = true;
+                    reduzirFoto(f).then(function (r) { escolhido = r; publicarBtn.disabled = false; });
+                }
+                legenda.focus();
+            });
+        });
+        caixa.querySelector('[data-sf-cancelar]').addEventListener('click', limpar);
+        publicarBtn.addEventListener('click', function () {
+            if (!escolhido) return;
+            var dados = new FormData();
+            dados.append('midia', escolhido.arquivo, escolhido.arquivo.name || 'midia');
+            dados.append('legenda', legenda.value.trim());
+            if (escolhido.largura) { dados.append('largura', escolhido.largura); dados.append('altura', escolhido.altura); }
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', caixa.dataset.url);
+            xhr.setRequestHeader('X-CSRFToken', csrf); xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+            publicarBtn.disabled = true; mostrarErro(''); barra.classList.remove('hidden');
+            xhr.upload.onprogress = function (ev) { if (ev.lengthComputable) barra.firstElementChild.style.width = Math.round(ev.loaded * 100 / ev.total) + '%'; };
+            xhr.onload = function () {
+                var j = {}; try { j = JSON.parse(xhr.responseText); } catch (err) {}
+                if (xhr.status === 200 && j.ok) {
+                    var lista = document.querySelector('[data-sf-lista]');
+                    if (lista) {
+                        var vazio = lista.querySelector('.sf-vazio'); if (vazio) vazio.remove();
+                        lista.insertBefore(html(j.html), lista.firstChild); quando(lista);
+                    }
+                    limpar();
+                } else {
+                    mostrarErro(j.erro || (xhr.status === 413 ? 'Arquivo grande demais para enviar.' : 'Não deu para publicar. Tente de novo.'));
+                    publicarBtn.disabled = false; barra.classList.add('hidden');
+                }
+            };
+            xhr.onerror = function () { mostrarErro('Sem conexão — tente de novo.'); publicarBtn.disabled = false; barra.classList.add('hidden'); };
+            xhr.send(dados);
+        });
+    }
+
+    // ── Mais posts (rolagem infinita, com botão de reserva) ──
+    function iniciarMais(marca) {
+        var botao = marca.querySelector('button'), carregando = false;
+        function carregar() {
+            if (carregando || !marca.dataset.antes) return;
+            carregando = true; botao.textContent = 'Carregando…';
+            fetch(marca.dataset.url + '?antes=' + encodeURIComponent(marca.dataset.antes), {credentials: 'same-origin'})
+                .then(function (r) { return r.json(); })
+                .then(function (j) {
+                    var lista = document.querySelector('[data-sf-lista]');
+                    lista.appendChild(html(j.html)); quando(lista);
+                    if (j.tem_mais && j.ultimo) { marca.dataset.antes = j.ultimo; botao.textContent = 'Ver mais publicações'; }
+                    else { marca.remove(); if (observador) observador.disconnect(); }
+                })
+                .catch(function () { botao.textContent = 'Tentar de novo'; })
+                .then(function () { carregando = false; });
+        }
+        botao.addEventListener('click', carregar);
+        var observador = null;
+        if (marca.dataset.automatico && 'IntersectionObserver' in window) {
+            observador = new IntersectionObserver(function (es) { if (es[0].isIntersecting) carregar(); }, {rootMargin: '600px'});
+            observador.observe(marca);
+        }
+    }
+
+    function iniciar() {
+        document.querySelectorAll('[data-sf-composer]').forEach(iniciarComposer);
+        document.querySelectorAll('[data-sf-mais]').forEach(iniciarMais);
+        quando();
+        setInterval(function () { quando(); }, 60000);
+    }
+    window.SocialFeed = {quando: quando};
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
+})();
+</script>

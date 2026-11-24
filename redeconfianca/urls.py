@@ -122,6 +122,7 @@ urlpatterns = [
     path('limpeza/', include('limpeza.urls')),  # Checklist de Limpeza
     path('power-bi/', include('power_bi.urls')),  # Dashboards Power BI
     path('simulator/', include('simulator.urls')),  # Simulador
+    path('social/', include('social.urls')),  # Feed da rede (25/11/2026)
     path('feedback/', include('feedback.urls')),  # Módulo de Feedback Geral
     path('fibras/', include('fibras.urls')),  # Acompanhamento de Fibras
     path('validad1/', include('validad1.urls')),  # Validação D-1
