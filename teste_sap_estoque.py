@@ -71,6 +71,8 @@ setup_test_environment()
 call_command('migrate', run_syncdb=True, verbosity=0)
 
 import json
+import re
+import subprocess
 from datetime import date, timedelta
 
 import requests
@@ -258,6 +260,24 @@ for aba in ('transito', 'reposicao', 'detalhado', 'produtos'):
     t(f'aba {aba} abre', r.status_code == 200, r.status_code)
 r = cc.get('/sap/estoque/?aba=reposicao&loja=057E')
 t('reposição mostra "Transferir de" Piúma', 'Transferir de' in r.content.decode() and 'Piúma' in r.content.decode())
+html_rep = r.content.decode()
+t('reposição: Vendas 30d, 90d e Sugestão ordenáveis (clique no cabeçalho)',
+  all(re.search(r'data-ordenar="numero">' + nome, html_rep) for nome in ('Vendas 30d', '90d', 'Sugestão', 'Livre')))
+t('botão de copiar ao lado do material', f'data-copiar="{GALAXY}"' in html_rep)
+t('a tabela rola dentro do cartão (a página não cresce)', 'class="est-rolagem"' in html_rep)
+t('chips das lojas mais perto, com a distância pintada', 'est-chip' in html_rep and 'est-km-perto' in html_rep)
+r = cc.get('/sap/estoque/?aba=detalhado&loja=057E')
+t('detalhado: copiar o serial', 'data-copiar="SC4H00000001"' in r.content.decode())
+r = cc.get('/sap/estoque/?loja=057E')
+t('matriz: dá para ordenar por loja (coluna de cada loja)', r.content.decode().count('data-ordenar="numero"') >= 5)
+js = next((s for s in re.findall(r'<script>(.*?)</script>', r.content.decode(), re.S) if 'estFechar' in s), '')
+arq = PASTA / 'estoque.js'
+arq.write_text(js, encoding='utf-8')
+try:
+    chk = subprocess.run(['node', '--check', str(arq)], capture_output=True, text=True, timeout=30)
+    t('JS da tela passa no node --check', chk.returncode == 0, chk.stderr[:300])
+except FileNotFoundError:
+    print('  (node não encontrado: pulei o --check)')
 r = cc.get('/sap/estoque/?loja=todas')
 t('rede inteira: todas as lojas viram coluna', r.status_code == 200 and len(r.context['colunas']) == 4
   and r.context['resumo']['livre'] == 31, r.context['resumo'])

@@ -1,8 +1,16 @@
 {% extends 'auditoria_sap/base_sap.html' %}
 {% comment %}
-Estoque da Visão SAP (23/11/2026). A regra mora em auditoria_sap/estoque.py; a
-view em auditoria_sap/views_estoque.py. Uma loja no topo ("Minha loja"), quatro
-números dela e cinco abas. Clicar numa quantidade abre a gaveta com os seriais.
+Estoque da Visão SAP (23/11/2026; redesenho 24/11). A regra mora em
+auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
+
+- A loja escolhida no topo, com as vizinhas em chips coloridos (a distância
+  pintada: verde até 30 km, âmbar até 120 km, cinza mais longe) — clicar troca a loja;
+- quatro números da loja em cartões coloridos, que abrem a aba certa;
+- tabelas que rolam dentro do cartão (cabeçalho e produto fixos): a página não
+  cresce até o fim. Clicar no cabeçalho ordena (número: maior → menor; de novo
+  inverte) e o filtro rápido acha a linha na hora, sem recarregar;
+- cada loja tem uma cor; clicar numa quantidade abre a gaveta com os seriais;
+- botão de copiar ao lado do material e do serial.
 {% endcomment %}
 
 {% block sap_titulo %}Estoque · Visão SAP{% endblock %}
@@ -11,12 +19,18 @@ números dela e cinco abas. Clicar numa quantidade abre a gaveta com os seriais.
 
 {% block sap_acoes %}
 {% if foto %}
-<div class="text-right text-xs leading-relaxed">
-    <p class="text-gray-500"><i class="fas fa-warehouse mr-1 text-gray-400"></i>Estoque SAP de <strong class="text-gray-700">{{ foto.quando_mb52|date:"d/m \à\s H\hi" }}</strong></p>
+<div class="flex flex-wrap items-center gap-2 text-xs">
+    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-50 border border-sky-100 text-sky-800">
+        <i class="fas fa-warehouse"></i>Estoque SAP <strong>{{ foto.quando_mb52|date:"d/m H\hi" }}</strong>
+    </span>
     {% if sem_vendas %}
-    <p class="text-amber-600"><i class="fas fa-triangle-exclamation mr-1"></i>Vendas do Vivo GO indisponíveis agora</p>
+    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800">
+        <i class="fas fa-triangle-exclamation"></i>Vendas do Vivo GO indisponíveis agora
+    </span>
     {% else %}
-    <p class="text-gray-500"><i class="fas fa-cash-register mr-1 text-gray-400"></i>Vendas Vivo GO até <strong class="text-gray-700">{{ foto.hoje|date:"d/m" }}</strong></p>
+    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-violet-50 border border-violet-100 text-violet-800">
+        <i class="fas fa-cash-register"></i>Vendas Vivo GO até <strong>{{ foto.hoje|date:"d/m" }}</strong>
+    </span>
     {% endif %}
 </div>
 {% endif %}
@@ -24,41 +38,111 @@ números dela e cinco abas. Clicar numa quantidade abre a gaveta com os seriais.
 
 {% block sap_conteudo %}
 <style>
-    .est-q { display:inline-flex; min-width:2.1rem; justify-content:center; padding:.2rem .45rem; border-radius:.5rem;
-             font-weight:700; font-size:.8rem; font-variant-numeric:tabular-nums; cursor:pointer;
-             transition:transform .1s ease, box-shadow .1s ease; border:1px solid transparent; }
-    .est-q:hover { transform:translateY(-1px); box-shadow:0 2px 6px rgba(15,23,42,.12); }
-    .est-q-1 { background:#FFEDD5; color:#9A3412; border-color:#FED7AA; }   /* 1–2 unidades */
-    .est-q-3 { background:#DCFCE7; color:#166534; border-color:#BBF7D0; }   /* 3 ou mais */
-    .est-q-t { background:#E0F2FE; color:#075985; border-color:#BAE6FD; }   /* em trânsito */
-    .est-zero { color:#CBD5E1; }
-    .est-minha { background:#F0F9FF; }
-    .est-tabela th, .est-tabela td { white-space:nowrap; }
-    .est-fixa { position:sticky; left:0; z-index:1; background:#fff; box-shadow:1px 0 0 #EEF2F6; white-space:normal !important; }
-    .est-tabela thead .est-fixa { z-index:2; background:#F8FAFC; }
-    .est-pill { padding:.4rem .8rem; border-radius:999px; font-size:.82rem; font-weight:600; white-space:nowrap; }
-    .est-pill-on { background:#0284C7; color:#fff; }
+    /* Quantidades */
+    .est-q { display:inline-flex; min-width:2.2rem; justify-content:center; padding:.22rem .5rem; border-radius:.6rem;
+             font-weight:800; font-size:.8rem; font-variant-numeric:tabular-nums; cursor:pointer; border:1px solid transparent;
+             transition:transform .12s ease, box-shadow .12s ease; }
+    .est-q:hover { transform:translateY(-1px) scale(1.06); box-shadow:0 4px 10px rgba(15,23,42,.14); }
+    .est-q-1 { background:#FFEDD5; color:#9A3412; border-color:#FDBA74; }
+    .est-q-3 { background:#DCFCE7; color:#166534; border-color:#86EFAC; }
+    .est-q-t { background:#E0F2FE; color:#075985; border-color:#7DD3FC; }
+    .est-zero { color:#CBD5E1; font-weight:700; }
+
+    /* Cartões coloridos (no espírito do /impulso) */
+    .est-kpi { position:relative; overflow:hidden; border-radius:1rem; padding:1rem; border:1px solid #EEF0F4; background:#fff;
+               transition:transform .15s ease, box-shadow .15s ease; display:block; }
+    .est-kpi:hover { transform:translateY(-2px); box-shadow:0 10px 24px -12px rgba(15,23,42,.25); }
+    .est-kpi::after { content:''; position:absolute; right:-28px; top:-28px; width:96px; height:96px; border-radius:999px; opacity:.12; background:var(--k); }
+    .est-kpi-icone { width:2.4rem; height:2.4rem; border-radius:.8rem; display:inline-flex; align-items:center; justify-content:center;
+                     color:#fff; background:linear-gradient(135deg, var(--k), var(--k2)); box-shadow:0 6px 14px -6px var(--k); }
+    .est-kpi-num { font-size:1.75rem; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
+
+    /* Abas */
+    .est-pill { padding:.45rem .9rem; border-radius:999px; font-size:.82rem; font-weight:700; white-space:nowrap; display:inline-flex; align-items:center; gap:.4rem;
+                transition:background .15s ease, color .15s ease; }
+    .est-pill-on { background:linear-gradient(135deg,#0284C7,#6366F1); color:#fff; box-shadow:0 6px 14px -8px #4F46E5; }
     .est-pill-off { background:#F1F5F9; color:#475569; }
     .est-pill-off:hover { background:#E2E8F0; }
-    .est-sit { display:inline-flex; align-items:center; gap:.3rem; padding:.1rem .5rem; border-radius:999px; font-size:11px; font-weight:700; }
+    .est-conta { font-size:10px; padding:.05rem .4rem; border-radius:999px; background:rgba(255,255,255,.25); }
+    .est-pill-off .est-conta { background:#E2E8F0; color:#334155; }
+
+    /* Lojas pintadas */
+    .est-loja { display:inline-flex; align-items:center; gap:.35rem; font-weight:700; }
+    .est-loja::before { content:''; width:.55rem; height:.55rem; border-radius:999px; background:var(--c); flex:none; }
+    .est-chip { display:inline-flex; align-items:center; gap:.4rem; padding:.3rem .65rem; border-radius:999px; font-size:.78rem; font-weight:600;
+                border:1px solid #E2E8F0; background:#fff; color:#334155; white-space:nowrap; transition:border-color .15s, box-shadow .15s; }
+    .est-chip:hover { border-color:var(--c); box-shadow:0 0 0 3px color-mix(in srgb, var(--c) 18%, transparent); }
+    .est-chip::before { content:''; width:.5rem; height:.5rem; border-radius:999px; background:var(--c); }
+    .est-chips { scrollbar-width:thin; }
+    .est-chips::-webkit-scrollbar { height:4px; }
+    .est-chips::-webkit-scrollbar-thumb { background:#E2E8F0; border-radius:999px; }
+    .est-km { font-size:.7rem; font-weight:700; padding:.05rem .4rem; border-radius:999px; }
+    .est-km-perto { background:#DCFCE7; color:#166534; }
+    .est-km-media { background:#FEF3C7; color:#92400E; }
+    .est-km-longe { background:#F1F5F9; color:#64748B; }
+
+    /* Tabela que rola dentro do cartão */
+    .est-rolagem { max-height:min(68vh, 760px); overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; }
+    .est-rolagem::-webkit-scrollbar { width:10px; height:10px; }
+    .est-rolagem::-webkit-scrollbar-thumb { background:#CBD5E1; border-radius:999px; border:2px solid #fff; }
+    .est-tabela { border-collapse:separate; border-spacing:0; }
+    .est-tabela th, .est-tabela td { white-space:nowrap; }
+    .est-tabela thead th { position:sticky; top:0; z-index:2; background:#F8FAFC; border-bottom:1px solid #E2E8F0; }
+    .est-tabela tbody tr:nth-child(even) td { background:#FCFCFD; }
+    .est-tabela tbody tr:hover td { background:#F0F9FF; }
+    .est-fixa { position:sticky; left:0; z-index:1; background:#fff; box-shadow:1px 0 0 #EEF2F6; white-space:normal !important; }
+    .est-tabela thead th.est-fixa { z-index:3; }
+    .est-fixa > p { max-width:17rem; }
+    @media (max-width: 640px) {
+        .est-fixa > p { max-width:9.5rem; font-size:.78rem; }
+        .est-fixa { min-width:0 !important; }
+        .est-rolagem { max-height:72vh; }
+    }
+    .est-tabela tbody tr:nth-child(even) td.est-fixa { background:#FCFCFD; }
+    .est-tabela tbody tr:hover td.est-fixa { background:#F0F9FF; }
+    th[data-ordenar] { cursor:pointer; user-select:none; }
+    th[data-ordenar]:hover { color:#0369A1; }
+    th[data-ordenar] .est-seta { opacity:.35; margin-left:.25rem; font-size:.65rem; }
+    th[data-ordenar].ordem-desc .est-seta, th[data-ordenar].ordem-asc .est-seta { opacity:1; color:#0284C7; }
+    .est-col-loja { border-top:3px solid var(--c); }
+    .est-minha { background:color-mix(in srgb, var(--c, #0EA5E9) 8%, #fff) !important; }
+    .est-copiar { display:inline-flex; align-items:center; justify-content:center; width:1.35rem; height:1.35rem; border-radius:.4rem;
+                  color:#94A3B8; transition:background .15s, color .15s; flex:none; }
+    .est-copiar:hover { background:#E0F2FE; color:#0369A1; }
+    .est-copiar.copiado { background:#DCFCE7; color:#166534; }
+    .est-sit { display:inline-flex; align-items:center; gap:.3rem; padding:.15rem .55rem; border-radius:999px; font-size:11px; font-weight:800; }
     .est-sit-critico { background:#FEE2E2; color:#B91C1C; }
     .est-sit-ruptura { background:#FCE7F3; color:#9D174D; }
     .est-sit-insuficiente { background:#FFEDD5; color:#9A3412; }
     .est-sit-ok { background:#DCFCE7; color:#166534; }
-    #estGaveta { transition: transform .2s ease; }
+    .est-barra { height:.35rem; border-radius:999px; background:#F1F5F9; overflow:hidden; min-width:3rem; }
+    .est-barra > span { display:block; height:100%; border-radius:999px; }
+    #estGaveta { transition: transform .22s cubic-bezier(.22,1,.36,1); }
     #estGaveta.fechada { transform: translateX(105%); }
-    html.dark .est-q-1 { background:rgba(249,115,22,.18); color:#fdba74; border-color:rgba(249,115,22,.35); }
-    html.dark .est-q-3 { background:rgba(34,197,94,.16); color:#86efac; border-color:rgba(34,197,94,.35); }
-    html.dark .est-q-t { background:rgba(14,165,233,.16); color:#7dd3fc; border-color:rgba(14,165,233,.35); }
+
+    html.dark .est-q-1 { background:rgba(249,115,22,.18); color:#fdba74; border-color:rgba(249,115,22,.4); }
+    html.dark .est-q-3 { background:rgba(34,197,94,.16); color:#86efac; border-color:rgba(34,197,94,.4); }
+    html.dark .est-q-t { background:rgba(14,165,233,.16); color:#7dd3fc; border-color:rgba(14,165,233,.4); }
     html.dark .est-zero { color:var(--tema-texto-3); }
-    html.dark .est-minha { background:rgba(14,165,233,.10); }
-    html.dark .est-fixa { background:var(--tema-superficie); box-shadow:1px 0 0 var(--tema-borda); }
-    html.dark .est-tabela thead .est-fixa { background:var(--tema-superficie-2); }
+    html.dark .est-kpi, html.dark .est-chip { background:var(--tema-superficie); border-color:var(--tema-borda); color:var(--tema-texto); }
     html.dark .est-pill-off { background:var(--tema-superficie-2); color:var(--tema-texto-2); }
+    html.dark .est-pill-off .est-conta { background:var(--tema-superficie-3); color:var(--tema-texto); }
+    html.dark .est-tabela thead th { background:var(--tema-superficie-2); border-color:var(--tema-borda); }
+    html.dark .est-fixa, html.dark .est-tabela tbody td { background:var(--tema-superficie); }
+    html.dark .est-tabela tbody tr:nth-child(even) td, html.dark .est-tabela tbody tr:nth-child(even) td.est-fixa { background:var(--tema-superficie-2); }
+    html.dark .est-tabela tbody tr:hover td, html.dark .est-tabela tbody tr:hover td.est-fixa { background:rgba(14,165,233,.10); }
+    html.dark .est-fixa { box-shadow:1px 0 0 var(--tema-borda); }
+    html.dark .est-minha { background:rgba(14,165,233,.12) !important; }
+    html.dark .est-km-perto { background:rgba(34,197,94,.16); color:#86efac; }
+    html.dark .est-km-media { background:rgba(245,158,11,.16); color:#fcd34d; }
+    html.dark .est-km-longe { background:var(--tema-superficie-3); color:var(--tema-texto-3); }
     html.dark .est-sit-critico { background:rgba(239,68,68,.18); color:#fca5a5; }
     html.dark .est-sit-ruptura { background:rgba(236,72,153,.18); color:#f9a8d4; }
     html.dark .est-sit-insuficiente { background:rgba(249,115,22,.18); color:#fdba74; }
     html.dark .est-sit-ok { background:rgba(34,197,94,.16); color:#86efac; }
+    html.dark .est-barra { background:var(--tema-superficie-3); }
+    html.dark .est-rolagem::-webkit-scrollbar-thumb { background:var(--tema-superficie-3); border-color:var(--tema-superficie); }
+    html.dark #estGaveta { background:var(--tema-superficie); }
 </style>
 
 {% if erro %}
@@ -70,159 +154,212 @@ números dela e cinco abas. Clicar numa quantidade abre a gaveta com os seriais.
 </div>
 {% else %}
 
-{# ------------------------------------------------------------- filtros #}
+{# ------------------------------------------------------------ loja + busca #}
 <form method="get" id="estFiltros" class="sap-card p-3 sm:p-4 mb-4">
     <input type="hidden" name="aba" value="{{ f.aba }}">
     {% if f.situacao %}<input type="hidden" name="situacao" value="{{ f.situacao }}">{% endif %}
-    {% if f.ordem == 'rede' %}<input type="hidden" name="ordem" value="rede">{% endif %}
+    {% if f.deposito %}<input type="hidden" name="deposito" value="{{ f.deposito }}">{% endif %}
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-end">
         <label class="block lg:col-span-3">
-            <span class="sap-rotulo">Minha loja</span>
-            <select name="loja" onchange="this.form.submit()" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-sky-200 focus:border-sky-400">
+            <span class="sap-rotulo"><i class="fas fa-store mr-1"></i>Minha loja</span>
+            <select name="loja" onchange="this.form.submit()" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-semibold bg-white focus:ring-2 focus:ring-sky-200 focus:border-sky-400"
+                    {% if loja_cor %}style="border-left:5px solid {{ loja_cor.forte }}"{% endif %}>
                 <option value="todas" {% if not f.loja %}selected{% endif %}>Todas as lojas (rede)</option>
                 {% for uf, lojas_uf in lojas %}
                 <optgroup label="{{ uf }}">
                     {% for l in lojas_uf %}
-                    <option value="{{ l.centro }}" {% if l.centro == f.loja %}selected{% endif %}>{{ l.nome }}{% if l.centro == minha_loja %} (minha){% endif %}</option>
+                    <option value="{{ l.centro }}" {% if l.centro == f.loja %}selected{% endif %}>{{ l.nome }}{% if l.centro == minha_loja %} · minha{% endif %}</option>
                     {% endfor %}
                 </optgroup>
                 {% endfor %}
             </select>
         </label>
         <label class="block lg:col-span-4">
-            <span class="sap-rotulo">Produto</span>
+            <span class="sap-rotulo"><i class="fas fa-box mr-1"></i>Produto</span>
             <div class="relative mt-1">
                 <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
                 <input type="search" name="q" value="{{ f.q }}" placeholder="Nome, cor, material ou fabricante"
-                       class="w-full rounded-lg border border-gray-200 pl-8 pr-3 py-2 text-sm focus:ring-2 focus:ring-sky-200 focus:border-sky-400">
+                       class="w-full rounded-xl border border-gray-200 pl-8 pr-3 py-2.5 text-sm focus:ring-2 focus:ring-sky-200 focus:border-sky-400">
             </div>
         </label>
         <label class="block lg:col-span-2">
-            <span class="sap-rotulo">Categoria</span>
-            <select name="categoria" onchange="this.form.submit()" class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white">
+            <span class="sap-rotulo"><i class="fas fa-layer-group mr-1"></i>Categoria</span>
+            <select name="categoria" onchange="this.form.submit()" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm bg-white">
                 <option value="">Todas</option>
                 {% for c in categorias %}<option value="{{ c }}" {% if c == f.categoria %}selected{% endif %}>{{ c }}</option>{% endfor %}
             </select>
         </label>
         <label class="block lg:col-span-2">
-            <span class="sap-rotulo">IMEI / serial</span>
-            <input type="search" name="serial" value="{{ f.serial }}" placeholder="Achar uma unidade" inputmode="numeric"
-                   class="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-sky-200 focus:border-sky-400">
+            <span class="sap-rotulo"><i class="fas fa-barcode mr-1"></i>IMEI / serial</span>
+            <input type="search" name="serial" value="{{ f.serial }}" placeholder="Achar uma unidade"
+                   class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-mono focus:ring-2 focus:ring-sky-200 focus:border-sky-400">
         </label>
         <div class="flex gap-2 lg:col-span-1">
-            <button type="submit" class="flex-1 px-3 py-2 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700" title="Buscar"><i class="fas fa-search"></i><span class="lg:hidden ml-1.5">Buscar</span></button>
+            <button type="submit" class="flex-1 px-3 py-2.5 rounded-xl text-white text-sm font-semibold shadow-sm" style="background:linear-gradient(135deg,#0284C7,#6366F1)" title="Buscar"><i class="fas fa-search"></i><span class="lg:hidden ml-1.5">Buscar</span></button>
             {% if f.q or f.categoria or f.serial %}
-            <a href="?aba={{ f.aba }}&loja={{ f.loja|default:'todas' }}" class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50" title="Limpar a busca"><i class="fas fa-xmark"></i></a>
+            <a href="?aba={{ f.aba }}&loja={{ f.loja|default:'todas' }}" class="px-3 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50" title="Limpar a busca"><i class="fas fa-xmark"></i></a>
             {% endif %}
         </div>
     </div>
+
     {% if loja_info %}
-    <p class="mt-2 text-xs text-gray-500"><i class="fas fa-location-dot mr-1 text-sky-500"></i>{{ loja_nome }} · {{ loja_info.cidade }}/{{ loja_info.uf }} · centro {{ f.loja }}</p>
+    <div class="est-chips mt-3 flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+        <span class="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-white" style="background:{{ loja_cor.forte }}">
+            <i class="fas fa-location-dot"></i>{{ loja_nome }} · {{ loja_info.cidade }}/{{ loja_info.uf }}
+        </span>
+        <span class="shrink-0 text-[11px] text-gray-400">mais perto:</span>
+        {% for v in vizinhas %}
+        <a href="?aba={{ f.aba }}&loja={{ v.centro }}{% if f.q %}&q={{ f.q|urlencode }}{% endif %}{% if f.categoria %}&categoria={{ f.categoria|urlencode }}{% endif %}"
+           class="est-chip shrink-0" style="--c:{{ v.cor.forte }}" title="Ver o estoque a partir de {{ v.nome }}">
+            {{ v.nome }} <span class="est-km est-km-{{ v.faixa }}">{{ v.km|floatformat:0 }} km</span>
+        </a>
+        {% endfor %}
+    </div>
     {% endif %}
 </form>
 
-{# --------------------------------------------------- achou pelo serial #}
+{# ----------------------------------------------------- achou pelo serial #}
 {% if f.serial %}
 <div class="sap-card p-4 mb-4">
     <p class="text-sm font-semibold text-gray-800"><i class="fas fa-barcode mr-1.5 text-sky-600"></i>Serial "{{ f.serial }}"</p>
     {% if achados %}
     <ul class="mt-2 divide-y divide-gray-100">
         {% for u in achados %}
-        <li class="py-2 flex flex-wrap items-center justify-between gap-2 text-sm">
-            <span class="font-mono text-gray-800">{{ u.serial }}</span>
-            <span class="text-gray-700">{{ u.loja }} <span class="text-gray-400">· {{ u.deposito_nome }}</span></span>
-            <span class="text-xs text-gray-500">{{ u.tipo_nome }}{% if u.desde %} · desde {{ u.desde|date:"d/m/Y" }} ({{ u.dias }} dia{{ u.dias|pluralize }}){% endif %}</span>
+        <li class="py-2.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm">
+            <span class="inline-flex items-center gap-1 font-mono text-gray-900">{{ u.serial }}<button type="button" class="est-copiar" data-copiar="{{ u.serial }}" title="Copiar o serial"><i class="far fa-copy text-xs"></i></button></span>
+            <span class="text-gray-700 min-w-0">{{ u.produto.nome }}</span>
+            <span class="est-loja text-gray-800" style="--c:{{ u.cor.forte }}">{{ u.loja }}</span>
+            <span class="text-xs text-gray-500">{{ u.deposito_nome }} · {{ u.tipo_nome }}{% if u.desde %} · desde {{ u.desde|date:"d/m/Y" }} ({{ u.dias }} d){% endif %}</span>
         </li>
         {% endfor %}
     </ul>
     {% else %}
-    <p class="mt-1 text-sm text-gray-500">Nenhuma unidade com esse serial no estoque do SAP (pode ter sido vendida ou não ter entrado ainda).</p>
+    <p class="mt-1 text-sm text-gray-500">Nenhuma unidade com esse serial no estoque do SAP (pode ter sido vendida ou ainda não ter entrado).</p>
     {% endif %}
 </div>
 {% endif %}
 
-{# ------------------------------------------------------------ números #}
+{# -------------------------------------------------------- números coloridos #}
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-    <a href="?{{ q_base }}&aba=disponivel" class="sap-card p-4 hover:ring-2 hover:ring-sky-100 transition">
-        <p class="sap-rotulo">Livre para venda</p>
-        <p class="text-2xl font-bold text-gray-900 tabular mt-1">{{ resumo.livre }}</p>
-        <p class="text-xs text-gray-500">{% if f.loja %}unidades em {{ loja_nome }}{% else %}unidades na rede{% endif %}</p>
+    <a href="?{{ q_base }}&aba=disponivel" class="est-kpi" style="--k:#0EA5E9;--k2:#2563EB">
+        <div class="flex items-center justify-between"><span class="est-kpi-icone"><i class="fas fa-boxes-stacked"></i></span><span class="sap-rotulo">Livre para venda</span></div>
+        <p class="est-kpi-num text-gray-900 mt-3">{{ resumo.livre }}</p>
+        <p class="text-xs text-gray-500 mt-1 truncate">{% if f.loja %}unidades em {{ loja_nome }}{% else %}unidades na rede{% endif %}</p>
     </a>
-    <a href="?{{ q_base }}&aba=transito" class="sap-card p-4 hover:ring-2 hover:ring-sky-100 transition">
-        <p class="sap-rotulo">Em trânsito</p>
-        <p class="text-2xl font-bold text-sky-700 tabular mt-1">{{ resumo.transito }}</p>
-        <p class="text-xs text-gray-500">{% if f.loja %}a caminho de {{ loja_nome }}{% else %}a caminho das lojas{% endif %}</p>
+    <a href="?{{ q_base }}&aba=transito" class="est-kpi" style="--k:#8B5CF6;--k2:#6366F1">
+        <div class="flex items-center justify-between"><span class="est-kpi-icone"><i class="fas fa-truck-fast"></i></span><span class="sap-rotulo">Em trânsito</span></div>
+        <p class="est-kpi-num text-violet-700 mt-3">{{ resumo.transito }}</p>
+        <p class="text-xs text-gray-500 mt-1 truncate">{% if f.loja %}a caminho de {{ loja_nome }}{% else %}a caminho das lojas{% endif %}</p>
     </a>
-    <a href="?{{ q_base }}&aba=reposicao&situacao=ruptura" class="sap-card p-4 hover:ring-2 hover:ring-sky-100 transition {% if resumo.criticos %}ring-1 ring-red-200{% endif %}">
-        <p class="sap-rotulo">Em ruptura</p>
-        <p class="text-2xl font-bold {% if resumo.ruptura %}text-red-600{% else %}text-gray-900{% endif %} tabular mt-1">{{ resumo.ruptura }}</p>
-        <p class="text-xs text-gray-500">zerados que vendem{% if resumo.criticos %} · <strong class="text-red-600">{{ resumo.criticos }} crítico{{ resumo.criticos|pluralize }}</strong>{% endif %}</p>
+    <a href="?{{ q_base }}&aba=reposicao&situacao=ruptura" class="est-kpi" style="--k:#F43F5E;--k2:#DB2777">
+        <div class="flex items-center justify-between"><span class="est-kpi-icone"><i class="fas fa-circle-exclamation"></i></span><span class="sap-rotulo">Em ruptura</span></div>
+        <p class="est-kpi-num {% if resumo.ruptura %}text-rose-600{% else %}text-gray-900{% endif %} mt-3">{{ resumo.ruptura }}</p>
+        <p class="text-xs text-gray-500 mt-1 truncate">zerados que vendem{% if resumo.criticos %} · <strong class="text-rose-600">{{ resumo.criticos }} crítico{{ resumo.criticos|pluralize }}</strong>{% endif %}</p>
     </a>
-    <a href="?{{ q_base }}&aba=reposicao" class="sap-card p-4 hover:ring-2 hover:ring-sky-100 transition">
-        <p class="sap-rotulo">Sugestão de pedido</p>
-        <p class="text-2xl font-bold text-gray-900 tabular mt-1">{{ resumo.sugestao }}</p>
-        <p class="text-xs text-gray-500">unidades para cobrir 30 dias</p>
+    <a href="?{{ q_base }}&aba=reposicao" class="est-kpi" style="--k:#F59E0B;--k2:#EA580C">
+        <div class="flex items-center justify-between"><span class="est-kpi-icone"><i class="fas fa-cart-plus"></i></span><span class="sap-rotulo">Sugestão de pedido</span></div>
+        <p class="est-kpi-num text-amber-600 mt-3">{{ resumo.sugestao }}</p>
+        <p class="text-xs text-gray-500 mt-1 truncate">unidades para cobrir 30 dias</p>
     </a>
 </div>
 
-{# --------------------------------------------------------------- abas #}
+{# -------------------------------------------------------------------- abas #}
 <div class="flex gap-2 overflow-x-auto pb-1 mb-3">
     {% for chave, rotulo, icone in abas %}
     <a href="?{{ q_base }}&aba={{ chave }}" class="est-pill {% if f.aba == chave %}est-pill-on{% else %}est-pill-off{% endif %}">
-        <i class="fas {{ icone }} mr-1"></i>{{ rotulo }}
+        <i class="fas {{ icone }}"></i>{{ rotulo }}{% if f.aba == chave %}<span class="est-conta">{{ total_linhas }}</span>{% endif %}
     </a>
     {% endfor %}
 </div>
 
-{% if f.aba == 'disponivel' or f.aba == 'transito' %}
-{# ------------------------------------------ matriz: produto × loja #}
 <div class="sap-card overflow-hidden">
-    <div class="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
-        <div class="text-sm text-gray-700">
+    {# Barra de cima do cartão: o que é a tabela, filtro rápido e legenda #}
+    <div class="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+        <div class="text-sm text-gray-700 min-w-0">
             {% if f.aba == 'disponivel' %}
-                {% if f.loja %}<strong>{{ loja_nome }}</strong> e as {{ colunas|length|add:"-1" }} lojas mais perto{% else %}Todas as lojas{% endif %}
-                · livre para venda
-            {% else %}
+                {% if f.loja %}<strong>{{ loja_nome }}</strong> e as {{ colunas|length|add:"-1" }} lojas mais perto · livre para venda{% else %}Livre para venda em todas as lojas{% endif %}
+            {% elif f.aba == 'transito' %}
                 A caminho {% if f.loja %}de <strong>{{ loja_nome }}</strong> e das lojas mais perto{% else %}de cada loja (coluna = destino){% endif %}
+            {% elif f.aba == 'reposicao' %}
+                Estoque considerado = <strong>livre + trânsito</strong> · sugestão = vendas de 30 dias − estoque{% if not f.loja %} (soma das lojas){% endif %}
+            {% elif f.aba == 'detalhado' %}
+                Cada unidade{% if f.loja %} de <strong>{{ loja_nome }}</strong>{% endif %}, em todos os depósitos
+            {% else %}
+                Cadastro e saldo da rede
             {% endif %}
-            <span class="text-gray-400">· {{ total_linhas }} produto{{ total_linhas|pluralize }}</span>
         </div>
-        <div class="flex items-center gap-3 text-xs text-gray-500">
+        <div class="flex items-center gap-2 flex-wrap">
+            <div class="relative">
+                <i class="fas fa-filter absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-[11px]"></i>
+                <input type="search" id="estFiltroRapido" placeholder="Filtrar nesta lista…" autocomplete="off"
+                       class="w-48 sm:w-56 rounded-lg border border-gray-200 pl-7 pr-2 py-1.5 text-xs focus:ring-2 focus:ring-sky-200 focus:border-sky-400">
+            </div>
             {% if f.aba == 'disponivel' %}
-            <span class="inline-flex items-center gap-1"><span class="est-q est-q-1" style="cursor:default;min-width:1.4rem">1</span>1–2</span>
-            <span class="inline-flex items-center gap-1"><span class="est-q est-q-3" style="cursor:default;min-width:1.4rem">3</span>3 ou mais</span>
+            <span class="hidden sm:inline-flex items-center gap-1 text-[11px] text-gray-500"><span class="est-q est-q-1" style="cursor:default;min-width:1.4rem">1</span>1–2 <span class="est-q est-q-3 ml-1" style="cursor:default;min-width:1.4rem">3</span>3+</span>
+            {% elif f.aba == 'detalhado' %}
+            <a href="?{{ q_atual }}&formato=csv" class="text-xs font-semibold text-sky-700 hover:underline"><i class="fas fa-file-csv mr-1"></i>CSV</a>
+            {% elif f.aba == 'produtos' %}
+            <form method="get" class="flex items-center gap-1.5">
+                <input type="hidden" name="aba" value="produtos"><input type="hidden" name="loja" value="{{ f.loja|default:'todas' }}">
+                {% if f.q %}<input type="hidden" name="q" value="{{ f.q }}">{% endif %}
+                {% if f.categoria %}<input type="hidden" name="categoria" value="{{ f.categoria }}">{% endif %}
+                <select name="fabricante" onchange="this.form.submit()" class="rounded-lg border border-gray-200 px-2 py-1.5 text-xs bg-white">
+                    <option value="">Todos os fabricantes</option>
+                    {% for fab in fabricantes %}<option value="{{ fab }}" {% if fab == f.fabricante %}selected{% endif %}>{{ fab }}</option>{% endfor %}
+                </select>
+            </form>
             {% endif %}
-            <a href="?{{ q_atual }}&ordem={% if f.ordem == 'rede' %}nome{% else %}rede{% endif %}" class="font-semibold text-sky-700 hover:underline">
-                <i class="fas fa-arrow-down-wide-short mr-1"></i>{% if f.ordem == 'rede' %}Ordem: mais na rede{% else %}Ordem: A–Z{% endif %}
-            </a>
         </div>
+        {% if f.aba == 'reposicao' %}
+        <div class="w-full flex gap-2 overflow-x-auto">
+            {% for chave, rotulo in situacoes %}
+            <a href="?{{ q_base }}&aba=reposicao{% if chave %}&situacao={{ chave }}{% endif %}" class="est-pill text-xs {% if f.situacao == chave %}est-pill-on{% else %}est-pill-off{% endif %}">
+                {% if chave %}<span class="est-sit est-sit-{{ chave }}" style="padding:0 .35rem">●</span>{% endif %}{{ rotulo }}</a>
+            {% endfor %}
+            {% if sem_vendas %}<span class="text-xs text-amber-600 self-center"><i class="fas fa-triangle-exclamation mr-1"></i>Sem as vendas do Vivo GO agora: a reposição fica vazia.</span>{% endif %}
+        </div>
+        {% elif f.aba == 'detalhado' %}
+        <div class="w-full flex gap-2 overflow-x-auto">
+            <a href="?{{ q_base }}&aba=detalhado" class="est-pill text-xs {% if not f.deposito %}est-pill-on{% else %}est-pill-off{% endif %}">Todos os depósitos</a>
+            {% for cod, nome in depositos %}
+            <a href="?{{ q_base }}&aba=detalhado&deposito={{ cod }}" class="est-pill text-xs {% if f.deposito == cod %}est-pill-on{% else %}est-pill-off{% endif %}" title="{{ cod }}">{{ nome }}</a>
+            {% endfor %}
+        </div>
+        {% endif %}
     </div>
+
     {% if pagina.object_list %}
-    <div class="overflow-x-auto">
-        <table class="est-tabela min-w-full text-sm">
-            <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
+    <div class="est-rolagem">
+    {% if f.aba == 'disponivel' or f.aba == 'transito' %}
+        <table class="est-tabela min-w-full text-sm" data-tabela>
+            <thead class="text-[11px] uppercase tracking-wide text-gray-500">
                 <tr>
-                    <th class="est-fixa text-left px-3 py-2 min-w-[14rem]">Produto</th>
+                    <th class="est-fixa text-left px-3 py-2.5 min-w-[15rem]" data-ordenar="texto">Produto<i class="fas fa-sort est-seta"></i></th>
                     {% for c in colunas %}
-                    <th class="px-2 py-2 text-center {% if c.minha %}est-minha{% endif %}" title="{{ c.nome }}">
-                        <span class="block normal-case text-[12px] font-semibold text-gray-700 max-w-[7.5rem] truncate mx-auto">{{ c.nome }}</span>
-                        {% if c.minha %}<span class="block normal-case text-[10px] text-sky-600">sua loja</span>
-                        {% elif c.km is not None %}<span class="block normal-case text-[10px] text-gray-400">{{ c.km|floatformat:0 }} km</span>{% endif %}
+                    <th class="px-2 py-2 text-center est-col-loja {% if c.minha %}est-minha{% endif %}" style="--c:{{ c.cor.forte }}" data-ordenar="numero" title="Ordenar por {{ c.nome }}">
+                        <span class="block normal-case text-[12px] font-bold max-w-[8rem] truncate mx-auto" style="color:{{ c.cor.forte }}">{{ c.nome }}</span>
+                        {% if c.minha %}<span class="block normal-case text-[10px] font-semibold text-sky-600">sua loja<i class="fas fa-sort est-seta"></i></span>
+                        {% elif c.km is not None %}<span class="est-km est-km-{{ c.faixa }} normal-case">{{ c.km|floatformat:0 }} km</span><i class="fas fa-sort est-seta"></i>
+                        {% else %}<i class="fas fa-sort est-seta"></i>{% endif %}
                     </th>
                     {% endfor %}
-                    <th class="px-3 py-2 text-center">Rede</th>
-                    {% if f.aba == 'disponivel' and f.loja %}<th class="px-3 py-2 text-left">Mais perto com saldo</th>{% endif %}
+                    <th class="px-3 py-2 text-center" data-ordenar="numero">Rede<i class="fas fa-sort est-seta"></i></th>
+                    {% if f.aba == 'disponivel' and f.loja %}<th class="px-3 py-2 text-left" data-ordenar="numero" title="Ordenar pela distância">Mais perto com saldo<i class="fas fa-sort est-seta"></i></th>{% endif %}
                 </tr>
             </thead>
-            <tbody class="divide-y divide-gray-50">
+            <tbody>
                 {% for linha in pagina %}
-                <tr class="hover:bg-gray-50/60">
-                    <td class="est-fixa px-3 py-2">
-                        <p class="font-medium text-gray-900 leading-snug">{{ linha.produto.nome }}</p>
-                        <p class="text-[11px] text-gray-500">{% if linha.produto.cor %}{{ linha.produto.cor }} · {% endif %}{{ linha.produto.material }}{% if linha.produto.categoria %} · {{ linha.produto.categoria }}{% endif %}</p>
+                <tr data-busca="{{ linha.produto.nome }} {{ linha.produto.cor }} {{ linha.produto.material }} {{ linha.produto.categoria }} {{ linha.produto.fabricante }}">
+                    <td class="est-fixa px-3 py-2" data-v="{{ linha.produto.nome }}">
+                        <p class="font-semibold text-gray-900 leading-snug">{{ linha.produto.nome }}</p>
+                        <p class="text-[11px] text-gray-500 flex items-center gap-1 flex-wrap">
+                            {% if linha.produto.cor %}<span>{{ linha.produto.cor }} ·</span>{% endif %}
+                            <span class="font-mono">{{ linha.produto.material }}</span><button type="button" class="est-copiar" data-copiar="{{ linha.produto.material }}" title="Copiar o material"><i class="far fa-copy text-[10px]"></i></button>
+                            {% if linha.produto.categoria %}<span>· {{ linha.produto.categoria }}</span>{% endif %}
+                        </p>
                     </td>
                     {% for qtd in linha.qtds %}
-                    <td class="px-2 py-2 text-center {% if forloop.first and f.loja %}est-minha{% endif %}">
+                    <td class="px-2 py-2 text-center {% if forloop.first and f.loja %}est-minha{% endif %}" data-v="{{ qtd|floatformat:0 }}">
                         {% if qtd %}
                         <button type="button" class="est-q {% if f.aba == 'transito' %}est-q-t{% elif qtd >= 3 %}est-q-3{% else %}est-q-1{% endif %}"
                                 data-material="{{ linha.produto.material }}" data-indice="{{ forloop.counter0 }}"
@@ -230,14 +367,13 @@ números dela e cinco abas. Clicar numa quantidade abre a gaveta com os seriais.
                         {% else %}<span class="est-zero">·</span>{% endif %}
                     </td>
                     {% endfor %}
-                    <td class="px-3 py-2 text-center font-semibold text-gray-700 tabular">{{ linha.rede|floatformat:0 }}</td>
+                    <td class="px-3 py-2 text-center font-bold text-gray-700 tabular" data-v="{{ linha.rede|floatformat:0 }}">{{ linha.rede|floatformat:0 }}</td>
                     {% if f.aba == 'disponivel' and f.loja %}
-                    <td class="px-3 py-2 text-xs">
-                        {% if linha.qtds.0 %}<span class="text-gray-300">—</span>
+                    <td class="px-3 py-2 text-xs" data-v="{% if linha.qtds.0 %}-1{% elif linha.mais_perto %}{{ linha.mais_perto.km|floatformat:0 }}{% else %}99999{% endif %}">
+                        {% if linha.qtds.0 %}<span class="text-emerald-600 font-semibold"><i class="fas fa-check mr-1"></i>tem na loja</span>
                         {% elif linha.mais_perto %}
-                        <button type="button" class="text-left text-sky-700 hover:underline font-semibold"
-                                data-material="{{ linha.produto.material }}" data-centro="{{ linha.mais_perto.centro }}" data-modo="disponivel">
-                            {{ linha.mais_perto.nome }}</button>
+                        <button type="button" class="font-semibold text-sky-700 hover:underline"
+                                data-material="{{ linha.produto.material }}" data-centro="{{ linha.mais_perto.centro }}" data-modo="disponivel">{{ linha.mais_perto.nome }}</button>
                         <span class="text-gray-500">· {{ linha.mais_perto.km|floatformat:0 }} km · {{ linha.mais_perto.qtd|floatformat:0 }} un.</span>
                         {% else %}<span class="text-gray-400">sem saldo na rede</span>{% endif %}
                     </td>
@@ -246,204 +382,154 @@ números dela e cinco abas. Clicar numa quantidade abre a gaveta com os seriais.
                 {% endfor %}
             </tbody>
         </table>
+        <script id="estColunas" type="application/json">[{% for c in colunas %}"{{ c.centro }}"{% if not forloop.last %},{% endif %}{% endfor %}]</script>
+
+    {% elif f.aba == 'reposicao' %}
+        <table class="est-tabela min-w-full text-sm" data-tabela>
+            <thead class="text-[11px] uppercase tracking-wide text-gray-500">
+                <tr>
+                    <th class="est-fixa text-left px-3 py-2.5 min-w-[15rem]" data-ordenar="texto">Produto<i class="fas fa-sort est-seta"></i></th>
+                    {% if not f.loja %}<th class="text-left px-3 py-2.5" data-ordenar="texto">Loja<i class="fas fa-sort est-seta"></i></th>{% endif %}
+                    <th class="px-3 py-2.5 text-right" data-ordenar="numero">Livre<i class="fas fa-sort est-seta"></i></th>
+                    <th class="px-3 py-2.5 text-right" data-ordenar="numero">Trânsito<i class="fas fa-sort est-seta"></i></th>
+                    <th class="px-3 py-2.5 text-right" data-ordenar="numero">Vendas 30d<i class="fas fa-sort est-seta"></i></th>
+                    <th class="px-3 py-2.5 text-right" data-ordenar="numero">90d<i class="fas fa-sort est-seta"></i></th>
+                    <th class="px-3 py-2.5 text-left" data-ordenar="numero" title="Quanto do mês o estoque cobre">Cobertura<i class="fas fa-sort est-seta"></i></th>
+                    <th class="px-3 py-2.5 text-right" data-ordenar="numero">Sugestão<i class="fas fa-sort est-seta"></i></th>
+                    <th class="px-3 py-2.5 text-left" data-ordenar="numero">Situação<i class="fas fa-sort est-seta"></i></th>
+                    <th class="px-3 py-2.5 text-left" data-ordenar="numero" title="Ordenar pela distância">Transferir de<i class="fas fa-sort est-seta"></i></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for l in pagina %}
+                <tr data-busca="{{ l.produto.nome }} {{ l.produto.cor }} {{ l.produto.material }} {{ l.loja }}">
+                    <td class="est-fixa px-3 py-2" data-v="{{ l.produto.nome }}">
+                        <p class="font-semibold text-gray-900 leading-snug">{{ l.produto.nome }}</p>
+                        <p class="text-[11px] text-gray-500 flex items-center gap-1 flex-wrap">
+                            {% if l.produto.cor %}<span>{{ l.produto.cor }} ·</span>{% endif %}
+                            <span class="font-mono">{{ l.produto.material }}</span><button type="button" class="est-copiar" data-copiar="{{ l.produto.material }}" title="Copiar o material"><i class="far fa-copy text-[10px]"></i></button>
+                        </p>
+                    </td>
+                    {% if not f.loja %}<td class="px-3 py-2" data-v="{{ l.loja }}"><span class="est-loja text-gray-800 text-xs" style="--c:{{ l.cor.forte }}">{{ l.loja }}</span></td>{% endif %}
+                    <td class="px-3 py-2 text-right tabular font-semibold" data-v="{{ l.livre|floatformat:0 }}">{{ l.livre|floatformat:0 }}</td>
+                    <td class="px-3 py-2 text-right tabular text-violet-700" data-v="{{ l.transito|floatformat:0 }}">{{ l.transito|floatformat:0 }}</td>
+                    <td class="px-3 py-2 text-right tabular font-bold text-gray-900" data-v="{{ l.v30 }}">{{ l.v30 }}</td>
+                    <td class="px-3 py-2 text-right tabular text-gray-500" data-v="{{ l.v90 }}">{{ l.v90 }}</td>
+                    {% widthratio l.estoque l.v30 100 as cobre %}
+                    <td class="px-3 py-2" data-v="{% if l.v30 %}{{ cobre }}{% else %}999{% endif %}">
+                        <div class="flex items-center gap-2">
+                            <div class="est-barra flex-1"><span style="width:{% if l.v30 %}{% if cobre|add:0 > 100 %}100{% else %}{{ cobre }}{% endif %}{% else %}100{% endif %}%;background:{% if l.situacao == 'critico' %}#EF4444{% elif l.situacao == 'ruptura' %}#EC4899{% elif l.situacao == 'insuficiente' %}#F97316{% else %}#22C55E{% endif %}"></span></div>
+                            <span class="text-[11px] text-gray-500 tabular w-9 text-right">{% if l.v30 %}{{ cobre }}%{% else %}—{% endif %}</span>
+                        </div>
+                    </td>
+                    <td class="px-3 py-2 text-right tabular font-extrabold {% if l.sugestao %}text-amber-600{% else %}text-gray-300{% endif %}" data-v="{{ l.sugestao }}">{{ l.sugestao }}</td>
+                    <td class="px-3 py-2" data-v="{% if l.situacao == 'critico' %}4{% elif l.situacao == 'ruptura' %}3{% elif l.situacao == 'insuficiente' %}2{% else %}1{% endif %}">
+                        <span class="est-sit est-sit-{{ l.situacao }}">
+                            {% if l.situacao == 'critico' %}<i class="fas fa-circle-exclamation"></i>Crítico{% elif l.situacao == 'ruptura' %}<i class="fas fa-box-open"></i>Ruptura{% elif l.situacao == 'insuficiente' %}<i class="fas fa-battery-quarter"></i>Insuficiente{% else %}<i class="fas fa-check"></i>Coberto{% endif %}
+                        </span>
+                    </td>
+                    <td class="px-3 py-2 text-xs" data-v="{% if l.buscar_em %}{{ l.buscar_em.km|floatformat:0 }}{% else %}99999{% endif %}">
+                        {% if l.buscar_em %}
+                        <button type="button" class="est-loja hover:underline" style="--c:{{ l.buscar_em.cor.forte }};color:{{ l.buscar_em.cor.forte }}"
+                                data-material="{{ l.produto.material }}" data-centro="{{ l.buscar_em.centro }}" data-modo="disponivel" data-minha="{{ l.centro }}">{{ l.buscar_em.nome }}</button>
+                        <span class="text-gray-500">· {{ l.buscar_em.km|floatformat:0 }} km · sobra {{ l.buscar_em.sobra }}</span>
+                        {% elif l.sugestao %}<span class="text-gray-400"><i class="fas fa-cart-shopping mr-1"></i>pedir</span>{% else %}<span class="text-gray-300">—</span>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+    {% elif f.aba == 'detalhado' %}
+        <table class="est-tabela min-w-full text-sm" data-tabela>
+            <thead class="text-[11px] uppercase tracking-wide text-gray-500">
+                <tr>
+                    <th class="est-fixa text-left px-3 py-2.5 min-w-[14rem]" data-ordenar="texto">Produto<i class="fas fa-sort est-seta"></i></th>
+                    <th class="text-left px-3 py-2.5" data-ordenar="texto">Loja<i class="fas fa-sort est-seta"></i></th>
+                    <th class="text-left px-3 py-2.5" data-ordenar="texto">IMEI / serial<i class="fas fa-sort est-seta"></i></th>
+                    <th class="text-left px-3 py-2.5" data-ordenar="texto">Depósito<i class="fas fa-sort est-seta"></i></th>
+                    <th class="text-left px-3 py-2.5" data-ordenar="texto">Tipo de estoque<i class="fas fa-sort est-seta"></i></th>
+                    <th class="text-left px-3 py-2.5" data-ordenar="texto">Status<i class="fas fa-sort est-seta"></i></th>
+                    <th class="text-left px-3 py-2.5" data-ordenar="numero">Última mov.<i class="fas fa-sort est-seta"></i></th>
+                    <th class="text-right px-3 py-2.5" data-ordenar="numero">Dias<i class="fas fa-sort est-seta"></i></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in pagina %}
+                <tr data-busca="{{ u.produto.nome }} {{ u.material }} {{ u.serial }} {{ u.loja }} {{ u.deposito }}">
+                    <td class="est-fixa px-3 py-2" data-v="{{ u.produto.nome }}">
+                        <p class="font-semibold text-gray-900 leading-snug">{{ u.produto.nome }}</p>
+                        <p class="text-[11px] text-gray-500 flex items-center gap-1 flex-wrap">
+                            {% if u.produto.cor %}<span>{{ u.produto.cor }} ·</span>{% endif %}
+                            <span class="font-mono">{{ u.material }}</span><button type="button" class="est-copiar" data-copiar="{{ u.material }}" title="Copiar o material"><i class="far fa-copy text-[10px]"></i></button>
+                        </p>
+                    </td>
+                    <td class="px-3 py-2" data-v="{{ u.loja }}"><span class="est-loja text-gray-800 text-xs" style="--c:{{ u.cor.forte }}">{{ u.loja }}</span></td>
+                    <td class="px-3 py-2" data-v="{{ u.serial }}"><span class="inline-flex items-center gap-1 font-mono text-xs text-gray-900">{{ u.serial }}<button type="button" class="est-copiar" data-copiar="{{ u.serial }}" title="Copiar o serial"><i class="far fa-copy text-[10px]"></i></button></span></td>
+                    <td class="px-3 py-2 text-xs" data-v="{{ u.deposito }}"><span class="font-bold">{{ u.deposito }}</span> <span class="text-gray-500">{{ u.deposito_nome }}</span></td>
+                    <td class="px-3 py-2 text-xs" data-v="{{ u.tipo_nome }}">{{ u.tipo_nome }}</td>
+                    <td class="px-3 py-2 text-xs text-gray-600" data-v="{{ u.status_sistema }}">{{ u.status_sistema }}{% if u.status_usuario %} · {{ u.status_usuario }}{% endif %}</td>
+                    <td class="px-3 py-2 text-xs" data-v="{{ u.desde|date:'Ymd'|default:'0' }}">{{ u.desde|date:"d/m/Y"|default:"—" }}</td>
+                    <td class="px-3 py-2 text-right tabular {% if u.dias and u.dias > 90 %}text-amber-700 font-bold{% endif %}" data-v="{{ u.dias|default_if_none:'-1' }}">{{ u.dias|default_if_none:"—" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+    {% else %}
+        <table class="est-tabela min-w-full text-sm" data-tabela>
+            <thead class="text-[11px] uppercase tracking-wide text-gray-500">
+                <tr>
+                    <th class="est-fixa text-left px-3 py-2.5 min-w-[15rem]" data-ordenar="texto">Produto<i class="fas fa-sort est-seta"></i></th>
+                    <th class="text-left px-3 py-2.5" data-ordenar="texto">Material<i class="fas fa-sort est-seta"></i></th>
+                    <th class="text-left px-3 py-2.5" data-ordenar="texto">Categoria<i class="fas fa-sort est-seta"></i></th>
+                    <th class="text-left px-3 py-2.5" data-ordenar="texto">Fabricante<i class="fas fa-sort est-seta"></i></th>
+                    <th class="text-left px-3 py-2.5" data-ordenar="texto">Descrição no SAP<i class="fas fa-sort est-seta"></i></th>
+                    <th class="text-right px-3 py-2.5" data-ordenar="numero">Disponível (rede)<i class="fas fa-sort est-seta"></i></th>
+                    <th class="text-right px-3 py-2.5" data-ordenar="numero">Em trânsito (rede)<i class="fas fa-sort est-seta"></i></th>
+                    <th class="px-3 py-2.5"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for l in pagina %}
+                <tr data-busca="{{ l.produto.nome }} {{ l.produto.cor }} {{ l.produto.material }} {{ l.produto.categoria }} {{ l.produto.fabricante }} {{ l.produto.descricao_sap }}">
+                    <td class="est-fixa px-3 py-2" data-v="{{ l.produto.nome }}">
+                        <p class="font-semibold text-gray-900 leading-snug">{{ l.produto.nome }}</p>
+                        <p class="text-[11px] text-gray-500">{{ l.produto.cor|default:"" }}{% if l.produto.gama %} · {{ l.produto.gama }}{% endif %}{% if not l.produto.tem_cadastro %} <span class="text-amber-600">sem nome comercial</span>{% endif %}</p>
+                    </td>
+                    <td class="px-3 py-2" data-v="{{ l.produto.material }}"><span class="inline-flex items-center gap-1 font-mono text-xs">{{ l.produto.material }}<button type="button" class="est-copiar" data-copiar="{{ l.produto.material }}" title="Copiar o material"><i class="far fa-copy text-[10px]"></i></button></span></td>
+                    <td class="px-3 py-2 text-xs" data-v="{{ l.produto.categoria }}">{{ l.produto.categoria }}{% if l.produto.subcategoria %} <span class="text-gray-400">· {{ l.produto.subcategoria }}</span>{% endif %}</td>
+                    <td class="px-3 py-2 text-xs" data-v="{{ l.produto.fabricante }}">{{ l.produto.fabricante|default:"—" }}</td>
+                    <td class="px-3 py-2 text-xs text-gray-500" data-v="{{ l.produto.descricao_sap }}">{{ l.produto.descricao_sap|default:"—" }}</td>
+                    <td class="px-3 py-2 text-right tabular font-bold {% if l.livre %}text-emerald-700{% else %}text-gray-300{% endif %}" data-v="{{ l.livre|floatformat:0 }}">{{ l.livre|floatformat:0 }}</td>
+                    <td class="px-3 py-2 text-right tabular {% if l.transito %}text-violet-700 font-semibold{% else %}text-gray-300{% endif %}" data-v="{{ l.transito|floatformat:0 }}">{{ l.transito|floatformat:0 }}</td>
+                    <td class="px-3 py-2 text-right">
+                        {% if l.livre %}<a href="?aba=disponivel&loja={{ f.loja|default:'todas' }}&q={{ l.produto.material }}" class="text-xs font-bold text-sky-700 hover:underline whitespace-nowrap">Onde tem <i class="fas fa-arrow-right"></i></a>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
     </div>
+    <p id="estNadaNoFiltro" class="hidden p-6 text-center text-sm text-gray-500">Nada nesta lista com esse filtro.</p>
     {% include 'auditoria_sap/_estoque_paginas.html' %}
     {% else %}
     <div class="p-10 text-center text-gray-500 text-sm">
-        <i class="fas fa-box-open text-3xl text-gray-300"></i>
-        <p class="mt-2">{% if f.aba == 'transito' %}Nada em trânsito{% else %}Nenhum produto com saldo livre{% endif %} {% if f.q or f.categoria %}com essa busca{% else %}nessas lojas{% endif %}.</p>
+        {% if f.aba == 'reposicao' %}<i class="fas fa-circle-check text-3xl text-emerald-300"></i><p class="mt-2">Nada para repor com esse filtro.</p>
+        {% elif f.aba == 'transito' %}<i class="fas fa-truck text-3xl text-gray-300"></i><p class="mt-2">Nada em trânsito {% if f.q or f.categoria %}com essa busca{% else %}nessas lojas{% endif %}.</p>
+        {% else %}<i class="fas fa-box-open text-3xl text-gray-300"></i><p class="mt-2">Nada encontrado {% if f.q or f.categoria %}com essa busca{% else %}aqui{% endif %}.</p>{% endif %}
     </div>
     {% endif %}
 </div>
-<script id="estColunas" type="application/json">[{% for c in colunas %}"{{ c.centro }}"{% if not forloop.last %},{% endif %}{% endfor %}]</script>
 
-{% elif f.aba == 'reposicao' %}
-{# ---------------------------------------------------------- reposição #}
-<div class="sap-card overflow-hidden">
-    <div class="px-4 py-3 border-b border-gray-100">
-        <p class="text-sm text-gray-700">
-            Estoque considerado = <strong>livre + em trânsito</strong>. Sugestão = vendas de 30 dias − estoque.
-            {% if not f.loja %}Na rede, é a soma das sugestões de cada loja.{% endif %}
-            Antes de pedir, veja se a loja mais perto (até 200 km) tem sobra para transferir.
-        </p>
-        <div class="flex gap-2 overflow-x-auto mt-3">
-            {% for chave, rotulo in situacoes %}
-            <a href="?{{ q_base }}&aba=reposicao{% if chave %}&situacao={{ chave }}{% endif %}" class="est-pill text-xs {% if f.situacao == chave %}est-pill-on{% else %}est-pill-off{% endif %}">{{ rotulo }}</a>
-            {% endfor %}
-        </div>
-        {% if sem_vendas %}<p class="mt-2 text-xs text-amber-600"><i class="fas fa-triangle-exclamation mr-1"></i>As vendas do Vivo GO não vieram agora: a reposição fica vazia até a próxima leitura.</p>{% endif %}
-    </div>
-    {% if pagina.object_list %}
-    <div class="overflow-x-auto">
-        <table class="est-tabela min-w-full text-sm">
-            <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
-                <tr>
-                    <th class="est-fixa text-left px-3 py-2 min-w-[14rem]">Produto</th>
-                    {% if not f.loja %}<th class="text-left px-3 py-2">Loja</th>{% endif %}
-                    <th class="px-3 py-2 text-right">Livre</th>
-                    <th class="px-3 py-2 text-right">Trânsito</th>
-                    <th class="px-3 py-2 text-right">Vendas 30d</th>
-                    <th class="px-3 py-2 text-right">90d</th>
-                    <th class="px-3 py-2 text-right">Sugestão</th>
-                    <th class="px-3 py-2 text-left">Situação</th>
-                    <th class="px-3 py-2 text-left">Transferir de</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-50">
-                {% for l in pagina %}
-                <tr class="hover:bg-gray-50/60">
-                    <td class="est-fixa px-3 py-2">
-                        <p class="font-medium text-gray-900 leading-snug">{{ l.produto.nome }}</p>
-                        <p class="text-[11px] text-gray-500">{% if l.produto.cor %}{{ l.produto.cor }} · {% endif %}{{ l.produto.material }}</p>
-                    </td>
-                    {% if not f.loja %}<td class="px-3 py-2 text-gray-700">{{ l.loja }}</td>{% endif %}
-                    <td class="px-3 py-2 text-right tabular">{{ l.livre|floatformat:0 }}</td>
-                    <td class="px-3 py-2 text-right tabular text-sky-700">{{ l.transito|floatformat:0 }}</td>
-                    <td class="px-3 py-2 text-right tabular font-semibold">{{ l.v30 }}</td>
-                    <td class="px-3 py-2 text-right tabular text-gray-500">{{ l.v90 }}</td>
-                    <td class="px-3 py-2 text-right tabular font-bold {% if l.sugestao %}text-gray-900{% else %}text-gray-300{% endif %}">{{ l.sugestao }}</td>
-                    <td class="px-3 py-2">
-                        <span class="est-sit est-sit-{{ l.situacao }}">
-                            {% if l.situacao == 'critico' %}<i class="fas fa-circle-exclamation"></i>Crítico{% elif l.situacao == 'ruptura' %}Ruptura{% elif l.situacao == 'insuficiente' %}Insuficiente{% else %}Coberto{% endif %}
-                        </span>
-                    </td>
-                    <td class="px-3 py-2 text-xs">
-                        {% if l.buscar_em %}
-                        <button type="button" class="text-sky-700 hover:underline font-semibold"
-                                data-material="{{ l.produto.material }}" data-centro="{{ l.buscar_em.centro }}" data-modo="disponivel" data-minha="{{ l.centro }}">{{ l.buscar_em.nome }}</button>
-                        <span class="text-gray-500">· {{ l.buscar_em.km|floatformat:0 }} km · sobra {{ l.buscar_em.sobra }}</span>
-                        {% elif l.sugestao %}<span class="text-gray-400">pedir</span>{% else %}<span class="text-gray-300">—</span>{% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    <div class="px-4 py-2 text-xs text-gray-500 border-t border-gray-100">Sugestão total desta lista: <strong class="text-gray-800">{{ sugestao_filtrada }}</strong> unidade{{ sugestao_filtrada|pluralize }}.</div>
-    {% include 'auditoria_sap/_estoque_paginas.html' %}
-    {% else %}
-    <div class="p-10 text-center text-gray-500 text-sm"><i class="fas fa-circle-check text-3xl text-emerald-300"></i><p class="mt-2">Nada para repor com esse filtro.</p></div>
-    {% endif %}
-</div>
-
-{% elif f.aba == 'detalhado' %}
-{# ----------------------------------------------------------- detalhado #}
-<div class="sap-card overflow-hidden">
-    <div class="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
-        <div class="flex gap-2 overflow-x-auto">
-            <a href="?{{ q_base }}&aba=detalhado" class="est-pill text-xs {% if not f.deposito %}est-pill-on{% else %}est-pill-off{% endif %}">Todos os depósitos</a>
-            {% for cod, nome in depositos %}
-            <a href="?{{ q_base }}&aba=detalhado&deposito={{ cod }}" class="est-pill text-xs {% if f.deposito == cod %}est-pill-on{% else %}est-pill-off{% endif %}" title="{{ cod }}">{{ nome }}</a>
-            {% endfor %}
-        </div>
-        <a href="?{{ q_atual }}&formato=csv" class="text-xs font-semibold text-sky-700 hover:underline"><i class="fas fa-file-csv mr-1"></i>Baixar CSV ({{ total_linhas }})</a>
-    </div>
-    {% if pagina.object_list %}
-    <div class="overflow-x-auto">
-        <table class="est-tabela min-w-full text-sm">
-            <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
-                <tr>
-                    <th class="est-fixa text-left px-3 py-2 min-w-[13rem]">Produto</th>
-                    <th class="text-left px-3 py-2">Loja</th>
-                    <th class="text-left px-3 py-2">IMEI / serial</th>
-                    <th class="text-left px-3 py-2">Depósito</th>
-                    <th class="text-left px-3 py-2">Tipo de estoque</th>
-                    <th class="text-left px-3 py-2">Status</th>
-                    <th class="text-left px-3 py-2">Última mov.</th>
-                    <th class="text-right px-3 py-2">Dias</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-50">
-                {% for u in pagina %}
-                <tr class="hover:bg-gray-50/60">
-                    <td class="est-fixa px-3 py-2">
-                        <p class="font-medium text-gray-900 leading-snug">{{ u.produto.nome }}</p>
-                        <p class="text-[11px] text-gray-500">{% if u.produto.cor %}{{ u.produto.cor }} · {% endif %}{{ u.material }}</p>
-                    </td>
-                    <td class="px-3 py-2 text-gray-700">{{ u.loja }}</td>
-                    <td class="px-3 py-2 font-mono text-xs">{{ u.serial }}</td>
-                    <td class="px-3 py-2 text-xs"><span class="font-semibold">{{ u.deposito }}</span> <span class="text-gray-500">{{ u.deposito_nome }}</span></td>
-                    <td class="px-3 py-2 text-xs">{{ u.tipo_nome }}</td>
-                    <td class="px-3 py-2 text-xs text-gray-600">{{ u.status_sistema }}{% if u.status_usuario %} · {{ u.status_usuario }}{% endif %}</td>
-                    <td class="px-3 py-2 text-xs">{{ u.desde|date:"d/m/Y"|default:"—" }}</td>
-                    <td class="px-3 py-2 text-right tabular {% if u.dias and u.dias > 90 %}text-amber-700 font-semibold{% endif %}">{{ u.dias|default_if_none:"—" }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% include 'auditoria_sap/_estoque_paginas.html' %}
-    {% else %}
-    <div class="p-10 text-center text-gray-500 text-sm"><i class="fas fa-box-open text-3xl text-gray-300"></i><p class="mt-2">Nenhuma unidade com esse filtro.</p></div>
-    {% endif %}
-</div>
-
-{% else %}
-{# ------------------------------------------------------------ produtos #}
-<div class="sap-card overflow-hidden">
-    <div class="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center gap-3">
-        <form method="get" class="flex items-center gap-2">
-            <input type="hidden" name="aba" value="produtos"><input type="hidden" name="loja" value="{{ f.loja|default:'todas' }}">
-            {% if f.q %}<input type="hidden" name="q" value="{{ f.q }}">{% endif %}
-            {% if f.categoria %}<input type="hidden" name="categoria" value="{{ f.categoria }}">{% endif %}
-            <span class="sap-rotulo">Fabricante</span>
-            <select name="fabricante" onchange="this.form.submit()" class="rounded-lg border border-gray-200 px-2 py-1.5 text-sm bg-white">
-                <option value="">Todos</option>
-                {% for fab in fabricantes %}<option value="{{ fab }}" {% if fab == f.fabricante %}selected{% endif %}>{{ fab }}</option>{% endfor %}
-            </select>
-        </form>
-        <span class="text-xs text-gray-500">{{ total_linhas }} produto{{ total_linhas|pluralize }} · saldos da rede</span>
-    </div>
-    {% if pagina.object_list %}
-    <div class="overflow-x-auto">
-        <table class="est-tabela min-w-full text-sm">
-            <thead class="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
-                <tr>
-                    <th class="est-fixa text-left px-3 py-2 min-w-[14rem]">Produto</th>
-                    <th class="text-left px-3 py-2">Material</th>
-                    <th class="text-left px-3 py-2">Categoria</th>
-                    <th class="text-left px-3 py-2">Fabricante</th>
-                    <th class="text-left px-3 py-2">Descrição no SAP</th>
-                    <th class="text-right px-3 py-2">Disponível (rede)</th>
-                    <th class="text-right px-3 py-2">Em trânsito (rede)</th>
-                    <th class="px-3 py-2"></th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-50">
-                {% for l in pagina %}
-                <tr class="hover:bg-gray-50/60">
-                    <td class="est-fixa px-3 py-2">
-                        <p class="font-medium text-gray-900 leading-snug">{{ l.produto.nome }}</p>
-                        <p class="text-[11px] text-gray-500">{{ l.produto.cor|default:"" }}{% if l.produto.gama %} · {{ l.produto.gama }}{% endif %}{% if not l.produto.tem_cadastro %} <span class="text-amber-600">sem nome comercial</span>{% endif %}</p>
-                    </td>
-                    <td class="px-3 py-2 font-mono text-xs">{{ l.produto.material }}</td>
-                    <td class="px-3 py-2 text-xs">{{ l.produto.categoria }}{% if l.produto.subcategoria %} <span class="text-gray-400">· {{ l.produto.subcategoria }}</span>{% endif %}</td>
-                    <td class="px-3 py-2 text-xs">{{ l.produto.fabricante|default:"—" }}</td>
-                    <td class="px-3 py-2 text-xs text-gray-500">{{ l.produto.descricao_sap|default:"—" }}</td>
-                    <td class="px-3 py-2 text-right tabular font-semibold">{{ l.livre|floatformat:0 }}</td>
-                    <td class="px-3 py-2 text-right tabular text-sky-700">{{ l.transito|floatformat:0 }}</td>
-                    <td class="px-3 py-2 text-right">
-                        {% if l.livre %}<a href="?aba=disponivel&loja={{ f.loja|default:'todas' }}&q={{ l.produto.material }}" class="text-xs font-semibold text-sky-700 hover:underline whitespace-nowrap">Onde tem <i class="fas fa-arrow-right"></i></a>{% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% include 'auditoria_sap/_estoque_paginas.html' %}
-    {% else %}
-    <div class="p-10 text-center text-gray-500 text-sm"><i class="fas fa-tags text-3xl text-gray-300"></i><p class="mt-2">Nenhum produto com essa busca.</p></div>
-    {% endif %}
-</div>
-{% endif %}
-
-{# ------------------------------------------- gaveta: as unidades #}
-<div id="estFundo" class="hidden fixed inset-0 bg-slate-900/30 z-40" onclick="estFechar()"></div>
-<aside id="estGaveta" class="fechada fixed top-0 right-0 h-full w-full sm:w-[26rem] bg-white shadow-2xl z-50 flex flex-col" aria-hidden="true">
-    <div class="px-4 py-3 border-b border-gray-100 flex items-start justify-between gap-3">
+{# ------------------------------------------------- gaveta: as unidades #}
+<div id="estFundo" class="hidden fixed inset-0 bg-slate-900/30 backdrop-blur-[1px] z-40" onclick="estFechar()"></div>
+<aside id="estGaveta" class="fechada fixed top-0 right-0 h-full w-full sm:w-[27rem] bg-white shadow-2xl z-50 flex flex-col" aria-hidden="true">
+    <div id="estGavetaTopo" class="px-4 py-3 border-b border-gray-100 flex items-start justify-between gap-3" style="border-top:4px solid #0EA5E9">
         <div class="min-w-0">
-            <p id="estGavetaTitulo" class="font-semibold text-gray-900 leading-snug"></p>
-            <p id="estGavetaSub" class="text-xs text-gray-500 mt-0.5"></p>
+            <p id="estGavetaTitulo" class="font-bold text-gray-900 leading-snug"></p>
+            <p id="estGavetaSub" class="text-xs text-gray-500 mt-1"></p>
         </div>
         <button type="button" onclick="estFechar()" class="p-2 -m-2 text-gray-400 hover:text-gray-700" aria-label="Fechar"><i class="fas fa-xmark text-lg"></i></button>
     </div>
@@ -459,10 +545,67 @@ números dela e cinco abas. Clicar numa quantidade abre a gaveta com os seriais.
     try { colunas = JSON.parse((document.getElementById('estColunas') || {}).textContent || '[]'); } catch (e) {}
     var gaveta = document.getElementById('estGaveta'), fundo = document.getElementById('estFundo');
     function esc(t) { var d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; }
+    function semAcento(t) { return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
 
-    window.estFechar = function () {
-        gaveta.classList.add('fechada'); gaveta.setAttribute('aria-hidden', 'true'); fundo.classList.add('hidden');
-    };
+    /* ---- Ordenar pelo cabeçalho: número começa do maior; clicar de novo inverte. ---- */
+    document.querySelectorAll('table[data-tabela]').forEach(function (tabela) {
+        var ths = Array.prototype.slice.call(tabela.querySelectorAll('thead th'));
+        ths.forEach(function (th, indice) {
+            if (!th.hasAttribute('data-ordenar')) return;
+            th.addEventListener('click', function () {
+                var numero = th.getAttribute('data-ordenar') === 'numero';
+                var desc = th.classList.contains('ordem-desc') ? false : th.classList.contains('ordem-asc') ? true : numero;
+                ths.forEach(function (o) { o.classList.remove('ordem-asc', 'ordem-desc'); var s = o.querySelector('.est-seta'); if (s) s.className = 'fas fa-sort est-seta'; });
+                th.classList.add(desc ? 'ordem-desc' : 'ordem-asc');
+                var seta = th.querySelector('.est-seta'); if (seta) seta.className = 'fas est-seta ' + (desc ? 'fa-sort-down' : 'fa-sort-up');
+                var corpo = tabela.tBodies[0];
+                var linhas = Array.prototype.slice.call(corpo.rows);
+                linhas.sort(function (a, b) {
+                    var va = a.cells[indice] ? a.cells[indice].getAttribute('data-v') || '' : '';
+                    var vb = b.cells[indice] ? b.cells[indice].getAttribute('data-v') || '' : '';
+                    var r = numero ? (parseFloat(va) || 0) - (parseFloat(vb) || 0) : semAcento(va).localeCompare(semAcento(vb), 'pt-BR');
+                    return desc ? -r : r;
+                });
+                linhas.forEach(function (l) { corpo.appendChild(l); });
+                var rolagem = tabela.closest('.est-rolagem'); if (rolagem) rolagem.scrollTop = 0;
+            });
+        });
+    });
+
+    /* ---- Filtro rápido: esconde na hora o que não bate, sem recarregar. ---- */
+    var filtro = document.getElementById('estFiltroRapido');
+    if (filtro) {
+        var espera;
+        filtro.addEventListener('input', function () {
+            clearTimeout(espera);
+            espera = setTimeout(function () {
+                var termos = semAcento(filtro.value).split(/\s+/).filter(Boolean), visiveis = 0;
+                document.querySelectorAll('table[data-tabela] tbody tr').forEach(function (tr) {
+                    var alvo = semAcento(tr.getAttribute('data-busca'));
+                    var mostra = termos.every(function (t) { return alvo.indexOf(t) >= 0; });
+                    tr.style.display = mostra ? '' : 'none';
+                    if (mostra) visiveis++;
+                });
+                var nada = document.getElementById('estNadaNoFiltro'); if (nada) nada.classList.toggle('hidden', visiveis > 0);
+            }, 120);
+        });
+    }
+
+    /* ---- Copiar material / serial ---- */
+    function copiar(botao) {
+        var texto = botao.getAttribute('data-copiar');
+        var feito = function () {
+            var antes = botao.innerHTML;
+            botao.classList.add('copiado'); botao.innerHTML = '<i class="fas fa-check text-[10px]"></i>';
+            setTimeout(function () { botao.classList.remove('copiado'); botao.innerHTML = antes; }, 1200);
+        };
+        if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(texto).then(feito, function () { window.prompt('Copie:', texto); });
+        else { var t = document.createElement('textarea'); t.value = texto; document.body.appendChild(t); t.select();
+               try { document.execCommand('copy'); feito(); } catch (e) { window.prompt('Copie:', texto); } t.remove(); }
+    }
+
+    /* ---- Gaveta com os seriais ---- */
+    window.estFechar = function () { gaveta.classList.add('fechada'); gaveta.setAttribute('aria-hidden', 'true'); fundo.classList.add('hidden'); };
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') window.estFechar(); });
 
     function abrir(centro, material, modo, minha) {
@@ -477,46 +620,44 @@ números dela e cinco abas. Clicar numa quantidade abre a gaveta com os seriais.
             .then(function (r) { return r.json(); })
             .then(function (d) {
                 if (!d.ok) { document.getElementById('estGavetaCorpo').innerHTML = '<p class="text-red-600">' + esc(d.erro || 'Não deu para abrir.') + '</p>'; return; }
-                var transito = d.modo === 'transito';
+                var transito = d.modo === 'transito', cor = (d.cor && d.cor.forte) || '#0EA5E9';
+                document.getElementById('estGavetaTopo').style.borderTopColor = cor;
                 document.getElementById('estGavetaTitulo').textContent = d.produto.nome + (d.produto.cor ? ' · ' + d.produto.cor : '');
                 document.getElementById('estGavetaSub').innerHTML =
-                    (transito ? 'A caminho de ' : '') + '<strong>' + esc(d.loja) + '</strong>' +
-                    (d.km != null ? ' · ' + d.km + ' km da sua loja' : '') + ' · ' + d.quantidade + ' un. · material ' + esc(d.produto.material);
+                    '<span class="est-loja" style="--c:' + cor + ';color:' + cor + '">' + (transito ? 'A caminho de ' : '') + esc(d.loja) + '</span>' +
+                    (d.km != null ? ' · <span class="est-km ' + (d.km <= 30 ? 'est-km-perto' : d.km <= 120 ? 'est-km-media' : 'est-km-longe') + '">' + d.km + ' km da sua loja</span>' : '') +
+                    ' · <strong>' + d.quantidade + '</strong> un.' +
+                    '<span class="inline-flex items-center gap-1 ml-1">· material <span class="font-mono">' + esc(d.produto.material) + '</span>' +
+                    '<button type="button" class="est-copiar" data-copiar="' + esc(d.produto.material) + '" title="Copiar o material"><i class="far fa-copy text-[10px]"></i></button></span>';
                 var html = '';
                 if (!d.unidades.length) {
                     html = d.quantidade
                         ? '<p class="text-gray-500">Item sem serial no SAP: são ' + d.quantidade + ' unidade(s) sem IMEI para listar.</p>'
                         : '<p class="text-gray-500">Nenhuma unidade ' + (transito ? 'a caminho' : 'livre') + ' aqui na última carga do SAP.</p>';
                 } else {
-                    html = '<ul class="divide-y divide-gray-100">' + d.unidades.map(function (u) {
-                        return '<li class="py-2.5 flex items-start justify-between gap-3">' +
-                            '<div class="min-w-0"><p class="font-mono text-gray-900 break-all">' + esc(u.serial) + '</p>' +
-                            '<p class="text-xs text-gray-500">' + esc(u.deposito) + ' · ' + esc(u.deposito_nome) +
-                            (u.status ? ' · ' + esc(u.status) : '') + '</p>' +
-                            '<p class="text-xs ' + (u.dias > 90 ? 'text-amber-700 font-semibold' : 'text-gray-500') + '">' +
+                    html = '<ul class="space-y-2">' + d.unidades.map(function (u) {
+                        var velho = u.dias > 90;
+                        return '<li class="rounded-xl border border-gray-100 px-3 py-2.5 flex items-start justify-between gap-3 hover:border-sky-200">' +
+                            '<div class="min-w-0"><p class="font-mono font-semibold text-gray-900 break-all">' + esc(u.serial) + '</p>' +
+                            '<p class="text-xs text-gray-500 mt-0.5">' + esc(u.deposito) + ' · ' + esc(u.deposito_nome) + (u.status ? ' · ' + esc(u.status) : '') + '</p>' +
+                            '<p class="text-xs mt-0.5 ' + (velho ? 'text-amber-700 font-semibold' : 'text-gray-500') + '">' +
                             (transito ? 'Saída SAP ' : 'Na loja desde ') + esc(u.desde || '—') +
                             (u.dias != null ? ' · ' + u.dias + ' dia' + (u.dias === 1 ? '' : 's') : '') + '</p></div>' +
-                            '<button type="button" class="shrink-0 px-2 py-1 rounded-md border border-gray-200 text-xs text-gray-600 hover:bg-gray-50" data-copiar="' + esc(u.serial) + '"><i class="far fa-copy mr-1"></i>Copiar</button></li>';
+                            '<button type="button" class="shrink-0 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-sky-50 hover:border-sky-200" data-copiar="' + esc(u.serial) + '"><i class="far fa-copy mr-1"></i>Copiar</button></li>';
                     }).join('') + '</ul>';
                     if (d.sem_serial) html += '<p class="mt-2 text-xs text-gray-500">+ ' + d.sem_serial + ' unidade(s) sem serial.</p>';
                 }
                 document.getElementById('estGavetaCorpo').innerHTML = html;
                 document.getElementById('estGavetaRodape').innerHTML = transito
-                    ? 'Confirme a chegada antes de oferecer a unidade ao cliente.'
-                    : 'Para transferir, passe à loja de origem o serial da unidade que você quer.';
+                    ? '<i class="fas fa-circle-info mr-1"></i>Confirme a chegada antes de oferecer a unidade ao cliente.'
+                    : '<i class="fas fa-circle-info mr-1"></i>Para transferir, passe à loja de origem o serial da unidade que você quer.';
             })
             .catch(function () { document.getElementById('estGavetaCorpo').innerHTML = '<p class="text-red-600">Sem conexão agora. Tente de novo.</p>'; });
     }
 
     document.addEventListener('click', function (e) {
-        var copiar = e.target.closest('[data-copiar]');
-        if (copiar) {
-            var texto = copiar.getAttribute('data-copiar');
-            (navigator.clipboard ? navigator.clipboard.writeText(texto) : Promise.reject()).then(function () {
-                copiar.innerHTML = '<i class="fas fa-check mr-1"></i>Copiado';
-            }).catch(function () { window.prompt('Copie o serial:', texto); });
-            return;
-        }
+        var botaoCopiar = e.target.closest('[data-copiar]');
+        if (botaoCopiar) { e.preventDefault(); copiar(botaoCopiar); return; }
         var alvo = e.target.closest('[data-material][data-modo]');
         if (!alvo) return;
         var centro = alvo.getAttribute('data-centro') || colunas[+alvo.getAttribute('data-indice')];

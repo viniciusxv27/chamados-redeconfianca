@@ -17,6 +17,7 @@ from django.core.paginator import Paginator
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
+from django.views.decorators.gzip import gzip_page
 
 from . import estoque as est
 from .mysql import SapIndisponivel
@@ -36,8 +37,30 @@ SITUACOES_REPOSICAO = (
     ('', 'Todas'), ('critico', 'Críticos'), ('ruptura', 'Em ruptura'),
     ('insuficiente', 'Insuficiente'), ('ok', 'Coberto'),
 )
-LINHAS_POR_PAGINA = 80
-UNIDADES_POR_PAGINA = 100
+# A tabela rola dentro do cartão (cabeçalho e produto fixos), então cabe muito mais
+# numa página; ordenar e filtrar é na hora, no navegador, sobre o que está na tela.
+LINHAS_POR_PAGINA = 600
+UNIDADES_POR_PAGINA = 500
+# Uma cor por loja (na ordem de ``LOJAS``): o nome pintado no cabeçalho, nos chips e na gaveta.
+CORES_DAS_LOJAS = (
+    ('#0EA5E9', '#E0F2FE'), ('#8B5CF6', '#EDE9FE'), ('#F97316', '#FFEDD5'), ('#10B981', '#D1FAE5'),
+    ('#EC4899', '#FCE7F3'), ('#EAB308', '#FEF9C3'), ('#6366F1', '#E0E7FF'), ('#14B8A6', '#CCFBF1'),
+    ('#EF4444', '#FEE2E2'), ('#84CC16', '#ECFCCB'), ('#06B6D4', '#CFFAFE'), ('#D946EF', '#FAE8FF'),
+)
+
+
+def cor_da_loja(centro):
+    ordem = [loja.centro for loja in est.LOJAS]
+    i = ordem.index(centro) if centro in ordem else sum(map(ord, centro or 'x'))
+    forte, clara = CORES_DAS_LOJAS[i % len(CORES_DAS_LOJAS)]
+    return {'forte': forte, 'clara': clara}
+
+
+def faixa_de_distancia(km):
+    """perto (até 30 km), media (até 120 km) ou longe — a cor do chip da distância."""
+    if km is None:
+        return ''
+    return 'perto' if km <= 30 else ('media' if km <= 120 else 'longe')
 
 
 def _loja_padrao(user):
@@ -105,6 +128,9 @@ def _resumo_da_loja(foto, loja):
 
 def _matriz(foto, filtros, modo):
     colunas = est.colunas_da_matriz(foto, filtros['loja'])
+    for c in colunas:
+        c['cor'] = cor_da_loja(c['centro'])
+        c['faixa'] = faixa_de_distancia(c['km'])
     linhas = est.matriz(foto, colunas, modo=modo, busca=filtros['q'], categoria=filtros['categoria'])
     if filtros['ordem'] == 'rede':
         linhas.sort(key=lambda l: (-l['rede'], l['produto']['nome']))
@@ -118,6 +144,9 @@ def _matriz(foto, filtros, modo):
     return colunas, linhas
 
 
+# A matriz da rede passa de 2 MB de HTML e vira ~100 KB comprimida (o portal não
+# comprime as respostas por padrão).
+@gzip_page
 @login_required
 @so_auditoria
 def estoque(request):
@@ -139,6 +168,11 @@ def estoque(request):
         'lojas': _lojas_para_escolher(foto),
         'loja_nome': est.nome_do_centro(foto, filtros['loja']) if filtros['loja'] else '',
         'loja_info': est.POR_CENTRO.get(filtros['loja']),
+        'loja_cor': cor_da_loja(filtros['loja']) if filtros['loja'] else None,
+        'vizinhas': [{'centro': c, 'nome': est.nome_do_centro(foto, c), 'km': km, 'faixa': faixa_de_distancia(km),
+                      'cor': cor_da_loja(c)}
+                     for c, km in est.vizinhas(filtros['loja'], centros=est.centros_da_foto(foto))]
+                    if filtros['loja'] else [],
         'minha_loja': _loja_padrao(request.user),
         'categorias': est.categorias(foto),
         'resumo': _resumo_da_loja(foto, filtros['loja']),
@@ -149,6 +183,9 @@ def estoque(request):
     }
     if filtros['serial']:
         contexto['achados'] = est.unidades_de(foto, modo='todas', serial=filtros['serial'])[:30]
+        for u in contexto['achados']:
+            u['cor'] = cor_da_loja(u['centro'])
+            u['produto'] = est.produto(foto, u['material'])
 
     if aba in ('disponivel', 'transito'):
         colunas, linhas = _matriz(foto, filtros, aba)
@@ -158,6 +195,10 @@ def estoque(request):
     elif aba == 'reposicao':
         linhas = est.reposicao(foto, filtros['loja'] or None, busca=filtros['q'],
                                categoria=filtros['categoria'], status=filtros['situacao'])
+        for linha in linhas:
+            linha['cor'] = cor_da_loja(linha['centro'])
+            if linha['buscar_em']:
+                linha['buscar_em']['cor'] = cor_da_loja(linha['buscar_em']['centro'])
         contexto.update(pagina=Paginator(linhas, LINHAS_POR_PAGINA).get_page(request.GET.get('pagina')),
                         total_linhas=len(linhas), situacoes=SITUACOES_REPOSICAO,
                         sugestao_filtrada=sum(l['sugestao'] for l in linhas))
@@ -201,6 +242,8 @@ def _detalhado(foto, filtros):
             nomes[u['material']] = est.produto(foto, u['material'])
         u['produto'] = nomes[u['material']]
     unidades.sort(key=lambda u: (u['loja'], u['produto']['nome'], -(u['dias'] or 0)))
+    for u in unidades:
+        u['cor'] = cor_da_loja(u['centro'])
     return unidades
 
 
@@ -246,6 +289,7 @@ def estoque_unidades(request):
         'modo': modo,
         'loja': est.nome_do_centro(foto, centro),
         'centro': centro,
+        'cor': cor_da_loja(centro),
         'km': round(km) if km is not None else None,
         'produto': {k: p[k] for k in ('nome', 'cor', 'material', 'categoria', 'descricao_sap')},
         'quantidade': int(qtd),
