@@ -78,6 +78,7 @@ from datetime import date, timedelta
 import requests
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.utils import timezone
 
 from auditoria_sap import estoque as est
 from auditoria_sap import mysql
@@ -150,6 +151,19 @@ CATALOGO = [
      'fabricante': 'Ovvi', 'categoria': 'Essenciais', 'subcategoria': 'Películas', 'gama': None},
     {'cod_sap': CARREGADOR, 'cor': 'Branco', 'nome_comercial': 'Carregador USB-C de 20W', 'fabricante': 'Geonav',
      'categoria': 'Essenciais', 'subcategoria': 'Carregadores', 'gama': None},
+    # 24/11: a mesma categoria/fabricante com outra grafia (vinha duplicada no filtro).
+    {'cod_sap': '22000001', 'cor': '', 'nome_comercial': 'Cabo ZZ', 'fabricante': 'GEONAV',
+     'categoria': 'essenciais', 'subcategoria': 'Cabos', 'gama': None},
+    {'cod_sap': '22000002', 'cor': '', 'nome_comercial': 'Roteador ZZ', 'fabricante': 'TP-Link',
+     'categoria': 'Demais Eletrônicos', 'subcategoria': 'Áudio e Vídeo', 'gama': None},
+    {'cod_sap': '22000003', 'cor': '', 'nome_comercial': 'Repetidor ZZ', 'fabricante': 'TP Link',
+     'categoria': 'Demais eletrônicos', 'subcategoria': 'Áudio e vídeo', 'gama': None},
+    {'cod_sap': '22000004', 'cor': '', 'nome_comercial': 'Extensor ZZ', 'fabricante': 'TP Link',
+     'categoria': 'Demais Eletrônicos', 'subcategoria': 'Áudio e Vídeo', 'gama': None},
+]
+RENOVA = [
+    {'fabricante': 'Samsung', 'modelo': 'Galaxy A57 5G 256GB', 'nome_comercial': 'Samsung Galaxy A57 5G 256GB',
+     'desconto': '300.00', 'inicio': date.today() - timedelta(days=10), 'fim': date.today() + timedelta(days=6)},
 ]
 VENDAS = [
     {'PDV': 'ANCHIETA', 'SKU': GALAXY, 'd30': 7, 'd90': 15, 'nome': 'Samsung Galaxy A57 5G 256GB'},
@@ -175,6 +189,9 @@ def dublê(sql, parametros=()):
         return [dict(r) for r in CATALOGO]
     if 'vw_vivogo_produtos_historico' in sql:
         return [dict(r) for r in VENDAS]
+    if 'descontos_fabricante' in sql:
+        hoje = parametros[0]
+        return [dict(r) for r in RENOVA if r['inicio'] <= hoje <= r['fim']]
     raise AssertionError(sql)
 
 
@@ -328,6 +345,63 @@ with mock.patch.object(mysql, '_consultar', side_effect=sem_vendas):
     r = cc.get('/sap/estoque/?aba=reposicao')
 t('sem as vendas: estoque abre e avisa na reposição', r.status_code == 200
   and 'Vendas do Vivo GO indisponíveis agora' in r.content.decode())
+
+print('\n== 9) CATEGORIAS PADRONIZADAS (24/11/2026) ==')
+est._MEMORIA.clear(); cache.clear()
+foto = est.fotografia(forcar=True)
+cats = est.categorias(foto)
+t('cada categoria uma vez, com a grafia mais usada', cats.count('Essenciais') == 1 and 'essenciais' not in cats
+  and cats.count('Demais Eletrônicos') == 1 and 'Demais eletrônicos' not in cats, cats)
+t('"Sem categoria" uma vez, no fim', cats[-1] == 'Sem categoria' and cats.count('Sem categoria') == 1)
+fabs = est.fabricantes(foto)
+t('fabricante: TP Link e TP-Link viram um só; GEONAV e Geonav também', len([f for f in fabs if 'tp' in f.lower()]) == 1
+  and len([f for f in fabs if f.lower() == 'geonav']) == 1, fabs)
+t('subcategoria padronizada', {foto['catalogo'][m]['subcategoria'] for m in ('22000002', '22000003', '22000004')}
+  == {'Áudio e Vídeo'})
+t('filtrar por categoria pega as duas grafias', foto['catalogo']['22000001']['categoria'] == 'Essenciais')
+
+print('\n== 10) PREÇO E RENOVA NA GAVETA ==')
+from vendas.models import ItemPreco
+ItemPreco.objects.create(categoria='SMARTPHONES', nome='Samsung Galaxy A57 5G 256GB', cod_sap='TGSA60912000', valor=2299,
+                         ativo=True, importado_em=timezone.now(), extra={
+                             'skus': [{'cor': 'Azul', 'sku': 'TGSA60912000'}, {'cor': 'Azul', 'sku': GALAXY}],
+                             'PORTFÓLIO': 'In',
+                             'tabela': {'PRÉ': {'Preço': '2299.00', 'PIX e Vivo Pay': '2069.10', '12x': '2299.00',
+                                                '21x': '2582.73'},
+                                        'VIVO V': {'Preço': '1749.00', 'PIX e Vivo Pay': '1574.10', '12x': '1749.00',
+                                                   '21x': '1964.85'},
+                                        'CONTROLE': {'Preço': '-'}}})
+ItemPreco.objects.create(categoria='ELETRÔNICOS_LP_Não Conectados', nome='Carregador USB-C de 20W', cod_sap=CARREGADOR,
+                         valor=219, ativo=True, importado_em=timezone.now(), extra={'skus': [{'sku': CARREGADOR}]})
+j = cc.get(f'/sap/estoque/produto/?material={GALAXY}&minha=057E').json()
+pr = j.get('preco') or {}
+t('clicar no produto: preço da tabela, pelo SKU da cor', j['ok'] and pr.get('valor') == 2299.0, j.get('preco'))
+t('PIX/Vivo Pay, 12x e 21x (parcela e total)', pr.get('pix') == 2069.1 and pr.get('parcela12') == 191.58
+  and pr.get('parcela21') == 122.99 and pr.get('total21') == 2582.73, pr)
+t('o preço em cada plano (sem o "-" de plano que não vende)', [g['grupo'] for g in pr.get('grupos', [])] == ['PRÉ', 'VIVO V'])
+t('tem Renova: avisa o desconto, até quando e o preço com ele', j['renova'] and j['renova']['desconto'] == 300
+  and j['renova']['com_renova'] == 1999.0, j.get('renova'))
+t('onde tem: a sua loja primeiro e depois pela distância', [l['centro'] for l in j['lojas']] == ['057E', '064E', '220L']
+  and j['lojas'][0]['minha'] and j['lojas'][1]['km'] < j['lojas'][2]['km'], j.get('lojas'))
+j = cc.get(f'/sap/estoque/produto/?material={CARREGADOR}').json()
+t('sem Renova: não avisa nada', j['renova'] is None and j['preco']['valor'] == 219.0 and j['preco']['pix'] is None)
+j = cc.get(f'/sap/estoque/produto/?material={PELICULA}').json()
+t('sem preço na tabela: a gaveta abre igual', j['ok'] and j['preco'] is None)
+j = cc.get(f'/sap/estoque/unidades/?centro=064E&material={GALAXY}&modo=disponivel&minha=057E').json()
+t('a gaveta dos seriais também traz preço e Renova', j['preco']['valor'] == 2299.0 and j['renova']['desconto'] == 300)
+html = cc.get('/sap/estoque/?loja=057E').content.decode()
+t('na tabela: o nome abre a gaveta do produto e o selo Renova aparece', f'data-produto="{GALAXY}"' in html
+  and 'Renova −R$ 300' in html)
+t('quem não é da Visão SAP não vê preço', cv.get(f'/sap/estoque/produto/?material={GALAXY}',
+                                                HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code == 403)
+js = next((sc for sc in re.findall(r'<script>(.*?)</script>', html, re.S) if 'estFechar' in sc), '')
+arq = PASTA / 'estoque2.js'
+arq.write_text(js, encoding='utf-8')
+try:
+    chk = subprocess.run(['node', '--check', str(arq)], capture_output=True, text=True, timeout=30)
+    t('JS da tela (com preço e Renova) passa no node --check', chk.returncode == 0, chk.stderr[:300])
+except FileNotFoundError:
+    print('  (node não encontrado: pulei o --check)')
 
 print(f'\n{ok} OK / {fail} falhas')
 sys.exit(1 if fail else 0)

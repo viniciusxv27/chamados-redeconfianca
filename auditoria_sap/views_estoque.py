@@ -264,6 +264,124 @@ def _csv_detalhado(foto, unidades):
     return resposta
 
 
+# ---------------------------------------------------------------------------
+# Preço e Renova (24/11/2026): "faltou adicionar o valor do produto, quando clicar em cima,
+# e se tiver desconto do Renova, avisar".
+# ---------------------------------------------------------------------------
+GRUPO_DE_REFERENCIA = 'PRÉ'        # o preço "de vitrine" é o do bloco PRÉ da tabela da Vivo
+_PRECOS = {}
+
+
+def _dinheiro(valor):
+    try:
+        texto = str(valor).strip()
+        if not texto or texto == '-':
+            return None
+        return round(float(texto.replace(',', '.')), 2)
+    except (TypeError, ValueError):
+        return None
+
+
+def _indice_de_precos():
+    """{SKU/material: preço} da tabela de preços importada em /vendas/precos/ (vendas.ItemPreco).
+
+    O SKU da tabela é o material do SAP (um por cor, em ``extra['skus']``). Guardado em
+    memória até a tabela mudar (nova importação ou edição)."""
+    from django.db.models import Count, Max
+    from vendas.models import ItemPreco
+
+    ativos = ItemPreco.objects.filter(ativo=True)
+    marca = tuple(ativos.aggregate(n=Count('id'), i=Max('importado_em'), u=Max('updated_at')).values())
+    if _PRECOS.get('marca') == marca:
+        return _PRECOS['indice']
+    indice = {}
+    for item in ativos.only('id', 'nome', 'categoria', 'cod_sap', 'valor', 'extra', 'importado_em'):
+        extra = item.extra or {}
+        grupos = []
+        for grupo, valores in (extra.get('tabela') or {}).items():
+            if not isinstance(valores, dict):
+                continue
+            preco = _dinheiro(valores.get('Preço'))
+            if preco is None:
+                continue
+            t12, t21 = _dinheiro(valores.get('12x')), _dinheiro(valores.get('21x'))
+            grupos.append({'grupo': grupo, 'preco': preco, 'pix': _dinheiro(valores.get('PIX e Vivo Pay')),
+                           'parcela12': round(t12 / 12, 2) if t12 else None,
+                           'parcela21': round(t21 / 21, 2) if t21 else None, 'total21': t21})
+        base = next((g for g in grupos if g['grupo'].upper() == GRUPO_DE_REFERENCIA), grupos[0] if grupos else None)
+        valor = float(item.valor) if item.valor is not None else (base['preco'] if base else None)
+        if valor is None:
+            continue
+        preco = {
+            'nome': item.nome, 'tabela': item.categoria, 'valor': valor,
+            'pix': base['pix'] if base else None,
+            'parcela12': base['parcela12'] if base else None,
+            'parcela21': base['parcela21'] if base else None,
+            'total21': base['total21'] if base else None,
+            'grupo': base['grupo'] if base else '',
+            'grupos': grupos,
+            'portfolio': extra.get('PORTFÓLIO') or '',
+            'atualizado': item.importado_em.strftime('%d/%m/%Y') if item.importado_em else '',
+        }
+        skus = [item.cod_sap] + [s.get('sku') for s in (extra.get('skus') or []) if isinstance(s, dict)]
+        for sku in skus:
+            if sku:
+                indice.setdefault(str(sku).strip().upper(), preco)
+    _PRECOS.clear()
+    _PRECOS.update(marca=marca, indice=indice)
+    return indice
+
+
+def preco_do_material(material):
+    try:
+        return _indice_de_precos().get((material or '').upper())
+    except Exception:                                            # noqa: BLE001 — sem preço, a gaveta abre igual
+        logger.warning('Estoque SAP: tabela de preços não lida', exc_info=True)
+        return None
+
+
+def _renova_para_json(renova, preco):
+    if not renova:
+        return None
+    valor = preco['valor'] if preco else None
+    return {
+        'desconto': renova['desconto'],
+        'ate': renova['fim'].strftime('%d/%m/%Y') if hasattr(renova['fim'], 'strftime') else str(renova['fim']),
+        'modelo': renova['modelo'],
+        'com_renova': round(valor - renova['desconto'], 2) if valor else None,
+    }
+
+
+@login_required
+@so_auditoria
+def estoque_produto(request):
+    """A gaveta do produto: preço (base, PIX/Vivo Pay, 12x, 21x, por plano), Renova e onde tem."""
+    try:
+        foto = est.fotografia()
+    except SapIndisponivel as exc:
+        return JsonResponse({'ok': False, 'erro': str(exc)}, status=503)
+    material = (request.GET.get('material') or '').strip().upper()
+    minha = (request.GET.get('minha') or '').strip().upper()
+    if not material:
+        return JsonResponse({'ok': False, 'erro': 'Produto inválido.'}, status=400)
+    p = est.produto(foto, material)
+    preco = preco_do_material(material)
+    lojas = est.lojas_com_o_produto(foto, material, minha)
+    for loja in lojas:
+        loja['cor'] = cor_da_loja(loja['centro'])
+    return JsonResponse({
+        'ok': True,
+        'produto': {k: p[k] for k in ('nome', 'cor', 'material', 'categoria', 'subcategoria', 'fabricante',
+                                      'descricao_sap')},
+        'preco': preco,
+        'renova': _renova_para_json(p.get('renova'), preco),
+        'lojas': lojas,
+        'livre_rede': sum(l['livre'] for l in lojas),
+        'transito_rede': sum(l['transito'] for l in lojas),
+        'minha': est.nome_do_centro(foto, minha) if minha in est.centros_da_foto(foto) else '',
+    })
+
+
 @login_required
 @so_auditoria
 def estoque_unidades(request):
@@ -292,6 +410,8 @@ def estoque_unidades(request):
         'cor': cor_da_loja(centro),
         'km': round(km) if km is not None else None,
         'produto': {k: p[k] for k in ('nome', 'cor', 'material', 'categoria', 'descricao_sap')},
+        'preco': preco_do_material(material),
+        'renova': _renova_para_json(p.get('renova'), preco_do_material(material)),
         'quantidade': int(qtd),
         'sem_serial': max(0, int(qtd) - len(unidades)),
         'unidades': [{

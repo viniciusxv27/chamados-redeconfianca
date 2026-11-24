@@ -261,6 +261,38 @@ def _ler_iq09(execucao):
     return unidades, descricoes
 
 
+# Grafias diferentes do mesmo nome no catálogo do SAP que a chave sozinha não junta.
+MESMO_NOME = {'bluecastle': 'blucastle'}
+CAMPOS_PADRONIZADOS = ('categoria', 'subcategoria', 'fabricante')
+
+
+def _chave_nome(texto):
+    """"Demais Eletrônicos", "Demais eletrônicos" e "TP-Link"/"TP Link" viram a mesma chave."""
+    chave = re.sub(r'[^0-9a-z]', '', _sem_acento(texto))
+    return MESMO_NOME.get(chave, chave)
+
+
+def padronizar(valores):
+    """{grafia: grafia padrão} — vale a mais usada; no empate, a que não está toda em maiúsculas.
+
+    Pedido de 24/11/2026: "algumas categorias ficaram duplicadas, ajuste e padronize" —
+    o catálogo traz "Bem Estar" (189) e "Bem estar" (1), "Áudio e Vídeo" e "Áudio e vídeo",
+    "HUAWEI" e "Huawei", "PlayStation" e "Playstation"..."""
+    contagem = {}
+    for valor in valores:
+        if valor:
+            contagem[valor] = contagem.get(valor, 0) + 1
+    por_chave = {}
+    for valor, n in contagem.items():
+        por_chave.setdefault(_chave_nome(valor), []).append((n, not valor.isupper(), valor))
+    padrao = {}
+    for grafias in por_chave.values():
+        escolhida = max(grafias)[2]
+        for _n, _m, valor in grafias:
+            padrao[valor] = escolhida
+    return padrao
+
+
 def _ler_catalogo():
     catalogo = {}
     for r in mysql._consultar(
@@ -270,7 +302,32 @@ def _ler_catalogo():
         if cod:
             catalogo[cod] = {campo: _texto(r[campo]) for campo in
                              ('nome_comercial', 'cor', 'fabricante', 'categoria', 'subcategoria', 'gama')}
+    for campo in CAMPOS_PADRONIZADOS:
+        padrao = padronizar(item[campo] for item in catalogo.values())
+        for item in catalogo.values():
+            item[campo] = padrao.get(item[campo], item[campo])
     return catalogo
+
+
+def _ler_renova(hoje):
+    """Descontos do Vivo Renova vigentes hoje (descontos_fabricante, a "Tabela Vivo Renova").
+
+    ``{chave do nome: {'desconto', 'fim', 'modelo', 'fabricante'}}`` — pelo nome comercial
+    e pelo modelo, que é como a tabela traz o aparelho ("iPhone 16 128GB")."""
+    renova = {}
+    for r in mysql._consultar(
+            "SELECT fabricante, modelo, nome_comercial, desconto, inicio, fim FROM descontos_fabricante "
+            "WHERE inicio <= %s AND fim >= %s", (hoje, hoje)):
+        desconto = _numero(r['desconto'])
+        if desconto <= 0:
+            continue
+        item = {'desconto': desconto, 'fim': r['fim'], 'modelo': _texto(r['modelo']) or _texto(r['nome_comercial']),
+                'fabricante': _texto(r['fabricante'])}
+        for nome in (r['nome_comercial'], r['modelo']):
+            chave = _chave_nome(nome)
+            if chave and (chave not in renova or renova[chave]['desconto'] < desconto):
+                renova[chave] = item
+    return renova
 
 
 def _ler_vendas(hoje):
@@ -303,7 +360,7 @@ def fotografia(forcar=False):
     """O estoque da última carga, pronto para a tela. Levanta ``mysql.SapIndisponivel``."""
     iq09, mb52 = ultimas_cargas()
     hoje = timezone.localdate()
-    chave = f'sap_estoque:foto:v2:{iq09}:{mb52}:{hoje.isoformat()}'
+    chave = f'sap_estoque:foto:v3:{iq09}:{mb52}:{hoje.isoformat()}'
     if not forcar and _MEMORIA.get('chave') == chave:
         return _MEMORIA['foto']
     foto = None
@@ -325,8 +382,13 @@ def fotografia(forcar=False):
         except mysql.SapIndisponivel:
             logger.warning('Estoque SAP: vendas do Vivo GO não lidas (reposição sem vendas)', exc_info=True)
             vendas, nomes_vendas = None, {}
+        try:
+            renova = _ler_renova(hoje)
+        except mysql.SapIndisponivel:
+            logger.warning('Estoque SAP: descontos do Renova não lidos', exc_info=True)
+            renova = {}
         foto = {
-            'iq09': iq09, 'mb52': mb52,
+            'iq09': iq09, 'mb52': mb52, 'renova': renova,
             'quando_iq09': _data_da_carga(iq09), 'quando_mb52': _data_da_carga(mb52),
             'saldos': saldos, 'transito': transito, 'unidades': unidades,
             'descricoes': {**desc_iq09, **desc_mb52}, 'nomes_sap': nomes_sap,
@@ -380,6 +442,7 @@ def produto(foto, material):
         'gama': cat.get('gama', ''),
         'descricao_sap': descricao,
         'tem_cadastro': bool(cat),
+        'renova': (foto.get('renova') or {}).get(_chave_nome(nome)),
     }
 
 
@@ -568,8 +631,25 @@ def catalogo(foto, busca='', categoria='', fabricante=''):
 
 
 def categorias(foto):
-    return sorted({(c.get('categoria') or 'Sem categoria') for c in foto['catalogo'].values()} | {'Sem categoria'})
+    """As categorias do filtro, uma de cada (o catálogo já vem padronizado); "Sem categoria" no fim."""
+    nomes = {c.get('categoria') for c in foto['catalogo'].values() if c.get('categoria')}
+    return sorted(nomes, key=_sem_acento) + ['Sem categoria']
 
 
 def fabricantes(foto):
-    return sorted({c.get('fabricante') for c in foto['catalogo'].values() if c.get('fabricante')})
+    return sorted({c.get('fabricante') for c in foto['catalogo'].values() if c.get('fabricante')}, key=_sem_acento)
+
+
+def lojas_com_o_produto(foto, material, minha=''):
+    """Onde tem o material (livre e em trânsito), da loja mais perto de ``minha`` para a mais longe."""
+    origem = POR_CENTRO.get(minha)
+    lojas = []
+    for centro in centros_da_foto(foto):
+        livre, transito = livre_para_venda(foto, centro, material), em_transito(foto, centro, material)
+        if not (livre or transito):
+            continue
+        km = distancia_km(origem, POR_CENTRO.get(centro)) if origem and centro != minha else (0 if centro == minha else None)
+        lojas.append({'centro': centro, 'nome': nome_do_centro(foto, centro), 'livre': int(livre),
+                      'transito': int(transito), 'km': None if km is None else round(km), 'minha': centro == minha})
+    lojas.sort(key=lambda l: (not l['minha'], l['km'] if l['km'] is not None else 99999, -l['livre']))
+    return lojas

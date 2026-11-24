@@ -136,6 +136,13 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
     .est-compacto .est-fixa > p { max-width:13rem; }
     .est-compacto td.est-fixa { padding-top:.35rem !important; padding-bottom:.35rem !important; }
     .est-minha { background:color-mix(in srgb, var(--c, #0EA5E9) 8%, #fff) !important; }
+    .est-produto { text-align:left; font-weight:700; color:#0F172A; }
+    .est-produto:hover { color:#0369A1; text-decoration:underline; text-underline-offset:2px; }
+    .est-renova { display:inline-flex; align-items:center; gap:.25rem; margin-left:.25rem; padding:.05rem .45rem; border-radius:999px;
+                  font-size:10px; font-weight:800; background:#DCFCE7; color:#166534; border:1px solid #86EFAC; white-space:nowrap; vertical-align:middle; }
+    .est-preco { border-radius:1rem; padding:.9rem 1rem; background:linear-gradient(135deg,#F0F9FF,#EEF2FF); border:1px solid #E0E7FF; }
+    .est-preco-valor { font-size:1.6rem; font-weight:800; line-height:1.1; color:#0F172A; font-variant-numeric:tabular-nums; }
+    .est-renova-aviso { border-radius:1rem; padding:.75rem 1rem; background:#ECFDF5; border:1px solid #A7F3D0; color:#065F46; }
     .est-copiar { display:inline-flex; align-items:center; justify-content:center; width:1.35rem; height:1.35rem; border-radius:.4rem;
                   color:#94A3B8; transition:background .15s, color .15s; flex:none; }
     .est-copiar:hover { background:#E0F2FE; color:#0369A1; }
@@ -171,6 +178,11 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
     html.dark .est-sit-insuficiente { background:rgba(249,115,22,.18); color:#fdba74; }
     html.dark .est-sit-ok { background:rgba(34,197,94,.16); color:#86efac; }
     html.dark .est-barra { background:var(--tema-superficie-3); }
+    html.dark .est-produto { color:var(--tema-texto); }
+    html.dark .est-renova { background:rgba(34,197,94,.16); color:#86efac; border-color:rgba(34,197,94,.4); }
+    html.dark .est-preco { background:var(--tema-superficie-2); border-color:var(--tema-borda); }
+    html.dark .est-preco-valor { color:var(--tema-texto); }
+    html.dark .est-renova-aviso { background:rgba(34,197,94,.12); border-color:rgba(34,197,94,.35); color:#a7f3d0; }
     html.dark .est-barra-topo { background:var(--tema-superficie-2); border-color:var(--tema-borda); }
     html.dark .est-nav button, html.dark .est-nav select { background:var(--tema-superficie); border-color:var(--tema-borda); color:var(--tema-texto); }
     html.dark .est-rolagem::-webkit-scrollbar-thumb { background:var(--tema-superficie-3); border-color:var(--tema-superficie); }
@@ -402,7 +414,7 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
                 {% for linha in pagina %}
                 <tr data-busca="{{ linha.produto.nome }} {{ linha.produto.cor }} {{ linha.produto.material }} {{ linha.produto.categoria }} {{ linha.produto.fabricante }}">
                     <td class="est-fixa px-3 py-2" data-v="{{ linha.produto.nome }}">
-                        <p class="font-semibold text-gray-900 leading-snug">{{ linha.produto.nome }}</p>
+                        <p class="leading-snug"><button type="button" class="est-produto" data-produto="{{ linha.produto.material }}" title="Ver preço, Renova e onde tem">{{ linha.produto.nome }}</button>{% if linha.produto.renova %} <span class="est-renova" title="Desconto Vivo Renova até {{ linha.produto.renova.fim|date:'d/m' }}"><i class="fas fa-recycle"></i>Renova −R$ {{ linha.produto.renova.desconto|floatformat:0 }}</span>{% endif %}</p>
                         <p class="text-[11px] text-gray-500 flex items-center gap-1 flex-wrap">
                             {% if linha.produto.cor %}<span>{{ linha.produto.cor }} ·</span>{% endif %}
                             <span class="font-mono">{{ linha.produto.material }}</span><button type="button" class="est-copiar" data-copiar="{{ linha.produto.material }}" title="Copiar o material"><i class="far fa-copy text-[10px]"></i></button>
@@ -455,7 +467,7 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
                 {% for l in pagina %}
                 <tr data-busca="{{ l.produto.nome }} {{ l.produto.cor }} {{ l.produto.material }} {{ l.loja }}">
                     <td class="est-fixa px-3 py-2" data-v="{{ l.produto.nome }}">
-                        <p class="font-semibold text-gray-900 leading-snug">{{ l.produto.nome }}</p>
+                        <p class="leading-snug"><button type="button" class="est-produto" data-produto="{{ l.produto.material }}" title="Ver preço, Renova e onde tem">{{ l.produto.nome }}</button>{% if l.produto.renova %} <span class="est-renova" title="Desconto Vivo Renova até {{ l.produto.renova.fim|date:'d/m' }}"><i class="fas fa-recycle"></i>Renova −R$ {{ l.produto.renova.desconto|floatformat:0 }}</span>{% endif %}</p>
                         <p class="text-[11px] text-gray-500 flex items-center gap-1 flex-wrap">
                             {% if l.produto.cor %}<span>{{ l.produto.cor }} ·</span>{% endif %}
                             <span class="font-mono">{{ l.produto.material }}</span><button type="button" class="est-copiar" data-copiar="{{ l.produto.material }}" title="Copiar o material"><i class="far fa-copy text-[10px]"></i></button>
@@ -509,7 +521,7 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
                 {% for u in pagina %}
                 <tr data-busca="{{ u.produto.nome }} {{ u.material }} {{ u.serial }} {{ u.loja }} {{ u.deposito }}">
                     <td class="est-fixa px-3 py-2" data-v="{{ u.produto.nome }}">
-                        <p class="font-semibold text-gray-900 leading-snug">{{ u.produto.nome }}</p>
+                        <p class="leading-snug"><button type="button" class="est-produto" data-produto="{{ u.produto.material }}" title="Ver preço, Renova e onde tem">{{ u.produto.nome }}</button>{% if u.produto.renova %} <span class="est-renova" title="Desconto Vivo Renova até {{ u.produto.renova.fim|date:'d/m' }}"><i class="fas fa-recycle"></i>Renova −R$ {{ u.produto.renova.desconto|floatformat:0 }}</span>{% endif %}</p>
                         <p class="text-[11px] text-gray-500 flex items-center gap-1 flex-wrap">
                             {% if u.produto.cor %}<span>{{ u.produto.cor }} ·</span>{% endif %}
                             <span class="font-mono">{{ u.material }}</span><button type="button" class="est-copiar" data-copiar="{{ u.material }}" title="Copiar o material"><i class="far fa-copy text-[10px]"></i></button>
@@ -545,7 +557,7 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
                 {% for l in pagina %}
                 <tr data-busca="{{ l.produto.nome }} {{ l.produto.cor }} {{ l.produto.material }} {{ l.produto.categoria }} {{ l.produto.fabricante }} {{ l.produto.descricao_sap }}">
                     <td class="est-fixa px-3 py-2" data-v="{{ l.produto.nome }}">
-                        <p class="font-semibold text-gray-900 leading-snug">{{ l.produto.nome }}</p>
+                        <p class="leading-snug"><button type="button" class="est-produto" data-produto="{{ l.produto.material }}" title="Ver preço, Renova e onde tem">{{ l.produto.nome }}</button>{% if l.produto.renova %} <span class="est-renova" title="Desconto Vivo Renova até {{ l.produto.renova.fim|date:'d/m' }}"><i class="fas fa-recycle"></i>Renova −R$ {{ l.produto.renova.desconto|floatformat:0 }}</span>{% endif %}</p>
                         <p class="text-[11px] text-gray-500">{{ l.produto.cor|default:"" }}{% if l.produto.gama %} · {{ l.produto.gama }}{% endif %}{% if not l.produto.tem_cadastro %} <span class="text-amber-600">sem nome comercial</span>{% endif %}</p>
                     </td>
                     <td class="px-3 py-2" data-v="{{ l.produto.material }}"><span class="inline-flex items-center gap-1 font-mono text-xs">{{ l.produto.material }}<button type="button" class="est-copiar" data-copiar="{{ l.produto.material }}" title="Copiar o material"><i class="far fa-copy text-[10px]"></i></button></span></td>
@@ -591,6 +603,7 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
 <script>
 (function () {
     var URL = '{% url "auditoria_sap:estoque_unidades" %}';
+    var URL_PRODUTO = '{% url "auditoria_sap:estoque_produto" %}';
     var MINHA = '{{ f.loja }}';
     var colunas = [];
     try { colunas = JSON.parse((document.getElementById('estColunas') || {}).textContent || '[]'); } catch (e) {}
@@ -748,6 +761,74 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
                try { document.execCommand('copy'); feito(); } catch (e) { window.prompt('Copie:', texto); } t.remove(); }
     }
 
+    /* ---- Preço e Renova (na gaveta do produto e na dos seriais) ---- */
+    function reais(v) { return v == null ? '—' : Number(v).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}); }
+    function blocoRenova(r) {
+        if (!r) return '';
+        return '<div class="est-renova-aviso mt-3 flex items-start gap-3"><i class="fas fa-recycle text-xl mt-0.5"></i><div>' +
+            '<p class="font-bold">Tem desconto Vivo Renova: ' + reais(r.desconto) + '</p>' +
+            '<p class="text-xs mt-0.5">Na troca do aparelho usado, até ' + esc(r.ate) +
+            (r.com_renova != null ? ' · o preço cai para <strong>' + reais(r.com_renova) + '</strong>' : '') + '.</p></div></div>';
+    }
+    function blocoPreco(p, compacto) {
+        if (!p) return '<div class="est-preco text-sm text-gray-500"><i class="fas fa-tag mr-1"></i>Sem preço na tabela de preços do portal para este material.</div>';
+        var linhas = [];
+        if (p.pix != null) linhas.push('<span><i class="fas fa-bolt mr-1 text-amber-500"></i>PIX / Vivo Pay <strong>' + reais(p.pix) + '</strong></span>');
+        if (p.parcela12 != null) linhas.push('<span><i class="far fa-credit-card mr-1 text-sky-600"></i>12x de <strong>' + reais(p.parcela12) + '</strong> sem juros</span>');
+        if (p.parcela21 != null) linhas.push('<span>21x de <strong>' + reais(p.parcela21) + '</strong> (total ' + reais(p.total21) + ')</span>');
+        var html = '<div class="est-preco">' +
+            '<p class="text-[11px] uppercase tracking-wide font-bold text-sky-700">Preço' + (p.grupo ? ' · plano ' + esc(p.grupo) : '') + '</p>' +
+            '<p class="est-preco-valor mt-1">' + reais(p.valor) + '</p>' +
+            (linhas.length ? '<div class="mt-2 flex flex-col gap-1 text-xs text-gray-700">' + linhas.join('') + '</div>' : '') +
+            '<p class="mt-2 text-[10px] text-gray-400">Tabela de preços do portal' + (p.atualizado ? ' de ' + esc(p.atualizado) : '') +
+            (p.portfolio ? ' · portfólio ' + esc(p.portfolio) : '') + '</p></div>';
+        if (!compacto && p.grupos && p.grupos.length > 1) {
+            html += '<details class="mt-2 rounded-xl border border-gray-100"><summary class="cursor-pointer px-3 py-2 text-xs font-semibold text-gray-700">Preço em cada plano (' + p.grupos.length + ')</summary>' +
+                '<table class="w-full text-xs"><thead class="text-gray-400"><tr><th class="text-left px-3 py-1">Plano</th><th class="text-right px-2">Preço</th><th class="text-right px-2">PIX/Vivo Pay</th><th class="text-right px-3">12x</th></tr></thead><tbody>' +
+                p.grupos.map(function (g) {
+                    return '<tr class="border-t border-gray-50"><td class="px-3 py-1">' + esc(g.grupo) + '</td><td class="text-right px-2 font-semibold">' + reais(g.preco) +
+                        '</td><td class="text-right px-2">' + reais(g.pix) + '</td><td class="text-right px-3">' + reais(g.parcela12) + '</td></tr>';
+                }).join('') + '</tbody></table></details>';
+        }
+        return html;
+    }
+
+    function abrirProduto(material) {
+        document.getElementById('estGavetaTopo').style.borderTopColor = '#6366F1';
+        document.getElementById('estGavetaTitulo').textContent = 'Carregando…';
+        document.getElementById('estGavetaSub').textContent = '';
+        document.getElementById('estGavetaCorpo').innerHTML = '<p class="text-gray-400"><i class="fas fa-circle-notch fa-spin mr-1"></i>Buscando o preço e onde tem…</p>';
+        document.getElementById('estGavetaRodape').textContent = '';
+        gaveta.classList.remove('fechada'); gaveta.setAttribute('aria-hidden', 'false'); fundo.classList.remove('hidden');
+        fetch(URL_PRODUTO + '?material=' + encodeURIComponent(material) + '&minha=' + encodeURIComponent(MINHA),
+              {headers: {'X-Requested-With': 'XMLHttpRequest'}, credentials: 'same-origin'})
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d.ok) { document.getElementById('estGavetaCorpo').innerHTML = '<p class="text-red-600">' + esc(d.erro || 'Não deu para abrir.') + '</p>'; return; }
+                var p = d.produto;
+                document.getElementById('estGavetaTitulo').textContent = p.nome + (p.cor ? ' · ' + p.cor : '');
+                document.getElementById('estGavetaSub').innerHTML =
+                    '<span class="inline-flex items-center gap-1">material <span class="font-mono">' + esc(p.material) + '</span>' +
+                    '<button type="button" class="est-copiar" data-copiar="' + esc(p.material) + '" title="Copiar o material"><i class="far fa-copy text-[10px]"></i></button></span>' +
+                    (p.categoria ? ' · ' + esc(p.categoria) + (p.subcategoria && p.subcategoria !== p.categoria ? ' / ' + esc(p.subcategoria) : '') : '') +
+                    (p.fabricante ? ' · ' + esc(p.fabricante) : '');
+                var lojas = d.lojas.length ? '<ul class="mt-2 space-y-1.5">' + d.lojas.map(function (l) {
+                    var cor = (l.cor && l.cor.forte) || '#0EA5E9';
+                    return '<li class="flex items-center justify-between gap-2 rounded-xl border border-gray-100 px-3 py-2">' +
+                        '<span class="est-loja text-sm" style="--c:' + cor + ';color:' + cor + '">' + esc(l.nome) + '</span>' +
+                        '<span class="flex items-center gap-2 text-xs">' +
+                        (l.minha ? '<span class="est-km est-km-perto">sua loja</span>' : (l.km != null ? '<span class="est-km ' + (l.km <= 30 ? 'est-km-perto' : l.km <= 120 ? 'est-km-media' : 'est-km-longe') + '">' + l.km + ' km</span>' : '')) +
+                        (l.livre ? '<button type="button" class="est-q ' + (l.livre >= 3 ? 'est-q-3' : 'est-q-1') + '" data-material="' + esc(p.material) + '" data-centro="' + esc(l.centro) + '" data-modo="disponivel" title="Ver os seriais">' + l.livre + '</button>' : '<span class="est-zero">·</span>') +
+                        (l.transito ? '<button type="button" class="est-q est-q-t" data-material="' + esc(p.material) + '" data-centro="' + esc(l.centro) + '" data-modo="transito" title="A caminho">' + l.transito + '</button>' : '') +
+                        '</span></li>';
+                }).join('') + '</ul>' : '<p class="mt-2 text-sm text-gray-500">Sem saldo livre nem em trânsito na rede.</p>';
+                document.getElementById('estGavetaCorpo').innerHTML = blocoPreco(d.preco, false) + blocoRenova(d.renova) +
+                    '<p class="mt-4 text-[11px] uppercase tracking-wide font-bold text-gray-500">Onde tem · ' + d.livre_rede + ' livre' + (d.transito_rede ? ' · ' + d.transito_rede + ' a caminho' : '') + '</p>' + lojas;
+                document.getElementById('estGavetaRodape').innerHTML = '<i class="fas fa-circle-info mr-1"></i>Clique numa quantidade para ver os seriais. Verde: 3 ou mais; laranja: 1–2; azul: a caminho.';
+            })
+            .catch(function () { document.getElementById('estGavetaCorpo').innerHTML = '<p class="text-red-600">Sem conexão agora. Tente de novo.</p>'; });
+    }
+
     /* ---- Gaveta com os seriais ---- */
     window.estFechar = function () { gaveta.classList.add('fechada'); gaveta.setAttribute('aria-hidden', 'true'); fundo.classList.add('hidden'); };
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') window.estFechar(); });
@@ -791,7 +872,8 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
                     }).join('') + '</ul>';
                     if (d.sem_serial) html += '<p class="mt-2 text-xs text-gray-500">+ ' + d.sem_serial + ' unidade(s) sem serial.</p>';
                 }
-                document.getElementById('estGavetaCorpo').innerHTML = html;
+                document.getElementById('estGavetaCorpo').innerHTML = blocoPreco(d.preco, true) + blocoRenova(d.renova) +
+                    '<p class="mt-4 mb-2 text-[11px] uppercase tracking-wide font-bold text-gray-500">' + (transito ? 'A caminho' : 'Seriais livres para venda') + '</p>' + html;
                 document.getElementById('estGavetaRodape').innerHTML = transito
                     ? '<i class="fas fa-circle-info mr-1"></i>Confirme a chegada antes de oferecer a unidade ao cliente.'
                     : '<i class="fas fa-circle-info mr-1"></i>Para transferir, passe à loja de origem o serial da unidade que você quer.';
@@ -802,6 +884,8 @@ auditoria_sap/estoque.py; a view em auditoria_sap/views_estoque.py.
     document.addEventListener('click', function (e) {
         var botaoCopiar = e.target.closest('[data-copiar]');
         if (botaoCopiar) { e.preventDefault(); copiar(botaoCopiar); return; }
+        var produto = e.target.closest('[data-produto]');
+        if (produto) { abrirProduto(produto.getAttribute('data-produto')); return; }
         var alvo = e.target.closest('[data-material][data-modo]');
         if (!alvo) return;
         var centro = alvo.getAttribute('data-centro') || colunas[+alvo.getAttribute('data-indice')];

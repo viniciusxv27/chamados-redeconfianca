@@ -14,6 +14,7 @@ urlpatterns = [
     # Estoque (23/11/2026): disponível, em trânsito, reposição, detalhado e produtos.
     path('estoque/', views_estoque.estoque, name='estoque'),
     path('estoque/unidades/', views_estoque.estoque_unidades, name='estoque_unidades'),
+    path('estoque/produto/', views_estoque.estoque_produto, name='estoque_produto'),
     path('renova/', views.renova, name='renova'),
     path('renova/<int:venda_id>/marcar/', views.renova_marcar, name='renova_marcar'),
     path('renova/configurar/', views.renova_config, name='renova_config'),
