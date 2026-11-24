@@ -3,8 +3,8 @@
 Cobre:
 - Renova da central: cartões só com os números; as listas recentes ficam nos modais "Ver detalhado";
   links seguem filtrados pela loja;
-- marcar item do check-list mostra o cartão concluído "Rotina ADM · Check-list da Loja X · dd/mm" no
-  Kanban do Impulso de quem marcou; remarcar não duplica; desmarcar tira o item e, sem itens, o cartão;
+- marcar item do check-list mostra o cartão "Rotina ADM · Check-list da Loja X · dd/mm" no
+  Kanban do Impulso de quem marcou, na coluna "Entregue (aguardando avaliação)" (23/11/2026); remarcar não duplica; desmarcar tira o item e, sem itens, o cartão;
   nenhum Meta é criado e a pontuação do Impulso não muda;
 - quem vê o espelho: a própria pessoa, o superuser (com filtro de colaborador), não um colega;
 - ranking do mês: ordem, % de conclusão, no prazo, dias 100%, domingo, broche configurável pelo SUPERADMIN;
@@ -191,9 +191,11 @@ k = kanban(ca)
 t('sem marcação, sem espelho', 'data-espelho-rotina-adm' not in k)
 t('marcar responde ok', marcar(ca, i1)['ok'])
 k = kanban(ca)
-t('marcar cria o cartão concluído no Kanban de quem marcou', titulo_cartao in k and 'data-espelho-rotina-adm' in k)
-pos_concluida = k.find('data-status="CONCLUIDA"')
-t('o cartão fica na coluna Concluída', 0 < pos_concluida < k.find(titulo_cartao), (pos_concluida, k.find(titulo_cartao)))
+t('marcar cria o cartão no Kanban de quem marcou', titulo_cartao in k and 'data-espelho-rotina-adm' in k)
+# 23/11/2026: vai para "Entregue (aguardando avaliação)", não mais para "Concluída".
+pos_entregue, pos_concluida = k.find('data-status="ENTREGUE"'), k.find('data-status="CONCLUIDA"')
+t('o cartão fica na coluna Aguardando avaliação (não na Concluída)',
+  0 < pos_entregue < k.find(titulo_cartao) < pos_concluida, (pos_entregue, k.find(titulo_cartao), pos_concluida))
 t('o cartão diz que não pontua', 'Não entra na pontuação do Impulso' in k)
 t('um item marcado', '1 item marcado' in k and 'loja 1/3 no dia' in k)
 marcar(ca, i2)

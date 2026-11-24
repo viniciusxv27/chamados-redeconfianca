@@ -394,7 +394,10 @@ def _ordem_das_concluidas(metas):
 
 
 def _espelho_rotina_adm(request, f, colaborador_id):
-    """Check-list da Rotina ADM concluído, como cartões só de leitura na coluna Concluída (12/11/2026).
+    """Check-list da Rotina ADM marcado, como cartões só de leitura no Kanban (12/11/2026).
+
+    A coluna é a de ``rotina_adm.espelho.COLUNA``: "Entregue (aguardando avaliação)"
+    desde 23/11/2026 (antes ficavam em "Concluída", sem ninguém ter avaliado).
 
     Não é Meta: não pontua, não arrasta, não conta no total da coluna. Some com os
     filtros de quem criou (o check-list não tem criador). Ver rotina_adm/espelho.py.
@@ -511,7 +514,7 @@ def metas_kanban(request):
         # Quadro "Projetos da Inteligência": None (e nenhuma consulta) para quem não é do setor.
         'projetos_intel': projetos_do_quadro(user),
         'estagios_intel': ESTAGIOS_INTEL,
-        # Check-list da Rotina ADM feito pela pessoa: cartões concluídos que não pontuam.
+        # Check-list da Rotina ADM feito pela pessoa: cartões que não pontuam, em "aguardando avaliação".
         'espelho_rotina_adm': _espelho_rotina_adm(request, f, colaborador_id),
         **filtros_impulso.contexto(request, f),
     }

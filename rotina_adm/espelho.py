@@ -18,12 +18,19 @@ Desenho escolhido (o menos invasivo):
 - Quem vê: a mesma régua de ``impulso.views._metas_do_usuario`` (superuser vê
   todos; gestor do Impulso vê os dele e a equipe; os demais, só os próprios), com
   os filtros de colaborador, nome, setor e mês do Kanban.
+- Coluna (23/11/2026): "Entregue (aguardando avaliação)" — o "Aguardando Aprovação"
+  do Kanban —, não mais "Concluída". Pedido: o cartão "Rotina ADM · Check-list da
+  Loja Anchieta · 23/11" deve ir para "Aguardando Aprovação". No Impulso só fica
+  Concluída a meta que o gestor avaliou; o check-list marcado é entrega do analista
+  que ninguém avaliou ainda, então o lugar dele é ao lado das metas entregues.
 """
 from collections import defaultdict
 
 from django.db.models import Count, Max
 
 LIMITE = 31
+# Status (coluna) do Kanban do Impulso em que os cartões aparecem: ver o docstring.
+COLUNA = 'ENTREGUE'
 
 
 def _quem_ve(user):
@@ -37,7 +44,7 @@ def _quem_ve(user):
 
 
 def cartoes_do_kanban(user, f=None, colaborador_id=None, limite=LIMITE):
-    """Os cartões concluídos do check-list para a coluna Concluída, ou None quando não há nenhum.
+    """Os cartões do check-list para a coluna ``COLUNA`` do Kanban, ou None quando não há nenhum.
 
     ``f`` é o dicionário de ``impulso.filtros.ler`` (nome, setor e mês do Kanban).
     """
@@ -96,4 +103,4 @@ def cartoes_do_kanban(user, f=None, colaborador_id=None, limite=LIMITE):
         })
     from .permissoes import pode_gerir
     return {'cartoes': cartoes, 'total': total, 'restantes': max(total - len(cartoes), 0),
-            've_ranking': pode_gerir(user)}
+            've_ranking': pode_gerir(user), 'coluna': COLUNA}
