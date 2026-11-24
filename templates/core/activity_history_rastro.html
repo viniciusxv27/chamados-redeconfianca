@@ -1,0 +1,183 @@
+{% extends 'base.html' %}
+{% comment %}
+/activity-history/rastro/ — rastro completo (24/11/2026): tudo o que as pessoas fizeram num dia/período,
+de três fontes (páginas e envios, ações registradas, varredura retroativa do banco). Filtro por pessoas
+(várias), fontes, automáticos e texto; exporta Excel (3 abas) ou CSV com os mesmos filtros.
+{% endcomment %}
+{% block title %}Rastro completo - Histórico{% endblock %}
+
+{% block extra_css %}
+<style>
+    .rt-card { background:#fff; border:1px solid #ECECF1; border-radius:1rem; box-shadow:0 1px 2px rgba(16,24,40,.04); }
+    .rt-campo { width:100%; border:1px solid #D1D5DB; border-radius:.5rem; padding:.5rem .75rem; font-size:.875rem; background:#fff; }
+    .rt-chip { display:inline-flex; align-items:center; gap:.35rem; padding:.3rem .7rem; border-radius:999px; font-size:.78rem; font-weight:700;
+               border:1px solid #E2E8F0; background:#fff; color:#334155; cursor:pointer; user-select:none; }
+    .rt-chip input { accent-color:#F97316; }
+    .rt-f-paginas { --c:#2563EB; } .rt-f-acoes { --c:#7C3AED; } .rt-f-banco { --c:#EA580C; }
+    .rt-fonte { display:inline-flex; align-items:center; gap:.3rem; font-size:.7rem; font-weight:800; padding:.1rem .5rem; border-radius:999px;
+                color:var(--c); background:color-mix(in srgb, var(--c) 12%, #fff); white-space:nowrap; }
+    .rt-tabela { width:100%; border-collapse:collapse; font-size:.82rem; }
+    .rt-tabela th { text-align:left; font-size:.7rem; text-transform:uppercase; letter-spacing:.04em; color:#64748B; padding:.55rem .7rem;
+                    background:#F8FAFC; position:sticky; top:0; z-index:1; }
+    .rt-tabela td { padding:.5rem .7rem; border-top:1px solid #F1F5F9; vertical-align:top; }
+    .rt-tabela tr.auto td { color:#94A3B8; }
+    .rt-hora { font-variant-numeric:tabular-nums; white-space:nowrap; font-weight:700; color:#0F172A; }
+    .rt-det { overflow-wrap:anywhere; color:#475569; }
+    .rt-pessoas { max-height:14rem; overflow-y:auto; border:1px solid #E2E8F0; border-radius:.6rem; padding:.3rem; }
+    .rt-pessoas label { display:flex; align-items:center; gap:.5rem; padding:.25rem .4rem; border-radius:.4rem; font-size:.82rem; cursor:pointer; }
+    .rt-pessoas label:hover { background:#FFF7ED; }
+    .rt-pessoas label.inativo { color:#94A3B8; }
+    html.dark .rt-card { background:var(--tema-superficie); border-color:var(--tema-borda); }
+    html.dark .rt-campo, html.dark .rt-chip { background:var(--tema-superficie-2); border-color:var(--tema-borda); color:var(--tema-texto); }
+    html.dark .rt-tabela th { background:var(--tema-superficie-2); color:var(--tema-texto-2); }
+    html.dark .rt-tabela td { border-color:var(--tema-borda); }
+    html.dark .rt-hora { color:var(--tema-texto); }
+    html.dark .rt-det { color:var(--tema-texto-2); }
+    html.dark .rt-pessoas { border-color:var(--tema-borda); }
+    html.dark .rt-fonte { background:color-mix(in srgb, var(--c) 22%, transparent); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto p-3 sm:p-5">
+    <a href="{% url 'core:activity_history' %}" class="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-orange-600 mb-2"><i class="fas fa-arrow-left"></i>Histórico de Atividades</a>
+    <div class="flex items-start justify-between gap-3 mb-4 flex-wrap">
+        <div>
+            <h1 class="text-2xl font-bold flex items-center gap-2.5">
+                <span class="w-9 h-9 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center"><i class="fas fa-shoe-prints"></i></span>
+                Rastro completo
+            </h1>
+            <p class="text-sm text-gray-500 mt-1">
+                {% if mesmo_dia %}{{ de|date:"l, d/m/Y" }}{% else %}{{ de|date:"d/m/Y" }} a {{ ate|date:"d/m/Y" }}{% endif %}
+                · {{ total }} movimentaç{{ total|pluralize:"ão,ões" }} · {{ resumo|length }} pessoa{{ resumo|length|pluralize }}
+            </p>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+            <a href="{% url 'core:rastro_exportar' %}?{{ qs }}" class="inline-flex items-center gap-2 px-3.5 py-2 min-h-[2.5rem] bg-orange-500 text-white rounded-lg text-sm font-semibold hover:bg-orange-600"><i class="fas fa-file-excel"></i>Exportar Excel</a>
+            <a href="{% url 'core:rastro_exportar' %}?{{ qs }}&formato=csv" class="inline-flex items-center gap-2 px-3.5 py-2 min-h-[2.5rem] bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-50"><i class="fas fa-file-csv text-emerald-600"></i>CSV</a>
+        </div>
+    </div>
+
+    <form method="get" class="rt-card p-4 mb-4" id="rtForm">
+        <div class="grid gap-4 lg:grid-cols-3">
+            <div class="space-y-3">
+                <div class="grid grid-cols-2 gap-2">
+                    <div><label class="block text-xs font-semibold text-gray-500 mb-1" for="rtDe">De</label><input type="date" id="rtDe" name="de" value="{{ de|date:'Y-m-d' }}" class="rt-campo"></div>
+                    <div><label class="block text-xs font-semibold text-gray-500 mb-1" for="rtAte">Até</label><input type="date" id="rtAte" name="ate" value="{{ ate|date:'Y-m-d' }}" class="rt-campo"></div>
+                </div>
+                <p class="text-xs text-gray-400">Até {{ max_dias }} dias por vez. Para um dia só, deixe as duas datas iguais.</p>
+                <div><label class="block text-xs font-semibold text-gray-500 mb-1" for="rtBusca">Contém o texto</label>
+                    <input id="rtBusca" name="q" value="{{ busca }}" class="rt-campo" placeholder="chamado, /vendas/, comunicado…"></div>
+            </div>
+            <div>
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-xs font-semibold text-gray-500">Pessoas <span id="rtQtd" class="text-orange-600">{% if ids %}({{ ids|length }}){% else %}(todas){% endif %}</span></span>
+                    <button type="button" id="rtLimpar" class="text-xs text-gray-500 hover:text-orange-600">limpar</button>
+                </div>
+                <input id="rtFiltroPessoa" class="rt-campo mb-1.5" placeholder="Procurar pessoa…" autocomplete="off">
+                <div class="rt-pessoas" id="rtPessoas">
+                    {% for p in pessoas %}
+                    <label class="{% if not p.is_active %}inativo{% endif %}" data-nome="{{ p.get_full_name|lower }} {{ p.email|lower }}">
+                        <input type="checkbox" name="u" value="{{ p.id }}" {% if p.id in ids %}checked{% endif %}>
+                        {{ p.get_full_name|default:p.email }}{% if not p.is_active %} (inativo){% endif %}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="space-y-3">
+                <div>
+                    <span class="block text-xs font-semibold text-gray-500 mb-1.5">Fontes</span>
+                    <div class="flex flex-wrap gap-2">
+                        {% for c, r in todas_fontes %}
+                        <label class="rt-chip"><input type="checkbox" name="fonte" value="{{ c }}" {% if c in fontes %}checked{% endif %}>{{ r }}</label>
+                        {% endfor %}
+                    </div>
+                </div>
+                <label class="rt-chip"><input type="checkbox" name="auto" value="0" {% if sem_auto %}checked{% endif %}>Esconder o que o sistema grava sozinho</label>
+                <div class="flex gap-2 pt-1">
+                    <button class="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-semibold hover:bg-gray-700"><i class="fas fa-magnifying-glass"></i>Aplicar</button>
+                    <button formaction="{% url 'core:rastro_exportar' %}" class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-50"><i class="fas fa-file-excel text-emerald-600"></i>Exportar com estes filtros</button>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    {% for a in avisos %}
+    <div class="rt-card p-3 mb-2 text-sm flex gap-2" style="border-color:#FDE68A;background:#FFFBEB;color:#92400E"><i class="fas fa-circle-info mt-0.5"></i><span>{{ a }}</span></div>
+    {% endfor %}
+
+    <div class="grid lg:grid-cols-4 gap-4 items-start mt-3">
+        <aside class="rt-card p-4 lg:col-span-1">
+            <h2 class="font-bold mb-2 text-sm">Por pessoa</h2>
+            <ul class="space-y-1.5 text-sm max-h-[38rem] overflow-y-auto">
+                {% for p in resumo %}
+                <li class="flex items-center gap-2">
+                    <a class="flex-1 min-w-0 truncate hover:text-orange-600" href="?de={{ de|date:'Y-m-d' }}&ate={{ ate|date:'Y-m-d' }}&u={{ p.user_id }}{% for f in fontes %}&fonte={{ f }}{% endfor %}{% if sem_auto %}&auto=0{% endif %}" title="{{ p.setor }}">{{ p.pessoa }}</a>
+                    <span class="text-xs text-gray-400 tabular-nums">{{ p.primeiro|time:"H:i" }}–{{ p.ultimo|time:"H:i" }}</span>
+                    <strong class="tabular-nums">{{ p.total }}</strong>
+                </li>
+                {% empty %}<li class="text-gray-400">Ninguém no período.</li>{% endfor %}
+            </ul>
+            <div class="mt-3 pt-3 border-t text-xs text-gray-500 space-y-1">
+                {% for c, r in todas_fontes %}<p><span class="rt-fonte rt-f-{{ c }}">{{ r }}</span> {% for k, v in contagem_fontes.items %}{% if k == c %}{{ v }}{% endif %}{% endfor %}</p>{% endfor %}
+            </div>
+        </aside>
+
+        <div class="rt-card lg:col-span-3 overflow-hidden">
+            <div class="overflow-x-auto" style="max-height:75vh">
+                <table class="rt-tabela" data-rc-wrapped="1">
+                    <thead><tr><th>Hora</th><th>Pessoa</th><th>Fonte</th><th>O que</th><th>Detalhe</th></tr></thead>
+                    <tbody>
+                    {% for e in pagina %}
+                    <tr class="{% if e.automatico %}auto{% endif %}">
+                        <td class="rt-hora">{% if not mesmo_dia %}<span class="text-gray-400 font-normal">{{ e.local|date:"d/m" }}</span> {% endif %}{{ e.local|time:"H:i:s" }}</td>
+                        <td><span class="font-semibold">{{ e.pessoa }}</span>{% if e.setor %}<span class="block text-xs text-gray-400">{{ e.setor }}</span>{% endif %}</td>
+                        <td><span class="rt-fonte rt-f-{{ e.fonte }}">{% for c, r in todas_fontes %}{% if c == e.fonte %}{{ r }}{% endif %}{% endfor %}</span>{% if e.automatico %}<span class="block text-[11px] text-gray-400 mt-0.5">automático</span>{% endif %}</td>
+                        <td><span class="font-semibold">{{ e.o_que }}</span><span class="block text-xs text-gray-400">{{ e.modulo }}{% if e.vinculo %} · como {{ e.vinculo|lower }}{% endif %}</span></td>
+                        <td class="rt-det">{% if e.endereco and e.fonte == 'paginas' and e.o_que == 'Abriu a página' %}<a href="{{ e.endereco }}" class="underline hover:text-orange-600" target="_blank" rel="noopener">{{ e.detalhe }}</a>{% else %}{{ e.detalhe }}{% endif %}{% if e.ip %}<span class="block text-[11px] text-gray-400">IP {{ e.ip }}</span>{% endif %}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="text-center text-gray-400 py-10">Nada registrado com esses filtros.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if pagina.has_other_pages %}
+            <div class="flex items-center justify-center gap-3 p-3 border-t text-sm">
+                {% if pagina.has_previous %}<a class="px-3 py-1.5 border rounded-lg hover:bg-gray-50" href="?{{ qs }}&page={{ pagina.previous_page_number }}">Anterior</a>{% endif %}
+                <span class="text-gray-500">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }} · a exportação leva tudo</span>
+                {% if pagina.has_next %}<a class="px-3 py-1.5 border rounded-lg hover:bg-gray-50" href="?{{ qs }}&page={{ pagina.next_page_number }}">Próxima</a>{% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var filtro = document.getElementById('rtFiltroPessoa'), lista = document.getElementById('rtPessoas'), qtd = document.getElementById('rtQtd');
+    var norm = function (v) { return String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); };
+    filtro.addEventListener('input', function () {
+        var t = norm(filtro.value);
+        lista.querySelectorAll('label').forEach(function (l) { l.style.display = !t || norm(l.dataset.nome).indexOf(t) >= 0 ? '' : 'none'; });
+    });
+    function contar() {
+        var n = lista.querySelectorAll('input:checked').length;
+        qtd.textContent = n ? '(' + n + ')' : '(todas)';
+    }
+    lista.addEventListener('change', contar);
+    document.getElementById('rtLimpar').addEventListener('click', function () {
+        lista.querySelectorAll('input:checked').forEach(function (c) { c.checked = false; });
+        contar();
+    });
+    // Marcadas primeiro, para não se perderem no meio da lista.
+    Array.prototype.slice.call(lista.querySelectorAll('input:checked')).reverse().forEach(function (c) { lista.prepend(c.parentNode); });
+    document.getElementById('rtForm').addEventListener('submit', function (ev) {
+        var botao = ev.submitter;
+        if (botao && !botao.getAttribute('formaction')) {
+            setTimeout(function () { botao.disabled = true; botao.innerHTML = '<i class="fas fa-spinner fa-spin"></i>Varrendo o banco…'; }, 0);
+        }
+    });
+})();
+</script>
+{% endblock %}

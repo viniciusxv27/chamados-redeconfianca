@@ -108,6 +108,29 @@
         </div>
     </div>
 
+    {% comment %}Rastro completo (24/11/2026): tudo o que a pessoa fez num dia — páginas, ações e a varredura retroativa do banco —, com exportação por dia e por pessoas. Tela em core/activity_history_rastro.html.{% endcomment %}
+    <form method="get" action="{% url 'core:rastro_atividades' %}" class="ah-card p-4 mb-4" style="border-color:#FDBA74;background:linear-gradient(90deg,#FFF7ED,#fff 60%)">
+        <div class="flex flex-wrap items-end gap-3">
+            <div class="flex-1 min-w-[15rem]">
+                <p class="font-bold text-gray-900 flex items-center gap-2"><i class="fas fa-shoe-prints text-orange-500"></i>Rastro completo do dia</p>
+                <p class="text-xs text-gray-500 mt-0.5">Tudo o que cada pessoa fez: páginas abertas, envios, ações e o que ficou gravado em qualquer módulo (retroativo).</p>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1" for="rtDia">Dia</label>
+                <input type="date" id="rtDia" name="dia" value="{% now 'Y-m-d' %}" class="ah-campo">
+            </div>
+            <div class="min-w-[14rem]">
+                <label class="block text-xs font-semibold text-gray-500 mb-1" for="rtPessoa">Pessoa (opcional)</label>
+                <select id="rtPessoa" name="u" class="ah-campo">
+                    <option value="">Todas</option>
+                    {% for p in pessoas %}<option value="{{ p.id }}" {% if filtros.user == p.id|stringformat:'s' %}selected{% endif %}>{{ p.get_full_name|default:p.username }}</option>{% endfor %}
+                </select>
+            </div>
+            <button class="inline-flex items-center gap-2 px-3.5 py-2 min-h-[2.5rem] bg-orange-500 text-white rounded-lg text-sm font-semibold hover:bg-orange-600"><i class="fas fa-magnifying-glass"></i>Ver rastro</button>
+            <button formaction="{% url 'core:rastro_exportar' %}" class="inline-flex items-center gap-2 px-3.5 py-2 min-h-[2.5rem] bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-50"><i class="fas fa-file-excel text-emerald-600"></i>Exportar Excel</button>
+        </div>
+    </form>
+
     <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-4">
         <div class="ah-card p-3.5"><p class="text-xs text-gray-500">Registros</p><p class="text-xl font-bold text-gray-900 tabular mt-0.5">{{ stats.total_logs }}</p></div>
         <div class="ah-card p-3.5"><p class="text-xs text-gray-500">Hoje</p><p class="text-xl font-bold text-gray-900 tabular mt-0.5">{{ stats.today }}</p></div>

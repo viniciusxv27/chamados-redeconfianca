@@ -108,6 +108,10 @@ INSTALLED_APPS = [
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 
+# Registro de páginas acessadas (core.AcessoPagina): desliga com REGISTRAR_ACESSOS=False; guarda N dias.
+REGISTRAR_ACESSOS = config('REGISTRAR_ACESSOS', default=True, cast=bool)
+ACESSOS_DIAS_GUARDADOS = config('ACESSOS_DIAS_GUARDADOS', default=400, cast=int)
+
 # ─── Integração Tangerino (Sólides Ponto) ────────────────────────────────────
 # Token gerado no painel do Tangerino em Empregador -> Integrações. Já vem com
 # o prefixo "Basic ". Sem token a integração se desliga sozinha e o portal
@@ -146,6 +150,7 @@ MIDDLEWARE = [
     'apresentacoes.middleware.CapturaDeTelaMiddleware',  # iframe da captura de telas (só com ?captura_apresentacao=1)
     'core.middleware.LoggingMiddleware',
     'users.session_tracking.ActiveSessionMiddleware',
+    'core.rastro_middleware.RegistroDeAcessosMiddleware',  # cada página aberta/envio vira core.AcessoPagina (/activity-history/rastro/)
     'users.pre_registration_middleware.PreRegistrationAdjustmentMiddleware',
     'core.agendador_diario.TarefasDiariasMiddleware',  # tarefas diárias sem cron (projeção do simulador, lembretes do HC)
     'auditoria_sap.middleware.LeituraAgendadaSapMiddleware',  # lê o SAP a cada 3 h; antes dos bloqueios

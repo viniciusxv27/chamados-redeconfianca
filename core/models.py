@@ -1398,3 +1398,34 @@ class TarefaDiaria(models.Model):
 
     def __str__(self):
         return self.descricao or self.chave
+
+
+class AcessoPagina(models.Model):
+    """Cada página aberta e cada envio (POST/PUT/DELETE) de quem está logado — 24/11/2026.
+
+    Grava ``core.rastro_middleware.RegistroDeAcessosMiddleware``. É o que faltava para o
+    histórico mostrar "tudo o que a pessoa acessou": o SystemLog só tem as ações que o
+    código registra à mão, e o log do gunicorn não diz quem é o usuário. Chamadas
+    automáticas de fundo (fetch/polling) ficam de fora; o corpo do POST nunca é guardado.
+    Some sozinho depois de ``ACESSOS_DIAS_GUARDADOS`` dias (tarefa diária ``core_limpar_acessos``).
+    """
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                             related_name='acessos_pagina', verbose_name='Usuário')
+    criado_em = models.DateTimeField(default=timezone.now, verbose_name='Quando')
+    metodo = models.CharField(max_length=8, verbose_name='Método')
+    caminho = models.CharField(max_length=500, verbose_name='Endereço')
+    consulta = models.CharField(max_length=500, blank=True, default='', verbose_name='Parâmetros')
+    rota = models.CharField(max_length=150, blank=True, default='', verbose_name='Rota')
+    status = models.PositiveSmallIntegerField(null=True, blank=True)
+    duracao_ms = models.PositiveIntegerField(null=True, blank=True, verbose_name='Tempo (ms)')
+    ip = models.GenericIPAddressField(null=True, blank=True, verbose_name='IP')
+    navegador = models.CharField(max_length=300, blank=True, default='', verbose_name='Navegador')
+
+    class Meta:
+        verbose_name = 'Acesso a página'
+        verbose_name_plural = 'Acessos a páginas'
+        indexes = [models.Index(fields=['user', 'criado_em']), models.Index(fields=['criado_em'])]
+
+    def __str__(self):
+        return f'{self.metodo} {self.caminho}'

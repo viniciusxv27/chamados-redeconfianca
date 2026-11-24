@@ -40,6 +40,8 @@ TAREFAS = [
      'Progresso: média dos 7 pilares nos últimos 6 meses, do comissionamento pós-contestação'),
     ('cameras_limpar_videos', time(3, 0), 'cameras.servicos.limpar_videos_antigos',
      'Câmeras: apaga os vídeos de alerta vencidos (falso alarme 30 dias, abertos 90, furto confirmado 1 ano)'),
+    ('core_limpar_acessos', time(3, 30), 'core.rastro_middleware.limpar_antigos',
+     'Histórico: apaga os acessos a páginas mais velhos que ACESSOS_DIAS_GUARDADOS (padrão 400 dias)'),
 ]
 
 _ultima_checagem = None
