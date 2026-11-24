@@ -16,6 +16,10 @@
                class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
                 <i class="fas fa-user mr-1.5"></i>Meus cursos
             </a>
+            <a href="{% url 'cursos:historico' %}"
+               class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+                <i class="fas fa-clock-rotate-left mr-1.5"></i>Histórico
+            </a>
             {% if is_superadmin %}
             <a href="{% url 'cursos:configuracao' %}"
                class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
@@ -64,6 +68,10 @@
             <a href="{% url 'cursos:exportar' %}?curso={{ curso.id }}"
                class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
                 <i class="fas fa-file-csv mr-1.5"></i>Exportar CSV
+            </a>
+            <a href="{% url 'cursos:analitico' curso.id %}"
+               class="px-3 py-2 rounded-lg border border-purple-200 text-sm text-purple-700 hover:bg-purple-50">
+                <i class="fas fa-chart-column mr-1.5"></i>Analítico
             </a>
             <a href="{% url 'cursos:cobrar_whatsapp' %}?curso={{ curso.id }}"
                class="px-3 py-2 rounded-lg border border-green-200 text-sm text-green-700 hover:bg-green-50">

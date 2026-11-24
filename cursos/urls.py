@@ -9,6 +9,10 @@ urlpatterns = [
     path('<int:curso_id>/comprovante/', views.enviar_comprovante, name='enviar_comprovante'),
     path('bloqueado/', views.bloqueado, name='bloqueado'),
 
+    # Cursos encerrados: o histórico de cada um e o analítico do curso (gestores).
+    path('historico/', views.historico, name='historico'),
+    path('historico/<int:curso_id>/', views.analitico, name='analitico'),
+
     path('gestao/', views.gestao, name='gestao'),
     path('gestao/exportar/', views.exportar, name='exportar'),
     path('gestao/novo/', views.curso_form, name='curso_novo'),

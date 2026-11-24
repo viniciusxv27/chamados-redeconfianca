@@ -1,0 +1,256 @@
+{% extends 'base.html' %}
+{% block title %}Cursos — histórico{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto px-4 py-6">
+
+    <div class="flex items-start justify-between gap-3 flex-wrap mb-5">
+        <div class="min-w-0">
+            <h1 class="text-xl font-bold text-gray-800">
+                <i class="fas fa-clock-rotate-left text-purple-600 mr-2"></i>Histórico de cursos
+            </h1>
+            <p class="text-sm text-gray-500">
+                {% if modo == 'todos' %}Cursos com o prazo encerrado e como cada um terminou.
+                {% else %}Os cursos que já encerraram e o seu resultado em cada um.{% endif %}
+            </p>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+            <a href="{% url 'cursos:meus_cursos' %}"
+               class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+                <i class="fas fa-graduation-cap mr-1.5"></i>Cursos em aberto
+            </a>
+            {% if is_gestor %}
+            <a href="{% url 'cursos:gestao' %}"
+               class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+                <i class="fas fa-table-columns mr-1.5"></i>Quadro de gestão
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+        <div role="alert" class="mb-4 p-3 rounded-xl text-sm flex items-start gap-2
+             {% if message.tags == 'success' %}bg-green-50 border border-green-100 text-green-800
+             {% else %}bg-red-50 border border-red-100 text-red-700{% endif %}">
+            <i class="fas {% if message.tags == 'success' %}fa-check-circle{% else %}fa-exclamation-circle{% endif %} mt-0.5"></i>
+            <span>{{ message }}</span>
+        </div>
+        {% endfor %}
+    {% endif %}
+
+    {# Gestor tem as duas visões: todos os cursos (com os números) e o próprio histórico. #}
+    {% if is_gestor %}
+    <div class="flex gap-1 p-1 mb-4 bg-gray-100 rounded-xl w-full sm:w-auto sm:inline-flex">
+        <a href="{% url 'cursos:historico' %}"
+           class="flex-1 sm:flex-none text-center px-4 py-2 rounded-lg text-sm font-medium
+                  {% if modo == 'todos' %}bg-white text-purple-700 shadow-sm{% else %}text-gray-500 hover:text-gray-700{% endif %}">
+            <i class="fas fa-chart-column mr-1.5"></i>Todos os cursos
+        </a>
+        <a href="{% url 'cursos:historico' %}?ver=meu"
+           class="flex-1 sm:flex-none text-center px-4 py-2 rounded-lg text-sm font-medium
+                  {% if modo == 'meu' %}bg-white text-purple-700 shadow-sm{% else %}text-gray-500 hover:text-gray-700{% endif %}">
+            <i class="fas fa-user mr-1.5"></i>Meu histórico
+        </a>
+    </div>
+    {% endif %}
+
+    {# ── Filtros: título, tipo e período pelo prazo ─────────────────────── #}
+    <form method="get" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 mb-5">
+        {% if modo == 'meu' and is_gestor %}<input type="hidden" name="ver" value="meu">{% endif %}
+        <div class="grid grid-cols-2 sm:grid-cols-12 gap-2 items-end">
+            <div class="col-span-2 sm:col-span-4">
+                <label for="hq" class="block text-[11px] font-semibold text-gray-500 mb-1">Curso</label>
+                <div class="relative">
+                    <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-xs"></i>
+                    <input id="hq" type="search" name="q" value="{{ filtros.q }}" placeholder="Buscar pelo título…"
+                           class="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-transparent">
+                </div>
+            </div>
+            <div class="col-span-2 sm:col-span-3">
+                <label for="htipo" class="block text-[11px] font-semibold text-gray-500 mb-1">Tipo</label>
+                <select id="htipo" name="tipo" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+                    <option value="">Todos</option>
+                    {% for valor, rotulo in tipos %}
+                    <option value="{{ valor }}" {% if filtros.tipo == valor %}selected{% endif %}>{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-span-1 sm:col-span-2">
+                <label for="hde" class="block text-[11px] font-semibold text-gray-500 mb-1">Prazo de</label>
+                <input id="hde" type="date" name="de" value="{{ filtros.de|date:'Y-m-d' }}"
+                       class="w-full min-w-0 border border-gray-200 rounded-lg px-2 py-2 text-sm">
+            </div>
+            <div class="col-span-1 sm:col-span-2">
+                <label for="hate" class="block text-[11px] font-semibold text-gray-500 mb-1">até</label>
+                <input id="hate" type="date" name="ate" value="{{ filtros.ate|date:'Y-m-d' }}"
+                       class="w-full min-w-0 border border-gray-200 rounded-lg px-2 py-2 text-sm">
+            </div>
+            <div class="col-span-2 sm:col-span-1 flex gap-2">
+                <button type="submit" title="Filtrar"
+                        class="flex-1 px-3 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700">
+                    <i class="fas fa-filter"></i><span class="sm:hidden ml-1.5">Filtrar</span>
+                </button>
+            </div>
+        </div>
+        {% if filtrando %}
+        <div class="mt-2 text-xs">
+            <a href="{% url 'cursos:historico' %}{% if modo == 'meu' and is_gestor %}?ver=meu{% endif %}"
+               class="text-purple-600 hover:underline"><i class="fas fa-xmark mr-1"></i>Limpar filtros</a>
+        </div>
+        {% endif %}
+    </form>
+
+    {% if modo == 'todos' %}
+    {# ════════════════════════ GESTOR: TODOS OS CURSOS ════════════════════════ #}
+    <p class="text-xs text-gray-400 mb-3">
+        {{ total_cursos }} curso{{ total_cursos|pluralize }} encerrado{{ total_cursos|pluralize }}{% if filtrando %} no filtro{% endif %}.
+        Toque num curso para ver o analítico.
+    </p>
+
+    <div class="space-y-3">
+        {% for item in itens %}
+        {% with c=item.curso r=item.resumo %}
+        <a href="{% url 'cursos:analitico' c.id %}"
+           class="crs-hist block bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-purple-200 transition-all p-4">
+            <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <span class="inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold mb-1
+                          {% if c.tipo == 'FOCO' %}bg-purple-100 text-purple-700{% else %}bg-sky-100 text-sky-700{% endif %}">
+                        {{ c.get_tipo_display }}
+                    </span>
+                    <h2 class="font-semibold text-gray-800 leading-tight break-words">{{ c.titulo }}</h2>
+                    <p class="text-xs text-gray-400 mt-0.5">
+                        {% if c.competencia %}Referente a {{ c.competencia|date:'F/Y' }} · {% endif %}encerrado em {{ c.prazo|date:'d/m/Y' }}
+                    </p>
+                </div>
+                <div class="text-right flex-shrink-0">
+                    <p class="text-2xl font-bold tabular-nums leading-none
+                              {% if r.conclusao >= 90 %}text-emerald-600{% elif r.conclusao >= 60 %}text-amber-600{% else %}text-red-600{% endif %}">
+                        {{ r.conclusao }}%
+                    </p>
+                    <p class="text-[11px] text-gray-400">concluíram</p>
+                </div>
+            </div>
+
+            <div class="h-2 rounded-full bg-gray-100 overflow-hidden flex mt-3">
+                <div class="h-full bg-emerald-500" style="width: {% widthratio r.aprovados r.total 100 %}%"></div>
+                <div class="h-full bg-sky-500" style="width: {% widthratio r.conferir r.total 100 %}%"></div>
+                <div class="h-full bg-red-400" style="width: {% widthratio r.recusados r.total 100 %}%"></div>
+            </div>
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-gray-500">
+                <span><strong class="text-gray-700 tabular-nums">{{ r.total }}</strong> cobrado{{ r.total|pluralize }}</span>
+                <span class="text-emerald-700"><strong class="tabular-nums">{{ r.aprovados }}</strong> aprovado{{ r.aprovados|pluralize }}</span>
+                {% if r.conferir %}<span class="text-sky-700"><strong class="tabular-nums">{{ r.conferir }}</strong> em conferência</span>{% endif %}
+                {% if r.recusados %}<span class="text-red-600"><strong class="tabular-nums">{{ r.recusados }}</strong> recusado{{ r.recusados|pluralize }}</span>{% endif %}
+                <span class="text-amber-700"><strong class="tabular-nums">{{ r.nao_fez }}</strong> não f{{ r.nao_fez|pluralize:"ez,izeram" }}</span>
+                <span class="ml-auto text-purple-600 font-medium">Analítico <i class="fas fa-arrow-right text-[10px]"></i></span>
+            </div>
+        </a>
+        {% endwith %}
+        {% empty %}
+        <div class="bg-white rounded-2xl border border-gray-100 p-10 text-center">
+            <i class="fas fa-box-archive text-3xl text-gray-300 mb-3 block"></i>
+            <p class="text-sm text-gray-500">
+                {% if filtrando %}Nenhum curso encerrado com esses filtros.{% else %}Nenhum curso encerrou ainda — o histórico começa quando o primeiro prazo passar.{% endif %}
+            </p>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% if pagina.has_other_pages %}
+    <nav class="flex items-center justify-between gap-2 mt-5 text-sm">
+        {% if pagina.has_previous %}
+        <a href="?{% if parametros %}{{ parametros }}&{% endif %}pagina={{ pagina.previous_page_number }}"
+           class="px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"><i class="fas fa-chevron-left mr-1"></i>Anteriores</a>
+        {% else %}<span></span>{% endif %}
+        <span class="text-xs text-gray-400">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+        {% if pagina.has_next %}
+        <a href="?{% if parametros %}{{ parametros }}&{% endif %}pagina={{ pagina.next_page_number }}"
+           class="px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Mais antigos<i class="fas fa-chevron-right ml-1"></i></a>
+        {% else %}<span></span>{% endif %}
+    </nav>
+    {% endif %}
+
+    {% else %}
+    {# ════════════════════════ COLABORADOR: MEU HISTÓRICO ════════════════════════ #}
+    {% if meu.total %}
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-5">
+        <div class="bg-white rounded-2xl border-2 border-gray-100 p-3 sm:p-4">
+            <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Encerrados</p>
+            <p class="text-2xl font-bold text-gray-800 tabular-nums">{{ meu.total }}</p>
+        </div>
+        <div class="bg-white rounded-2xl border-2 border-gray-100 p-3 sm:p-4">
+            <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Concluídos</p>
+            <p class="text-2xl font-bold text-emerald-600 tabular-nums">{{ meu.aprovados }}
+                <span class="text-sm font-semibold text-gray-400">· {{ meu.conclusao }}%</span></p>
+        </div>
+        <div class="bg-white rounded-2xl border-2 border-gray-100 p-3 sm:p-4">
+            <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Entregues no prazo</p>
+            <p class="text-2xl font-bold text-purple-600 tabular-nums">{{ meu.no_prazo }}</p>
+        </div>
+        <div class="bg-white rounded-2xl border-2 {% if meu.faltou %}border-amber-200{% else %}border-gray-100{% endif %} p-3 sm:p-4">
+            <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Sem conclusão</p>
+            <p class="text-2xl font-bold text-amber-600 tabular-nums">{{ meu.faltou }}</p>
+            {% if meu.conferir %}<p class="text-[10px] text-sky-600 font-medium">+ {{ meu.conferir }} em conferência</p>{% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden divide-y divide-gray-100">
+        {% for l in linhas %}
+        <div class="crs-meu-hist p-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+            <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 flex-wrap mb-0.5">
+                    <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold
+                          {% if l.curso.tipo == 'FOCO' %}bg-purple-100 text-purple-700{% else %}bg-sky-100 text-sky-700{% endif %}">
+                        {% if l.curso.tipo == 'FOCO' %}Curso Foco{% else %}Capacitação{% endif %}
+                    </span>
+                    <span class="text-[11px] text-gray-400">
+                        {% if l.curso.competencia %}{{ l.curso.competencia|date:'F/Y' }} · {% endif %}prazo {{ l.curso.prazo|date:'d/m/Y' }}
+                    </span>
+                </div>
+                <p class="font-semibold text-gray-800 leading-tight break-words">{{ l.curso.titulo }}</p>
+                {% if l.envio and l.envio.status == 'RECUSADO' and l.envio.observacao %}
+                <p class="text-xs text-red-600 mt-1"><i class="fas fa-comment-dots mr-1"></i>{{ l.envio.observacao }}</p>
+                {% endif %}
+            </div>
+            <div class="flex sm:flex-col items-center sm:items-end gap-2 sm:gap-1 flex-wrap">
+                {% if l.situacao == 'APROVADO' %}
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
+                        <i class="fas fa-circle-check"></i>Concluído
+                    </span>
+                {% elif l.situacao == 'CONFERIR' %}
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-100 text-sky-800 text-xs font-semibold">
+                        <i class="fas fa-hourglass-half"></i>Em conferência
+                    </span>
+                {% elif l.situacao == 'RECUSADO' %}
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-xs font-semibold">
+                        <i class="fas fa-rotate-left"></i>Recusado
+                    </span>
+                {% else %}
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold">
+                        <i class="fas fa-circle-xmark"></i>Não enviado
+                    </span>
+                {% endif %}
+                {% if l.envio %}
+                <span class="text-[11px] text-gray-400">
+                    enviado em {{ l.envio.enviado_em|date:'d/m/Y' }}
+                    {% if l.no_prazo is True %}<span class="text-emerald-600 font-medium">· no prazo</span>
+                    {% elif l.no_prazo is False %}<span class="text-amber-600 font-medium">· depois do prazo</span>{% endif %}
+                </span>
+                {% endif %}
+            </div>
+        </div>
+        {% empty %}
+        <div class="p-10 text-center">
+            <i class="fas fa-box-archive text-3xl text-gray-300 mb-3 block"></i>
+            <p class="text-sm text-gray-500">
+                {% if filtrando %}Nenhum curso encerrado com esses filtros.{% else %}Nenhum curso seu encerrou ainda.{% endif %}
+            </p>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -725,3 +725,348 @@ def _quantas_pessoas(cfg):
         um_a_um = User.objects.filter(id__in=escolhidos)
         qs = um_a_um if qs is None else (qs | um_a_um)
     return qs.filter(is_active=True).distinct().count()
+
+
+# ---------------------------------------------------------------------------
+# Histórico e analítico dos cursos encerrados
+# ---------------------------------------------------------------------------
+# "Finalizado" neste módulo é o curso publicado cujo prazo já passou: o curso
+# acontece na plataforma da Vivo e o portal não tem um botão de "encerrar" —
+# o prazo é o fim. Para a pessoa, concluir é ter o comprovante APROVADO; o
+# resto (em conferência, recusado, não mandou) aparece como ficou.
+#
+# Quem conta em cada curso: a régua do quadro de gestão (quem é cobrado hoje)
+# com dois ajustes, porque o quadro olha para o presente e o histórico para o
+# passado:
+#   - quem mandou comprovante entra sempre, mesmo que tenha saído da empresa
+#     ou do escopo depois — ele fez o curso;
+#   - no Curso Foco, quem entrou depois do prazo (admissão, ou cadastro no
+#     portal se a admissão está vazia) sai da conta: não dava para cobrar dele.
+# Quem saiu da empresa sem mandar nada não entra: o portal não guarda a lista
+# de cobrados de antigamente, e inventá-la seria pior.
+
+ORDEM_ANALITICO = {NAO_FEZ: 0, RECUSADO: 1, CONFERIR: 2, APROVADO: 3}
+ROTULO_SITUACAO = {APROVADO: 'Aprovado', CONFERIR: 'Em conferência',
+                   RECUSADO: 'Recusado', NAO_FEZ: 'Não fez'}
+POR_PAGINA_HISTORICO = 20
+
+
+def _entrada(pessoa):
+    """Desde quando a pessoa conta: a admissão; sem ela, o cadastro no portal."""
+    if getattr(pessoa, 'admission_date', None):
+        return pessoa.admission_date
+    if pessoa.date_joined:
+        return timezone.localdate(pessoa.date_joined)
+    return None
+
+
+def _no_prazo(envio, curso):
+    """O envio que vale chegou até o dia do prazo? None quando não há envio que valha."""
+    if not (envio and envio.vale_como_entregue):
+        return None
+    return timezone.localdate(envio.enviado_em) <= curso.prazo
+
+
+def _linhas_do_historico(cursos, cfg):
+    """Quem conta em cada curso, com o último envio e quantas vezes mandou.
+
+    Devolve ``{curso_id: [linha, ...]}``. Tudo em poucas consultas: a lista do
+    Curso Foco é a mesma para todos (o escopo de hoje), então sai uma vez só.
+    """
+    if not cursos:
+        return {}
+    ids = [c.id for c in cursos]
+
+    base_foco = []
+    if any(c.tipo == Curso.FOCO for c in cursos):
+        base_foco = list(_pessoas_do_curso(Curso(tipo=Curso.FOCO), cfg).select_related('sector'))
+
+    atribuidos = {}
+    for curso_id, pessoa_id in (AtribuicaoCurso.objects
+                                .filter(curso_id__in=ids, colaborador__is_active=True)
+                                .values_list('curso_id', 'colaborador_id')):
+        atribuidos.setdefault(curso_id, set()).add(pessoa_id)
+
+    ultimos, tentativas, enviaram = {}, {}, {}
+    for envio in (Comprovante.objects.filter(curso_id__in=ids)
+                  .select_related('revisado_por')
+                  .order_by('curso_id', 'colaborador_id', '-enviado_em', '-id')):
+        chave = (envio.curso_id, envio.colaborador_id)
+        ultimos.setdefault(chave, envio)
+        tentativas[chave] = tentativas.get(chave, 0) + 1
+        enviaram.setdefault(envio.curso_id, set()).add(envio.colaborador_id)
+
+    pessoas = {p.id: p for p in base_foco}
+    faltam = set()
+    for grupo in list(atribuidos.values()) + list(enviaram.values()):
+        faltam |= grupo
+    faltam -= set(pessoas)
+    if faltam:
+        pessoas.update({p.id: p for p in User.objects.filter(id__in=faltam).select_related('sector')})
+
+    resultado = {}
+    for curso in cursos:
+        if curso.tipo == Curso.CAPACITACAO:
+            # Atribuição é explícita: o gestor mandou fazer, conta sempre.
+            quem = set(atribuidos.get(curso.id, set()))
+        else:
+            quem = {p.id for p in base_foco
+                    if _entrada(p) is None or _entrada(p) <= curso.prazo}
+        quem |= enviaram.get(curso.id, set())
+
+        linhas = []
+        for pessoa_id in quem:
+            pessoa = pessoas.get(pessoa_id)
+            if pessoa is None:
+                continue
+            envio = ultimos.get((curso.id, pessoa_id))
+            linhas.append({
+                'pessoa': pessoa,
+                'loja': _loja(pessoa),
+                'envio': envio,
+                'situacao': _situacao(envio),
+                'tentativas': tentativas.get((curso.id, pessoa_id), 0),
+                'no_prazo': _no_prazo(envio, curso),
+            })
+        linhas.sort(key=lambda l: (l['loja'], (l['pessoa'].first_name or '').lower(),
+                                   (l['pessoa'].last_name or '').lower()))
+        resultado[curso.id] = linhas
+    return resultado
+
+
+def _percentual(parte, total):
+    return round(parte * 100 / total) if total else 0
+
+
+def _duracao_legivel(segundos):
+    if segundos is None:
+        return ''
+    horas = segundos / 3600
+    if horas < 1:
+        return f'{max(1, round(segundos / 60))} min'
+    if horas < 48:
+        return f'{horas:.0f} h'
+    return f'{horas / 24:.1f} dias'.replace('.', ',')
+
+
+def _resumo_do_curso(linhas):
+    """Os números do analítico a partir das linhas de um curso."""
+    total = len(linhas)
+    cont = {APROVADO: 0, CONFERIR: 0, RECUSADO: 0, NAO_FEZ: 0}
+    no_prazo = depois = reenvios = 0
+    esperas = []
+    for l in linhas:
+        cont[l['situacao']] += 1
+        if l['no_prazo'] is True:
+            no_prazo += 1
+        elif l['no_prazo'] is False:
+            depois += 1
+        if l['tentativas'] > 1:
+            reenvios += 1
+        envio = l['envio']
+        if envio and envio.revisado_em and envio.status != Comprovante.PENDENTE:
+            esperas.append((envio.revisado_em - envio.enviado_em).total_seconds())
+    entregues = cont[APROVADO] + cont[CONFERIR]
+    espera_media = (sum(esperas) / len(esperas)) if esperas else None
+    return {
+        'total': total,
+        'aprovados': cont[APROVADO],
+        'conferir': cont[CONFERIR],
+        'recusados': cont[RECUSADO],
+        'nao_fez': cont[NAO_FEZ],
+        'entregues': entregues,
+        'no_prazo': no_prazo,
+        'depois_do_prazo': depois,
+        'reenvios': reenvios,
+        # Concluir é ter o comprovante aprovado; "entregou" inclui o que ainda
+        # espera conferência — é a mesma régua da "Adesão" do quadro.
+        'conclusao': _percentual(cont[APROVADO], total),
+        'adesao': _percentual(entregues, total),
+        'pontualidade': _percentual(no_prazo, entregues),
+        'conferidos': len(esperas),
+        'espera_media': _duracao_legivel(espera_media),
+    }
+
+
+def _por_loja(linhas):
+    blocos = {}
+    for l in linhas:
+        b = blocos.setdefault(l['loja'], {'nome': l['loja'], 'total': 0, 'aprovados': 0,
+                                          'entregues': 0, 'faltou': 0})
+        b['total'] += 1
+        if l['situacao'] == APROVADO:
+            b['aprovados'] += 1
+        if l['situacao'] in (APROVADO, CONFERIR):
+            b['entregues'] += 1
+        if l['situacao'] in (NAO_FEZ, RECUSADO):
+            b['faltou'] += 1
+    lista = list(blocos.values())
+    for b in lista:
+        b['conclusao'] = _percentual(b['aprovados'], b['total'])
+    # Quem ficou mais para trás aparece primeiro: é onde o gestor age.
+    lista.sort(key=lambda b: (b['conclusao'], b['nome']))
+    return lista
+
+
+def _filtros_historico(request):
+    """Busca, tipo e período (pelo prazo). Data inválida é ignorada, não derruba a tela."""
+    from django.utils.dateparse import parse_date
+
+    def data(nome):
+        try:
+            return parse_date((request.GET.get(nome) or '').strip())
+        except ValueError:
+            return None
+
+    tipo = request.GET.get('tipo') or ''
+    return {
+        'q': (request.GET.get('q') or '').strip()[:100],
+        'tipo': tipo if tipo in (Curso.FOCO, Curso.CAPACITACAO) else '',
+        'de': data('de'),
+        'ate': data('ate'),
+    }
+
+
+def _aplicar_filtros(qs, filtros):
+    if filtros['q']:
+        qs = qs.filter(titulo__icontains=filtros['q'])
+    if filtros['tipo']:
+        qs = qs.filter(tipo=filtros['tipo'])
+    if filtros['de']:
+        qs = qs.filter(prazo__gte=filtros['de'])
+    if filtros['ate']:
+        qs = qs.filter(prazo__lte=filtros['ate'])
+    return qs
+
+
+def _meu_historico(user, cfg, filtros):
+    """Os cursos encerrados que valeram para a pessoa, com o resultado dela."""
+    hoje = timezone.localdate()
+    meus = set(cursos_do_usuario(user, cfg).filter(prazo__lt=hoje).values_list('id', flat=True))
+    enviados = set(Comprovante.objects
+                   .filter(colaborador=user, curso__publicado=True, curso__prazo__lt=hoje)
+                   .values_list('curso_id', flat=True))
+    qs = Curso.objects.filter(id__in=meus | enviados, publicado=True, prazo__lt=hoje)
+    cursos = list(_aplicar_filtros(qs, filtros).order_by('-prazo', '-id'))
+    entrada = _entrada(user)
+
+    ultimos, tentativas = {}, {}
+    for envio in (Comprovante.objects.filter(colaborador=user, curso__in=cursos)
+                  .order_by('curso_id', '-enviado_em', '-id')):
+        ultimos.setdefault(envio.curso_id, envio)
+        tentativas[envio.curso_id] = tentativas.get(envio.curso_id, 0) + 1
+
+    linhas = []
+    for curso in cursos:
+        envio = ultimos.get(curso.id)
+        # Mesma régua do analítico: Curso Foco de antes da entrada não foi cobrança dela.
+        if envio is None and curso.tipo == Curso.FOCO and entrada and entrada > curso.prazo:
+            continue
+        linhas.append({
+            'curso': curso, 'envio': envio, 'situacao': _situacao(envio),
+            'tentativas': tentativas.get(curso.id, 0), 'no_prazo': _no_prazo(envio, curso),
+        })
+    return linhas
+
+
+@login_required
+def historico(request):
+    """Cursos encerrados: o gestor vê todos com os números; o colaborador, os dele."""
+    from django.core.paginator import Paginator
+
+    cfg = ConfiguracaoCursos.get()
+    if not pode_ver(request.user, cfg):
+        messages.error(request, 'Você não é cobrado pelos cursos da Vivo.')
+        return redirect('home')
+
+    gestor = e_gestor(request.user, cfg)
+    modo = 'meu' if (not gestor or request.GET.get('ver') == 'meu') else 'todos'
+    filtros = _filtros_historico(request)
+    contexto = {'is_gestor': gestor, 'modo': modo, 'filtros': filtros, 'tipos': Curso.TIPOS,
+                'filtrando': any(filtros.values())}
+
+    if modo == 'meu':
+        linhas = _meu_historico(request.user, cfg, filtros)
+        meu = {
+            'total': len(linhas),
+            'aprovados': sum(1 for l in linhas if l['situacao'] == APROVADO),
+            'conferir': sum(1 for l in linhas if l['situacao'] == CONFERIR),
+            'faltou': sum(1 for l in linhas if l['situacao'] in (NAO_FEZ, RECUSADO)),
+            'no_prazo': sum(1 for l in linhas if l['no_prazo'] is True),
+        }
+        meu['conclusao'] = _percentual(meu['aprovados'], meu['total'])
+        contexto.update({'linhas': linhas, 'meu': meu})
+        return render(request, 'cursos/historico.html', contexto)
+
+    hoje = timezone.localdate()
+    qs = Curso.objects.filter(publicado=True, prazo__lt=hoje)
+    cursos = list(_aplicar_filtros(qs, filtros).order_by('-prazo', '-id'))
+    pagina = Paginator(cursos, POR_PAGINA_HISTORICO).get_page(request.GET.get('pagina'))
+
+    # Os números só dos cursos desta página: o resto da lista não é desenhado.
+    da_pagina = list(pagina.object_list)
+    linhas = _linhas_do_historico(da_pagina, cfg)
+    itens = [{'curso': c, 'resumo': _resumo_do_curso(linhas.get(c.id, []))} for c in da_pagina]
+
+    parametros = request.GET.copy()
+    parametros.pop('pagina', None)
+    contexto.update({
+        'itens': itens,
+        'pagina': pagina,
+        'total_cursos': len(cursos),
+        'parametros': parametros.urlencode(),
+    })
+    return render(request, 'cursos/historico.html', contexto)
+
+
+@login_required
+def analitico(request, curso_id):
+    """Os números de um curso: quem fez, quando, loja por loja e pessoa por pessoa."""
+    cfg = ConfiguracaoCursos.get()
+    if not e_gestor(request.user, cfg):
+        messages.error(request, 'O analítico completo é da área dos gestores do módulo. '
+                                'O seu resultado está no seu histórico.')
+        return redirect('cursos:historico')
+
+    curso = get_object_or_404(Curso, id=curso_id, publicado=True)
+    linhas = _linhas_do_historico([curso], cfg).get(curso.id, [])
+
+    if request.GET.get('formato') == 'csv':
+        return _analitico_csv(curso, linhas)
+
+    for l in linhas:
+        l['rotulo'] = ROTULO_SITUACAO[l['situacao']]
+    linhas_ordenadas = sorted(linhas, key=lambda l: (ORDEM_ANALITICO[l['situacao']], l['loja'],
+                                                     (l['pessoa'].first_name or '').lower()))
+    return render(request, 'cursos/analitico.html', {
+        'curso': curso,
+        'resumo': _resumo_do_curso(linhas),
+        'lojas': _por_loja(linhas),
+        'linhas': linhas_ordenadas,
+        'encerrado': curso.vencido,
+    })
+
+
+def _analitico_csv(curso, linhas):
+    import csv
+
+    resposta = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+    nome = f'cursos-analitico-{curso.id}-{timezone.localdate():%Y-%m-%d}.csv'
+    resposta['Content-Disposition'] = f'attachment; filename="{nome}"'
+    escritor = csv.writer(resposta, delimiter=';')
+    escritor.writerow(['Loja', 'Colaborador', 'Situação', 'Enviado em', 'No prazo',
+                       'Conferido em', 'Conferido por', 'Envios'])
+    for l in linhas:
+        envio = l['envio']
+        revisor = envio.revisado_por if envio else None
+        escritor.writerow([
+            l['loja'], l['pessoa'].get_full_name() or l['pessoa'].username,
+            ROTULO_SITUACAO[l['situacao']],
+            timezone.localtime(envio.enviado_em).strftime('%d/%m/%Y %H:%M') if envio else '',
+            {True: 'Sim', False: 'Não', None: ''}[l['no_prazo']],
+            (timezone.localtime(envio.revisado_em).strftime('%d/%m/%Y %H:%M')
+             if envio and envio.revisado_em else ''),
+            (revisor.get_full_name() or revisor.username) if revisor else '',
+            l['tentativas'],
+        ])
+    return resposta

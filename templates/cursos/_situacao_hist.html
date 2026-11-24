@@ -1,0 +1,10 @@
+{# Etiqueta da situação de uma pessoa no analítico. Mesmas cores do quadro de gestão. #}
+{% if l.situacao == 'APROVADO' %}
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-semibold whitespace-nowrap"><i class="fas fa-circle-check"></i>Aprovado</span>
+{% elif l.situacao == 'CONFERIR' %}
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 text-[11px] font-semibold whitespace-nowrap"><i class="fas fa-hourglass-half"></i>Em conferência</span>
+{% elif l.situacao == 'RECUSADO' %}
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[11px] font-semibold whitespace-nowrap"><i class="fas fa-rotate-left"></i>Recusado</span>
+{% else %}
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-semibold whitespace-nowrap"><i class="fas fa-circle-xmark"></i>Não fez</span>
+{% endif %}

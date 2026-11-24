@@ -1,0 +1,238 @@
+{% extends 'base.html' %}
+{% block title %}Cursos — analítico{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto px-4 py-6">
+
+    <a href="{% url 'cursos:historico' %}" class="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-purple-700 mb-3">
+        <i class="fas fa-arrow-left text-xs"></i>Histórico de cursos
+    </a>
+
+    <div class="flex items-start justify-between gap-3 flex-wrap mb-5">
+        <div class="min-w-0">
+            <span class="inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold mb-1
+                  {% if curso.tipo == 'FOCO' %}bg-purple-100 text-purple-700{% else %}bg-sky-100 text-sky-700{% endif %}">
+                {{ curso.get_tipo_display }}
+            </span>
+            <h1 class="text-xl font-bold text-gray-800 leading-tight break-words">{{ curso.titulo }}</h1>
+            <p class="text-sm text-gray-500">
+                {% if curso.competencia %}Referente a {{ curso.competencia|date:'F/Y' }} · {% endif %}prazo {{ curso.prazo|date:'d/m/Y' }}
+            </p>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+            <a href="{% url 'cursos:analitico' curso.id %}?formato=csv"
+               class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+                <i class="fas fa-file-csv mr-1.5"></i>Exportar CSV
+            </a>
+            <a href="{% url 'cursos:gestao' %}?curso={{ curso.id }}"
+               class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+                <i class="fas fa-table-columns mr-1.5"></i>Abrir no quadro
+            </a>
+        </div>
+    </div>
+
+    {% if not encerrado %}
+    <div class="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-100 text-sm text-amber-800 flex items-start gap-2">
+        <i class="fas fa-hourglass-half mt-0.5"></i>
+        <span>Este curso ainda está no prazo — os números são parciais e mudam até {{ curso.prazo|date:'d/m/Y' }}.</span>
+    </div>
+    {% endif %}
+
+    {# ── Números principais ─────────────────────────────────────────────── #}
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-4">
+        <div class="bg-white rounded-2xl border-2 border-gray-100 p-3 sm:p-4">
+            <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Cobrados</p>
+            <p class="text-2xl font-bold text-gray-800 tabular-nums">{{ resumo.total }}</p>
+        </div>
+        <div class="bg-white rounded-2xl border-2 border-emerald-100 p-3 sm:p-4">
+            <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Taxa de conclusão</p>
+            <p class="text-2xl font-bold text-emerald-600 tabular-nums">{{ resumo.conclusao }}%</p>
+            <p class="text-[11px] text-gray-400">{{ resumo.aprovados }} aprovado{{ resumo.aprovados|pluralize }}</p>
+        </div>
+        <div class="bg-white rounded-2xl border-2 border-gray-100 p-3 sm:p-4">
+            <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Entregaram no prazo</p>
+            <p class="text-2xl font-bold text-purple-600 tabular-nums">{{ resumo.no_prazo }}</p>
+            <p class="text-[11px] text-gray-400">{{ resumo.pontualidade }}% de quem entregou</p>
+        </div>
+        <div class="bg-white rounded-2xl border-2 {% if resumo.nao_fez or resumo.recusados %}border-amber-200{% else %}border-gray-100{% endif %} p-3 sm:p-4">
+            <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Não fizeram</p>
+            <p class="text-2xl font-bold text-amber-600 tabular-nums">{{ resumo.nao_fez }}</p>
+            {% if resumo.recusados %}<p class="text-[11px] text-red-500 font-medium">+ {{ resumo.recusados }} recusado{{ resumo.recusados|pluralize }}</p>{% endif %}
+        </div>
+    </div>
+
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-4">
+        <div class="flex items-center justify-between text-sm mb-2">
+            <span class="font-semibold text-gray-700">Como terminou</span>
+            <span class="text-xs text-gray-500">Entregaram: <strong class="text-gray-700">{{ resumo.adesao }}%</strong></span>
+        </div>
+        <div class="h-2.5 rounded-full bg-gray-100 overflow-hidden flex">
+            <div class="h-full bg-emerald-500" style="width: {% widthratio resumo.aprovados resumo.total 100 %}%" title="Aprovados"></div>
+            <div class="h-full bg-sky-500" style="width: {% widthratio resumo.conferir resumo.total 100 %}%" title="Em conferência"></div>
+            <div class="h-full bg-red-400" style="width: {% widthratio resumo.recusados resumo.total 100 %}%" title="Recusados"></div>
+        </div>
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-[11px] text-gray-500">
+            <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>Aprovados · {{ resumo.aprovados }}</span>
+            <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-sky-500"></span>Em conferência · {{ resumo.conferir }}</span>
+            <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-red-400"></span>Recusados · {{ resumo.recusados }}</span>
+            <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-gray-200"></span>Não fizeram · {{ resumo.nao_fez }}</span>
+        </div>
+
+        <dl class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-gray-100 text-sm">
+            <div>
+                <dt class="text-[11px] text-gray-400">Entregues depois do prazo</dt>
+                <dd class="font-semibold text-gray-700 tabular-nums">{{ resumo.depois_do_prazo }}</dd>
+            </div>
+            <div>
+                <dt class="text-[11px] text-gray-400">Precisaram reenviar</dt>
+                <dd class="font-semibold text-gray-700 tabular-nums">{{ resumo.reenvios }}</dd>
+            </div>
+            <div>
+                <dt class="text-[11px] text-gray-400">Tempo médio de conferência</dt>
+                <dd class="font-semibold text-gray-700">{{ resumo.espera_media|default:'—' }}</dd>
+            </div>
+            <div>
+                <dt class="text-[11px] text-gray-400">Ainda em conferência</dt>
+                <dd class="font-semibold {% if resumo.conferir %}text-sky-600{% else %}text-gray-700{% endif %} tabular-nums">{{ resumo.conferir }}</dd>
+            </div>
+        </dl>
+    </div>
+
+    {# ── Loja por loja ──────────────────────────────────────────────────── #}
+    {% if lojas %}
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm mb-4">
+        <div class="px-4 pt-4 pb-2 flex items-center justify-between gap-2">
+            <h2 class="font-semibold text-gray-700 text-sm"><i class="fas fa-store text-gray-400 mr-1.5"></i>Por loja</h2>
+            <span class="text-[11px] text-gray-400">menor conclusão primeiro</span>
+        </div>
+        <div class="divide-y divide-gray-50">
+            {% for b in lojas %}
+            <div class="px-4 py-2.5">
+                <div class="flex items-center justify-between gap-3 text-sm">
+                    <span class="text-gray-700 min-w-0 truncate">{{ b.nome }}</span>
+                    <span class="flex-shrink-0 text-xs text-gray-500 tabular-nums">
+                        {{ b.aprovados }}/{{ b.total }}
+                        <strong class="ml-1 {% if b.conclusao >= 90 %}text-emerald-600{% elif b.conclusao >= 60 %}text-amber-600{% else %}text-red-600{% endif %}">{{ b.conclusao }}%</strong>
+                    </span>
+                </div>
+                <div class="h-1.5 rounded-full bg-gray-100 overflow-hidden mt-1.5">
+                    <div class="h-full {% if b.conclusao >= 90 %}bg-emerald-500{% elif b.conclusao >= 60 %}bg-amber-400{% else %}bg-red-400{% endif %}"
+                         style="width: {{ b.conclusao }}%"></div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {# ── Pessoa por pessoa ──────────────────────────────────────────────── #}
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm">
+        <div class="p-3 border-b border-gray-100 flex flex-wrap items-center gap-2">
+            <h2 class="font-semibold text-gray-700 text-sm w-full sm:w-auto sm:mr-2"><i class="fas fa-users text-gray-400 mr-1.5"></i>Pessoa por pessoa</h2>
+            <div class="relative flex-1 min-w-[10rem]">
+                <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-xs"></i>
+                <input type="search" id="anBusca" placeholder="Buscar pessoa ou loja…"
+                       class="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-transparent">
+            </div>
+            <div class="flex items-center gap-1.5 flex-wrap">
+                <button type="button" data-an-filtro="TODOS" class="an-pill px-3 py-1.5 rounded-full text-xs font-semibold border bg-purple-600 text-white border-purple-600">Todos · {{ resumo.total }}</button>
+                <button type="button" data-an-filtro="FALTOU" class="an-pill px-3 py-1.5 rounded-full text-xs font-semibold border bg-white text-gray-600 border-gray-200">Não concluíram · {{ resumo.nao_fez|add:resumo.recusados }}</button>
+                {% if resumo.conferir %}<button type="button" data-an-filtro="CONFERIR" class="an-pill px-3 py-1.5 rounded-full text-xs font-semibold border bg-white text-gray-600 border-gray-200">Em conferência · {{ resumo.conferir }}</button>{% endif %}
+                <button type="button" data-an-filtro="APROVADO" class="an-pill px-3 py-1.5 rounded-full text-xs font-semibold border bg-white text-gray-600 border-gray-200">Aprovados · {{ resumo.aprovados }}</button>
+            </div>
+        </div>
+
+        <div class="hidden sm:grid grid-cols-12 gap-3 px-4 py-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100">
+            <span class="col-span-4">Colaborador</span>
+            <span class="col-span-2">Situação</span>
+            <span class="col-span-3">Entrega</span>
+            <span class="col-span-3">Conferência</span>
+        </div>
+
+        <div class="divide-y divide-gray-50">
+            {% for l in linhas %}
+            <div class="an-linha grid grid-cols-1 sm:grid-cols-12 gap-1 sm:gap-3 px-4 py-3 text-sm"
+                 data-situacao="{{ l.situacao }}"
+                 data-busca="{{ l.pessoa.get_full_name|default:l.pessoa.username|lower }} {{ l.loja|lower }}">
+                <div class="sm:col-span-4 min-w-0 flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                        <p class="font-medium text-gray-800 truncate">{{ l.pessoa.get_full_name|default:l.pessoa.username }}{% if not l.pessoa.is_active %} <span class="text-[10px] text-gray-400 font-normal">(desligado)</span>{% endif %}</p>
+                        <p class="text-[11px] text-gray-400 truncate">{{ l.loja }}</p>
+                    </div>
+                    {# No celular a situação fica ao lado do nome; no computador ganha coluna própria. #}
+                    <span class="sm:hidden flex-shrink-0">{% include 'cursos/_situacao_hist.html' %}</span>
+                </div>
+                <div class="hidden sm:flex sm:col-span-2 items-center">{% include 'cursos/_situacao_hist.html' %}</div>
+                <div class="sm:col-span-3 text-xs text-gray-500 flex sm:block items-center gap-1.5 flex-wrap">
+                    {% if l.envio %}
+                        <span>{{ l.envio.enviado_em|date:'d/m/Y H:i' }}</span>
+                        {% if l.no_prazo is True %}<span class="text-emerald-600 font-medium sm:block">no prazo</span>
+                        {% elif l.no_prazo is False %}<span class="text-amber-600 font-medium sm:block">depois do prazo</span>{% endif %}
+                        {% if l.tentativas > 1 %}<span class="text-gray-400 sm:block">{{ l.tentativas }} envios</span>{% endif %}
+                    {% else %}<span class="text-gray-300">sem envio</span>{% endif %}
+                </div>
+                <div class="sm:col-span-3 text-xs text-gray-500 min-w-0">
+                    {% if l.envio and l.envio.revisado_em %}
+                        <span>{{ l.envio.revisado_em|date:'d/m/Y' }}{% if l.envio.revisado_por %} · {{ l.envio.revisado_por.get_full_name|default:l.envio.revisado_por.username }}{% endif %}</span>
+                        {% if l.envio.observacao %}<p class="text-[11px] text-gray-400 break-words">{{ l.envio.observacao }}</p>{% endif %}
+                    {% elif l.envio %}<span class="text-sky-600">aguardando</span>
+                    {% else %}<span class="text-gray-300 hidden sm:inline">—</span>{% endif %}
+                    {# `.url` com arquivo vazio levanta ValueError — só desenha o link quando há arquivo. #}
+                    {% if l.envio.arquivo %}
+                    <a href="{{ l.envio.arquivo.url }}" target="_blank" rel="noopener noreferrer"
+                       class="block text-purple-600 hover:underline truncate"><i class="fas fa-paperclip mr-1"></i>comprovante</a>
+                    {% endif %}
+                </div>
+            </div>
+            {% empty %}
+            <div class="p-10 text-center text-sm text-gray-500">Ninguém foi cobrado por este curso.</div>
+            {% endfor %}
+            <div id="anVazio" class="hidden p-8 text-center text-sm text-gray-400">Ninguém com esse filtro.</div>
+        </div>
+    </div>
+
+    <p class="text-[11px] text-gray-400 mt-4 leading-relaxed">
+        <i class="fas fa-circle-info mr-1"></i>
+        Concluir é ter o comprovante aprovado. Contam quem é cobrado pelo módulo hoje e já estava na empresa no prazo,
+        mais quem mandou comprovante (mesmo que tenha saído depois). Quem saiu sem mandar não aparece.
+        Vale o último envio de cada pessoa; "no prazo" compara o dia desse envio com o prazo do curso.
+    </p>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+<script>
+(function () {
+    var filtro = 'TODOS';
+    var busca = document.getElementById('anBusca');
+    var regras = {
+        TODOS: function () { return true; },
+        FALTOU: function (s) { return s === 'NAO_FEZ' || s === 'RECUSADO'; },
+        CONFERIR: function (s) { return s === 'CONFERIR'; },
+        APROVADO: function (s) { return s === 'APROVADO'; }
+    };
+    function aplicar() {
+        var termo = (busca.value || '').trim().toLowerCase();
+        var visiveis = 0;
+        document.querySelectorAll('.an-linha').forEach(function (linha) {
+            var ok = regras[filtro](linha.dataset.situacao) &&
+                     (!termo || linha.dataset.busca.indexOf(termo) !== -1);
+            linha.classList.toggle('hidden', !ok);
+            if (ok) visiveis++;
+        });
+        var vazio = document.getElementById('anVazio');
+        if (vazio) vazio.classList.toggle('hidden', visiveis > 0 || !document.querySelector('.an-linha'));
+        document.querySelectorAll('.an-pill').forEach(function (b) {
+            var on = b.dataset.anFiltro === filtro;
+            ['bg-purple-600', 'text-white', 'border-purple-600'].forEach(function (c) { b.classList.toggle(c, on); });
+            ['bg-white', 'text-gray-600', 'border-gray-200'].forEach(function (c) { b.classList.toggle(c, !on); });
+        });
+    }
+    document.querySelectorAll('.an-pill').forEach(function (b) {
+        b.addEventListener('click', function () { filtro = b.dataset.anFiltro; aplicar(); });
+    });
+    if (busca) busca.addEventListener('input', aplicar);
+})();
+</script>
+{% endblock %}
