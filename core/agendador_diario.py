@@ -36,6 +36,8 @@ TAREFAS = [
      'Contestação: resumo do ciclo no WhatsApp (ciclo que fechou pelo prazo e envio interrompido)'),
     ('sap_renova_cobranca', time(15, 0), 'auditoria_sap.renova.tarefa_diaria',
      'Visão Renova: cobra no grupo da loja as vendas com Renova (ZVNB) sem chamado'),
+    ('carreira_resultado', time(6, 30), 'carreira.resultado.tarefa_diaria',
+     'Progresso: média dos 7 pilares nos últimos 6 meses, do comissionamento pós-contestação'),
     ('cameras_limpar_videos', time(3, 0), 'cameras.servicos.limpar_videos_antigos',
      'Câmeras: apaga os vídeos de alerta vencidos (falso alarme 30 dias, abertos 90, furto confirmado 1 ano)'),
 ]

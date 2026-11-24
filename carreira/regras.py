@@ -119,15 +119,24 @@ def _tempo(user, perfil, hoje):
 
 def _resultado(user, perfil, hoje):
     base = {'chave': 'resultado', 'titulo': 'Resultado', 'icone': 'fa-chart-line', 'cor': '#0EA5E9',
-            'como': 'Média dos últimos 6 meses em 100% ou mais nos 7 pilares.', 'onde': 'Portal (Inteligência)'}
-    media = perfil.resultado_media
-    if media is None:
-        return {**base, 'situacao': AGUARDANDO, 'progresso': 0, 'valor': 'Aguardando a Inteligência lançar',
-                'dica': 'A média dos 7 pilares entra aqui assim que a Inteligência fechar os meses.'}
+            'como': 'Média dos últimos 6 meses em 100% ou mais nos 7 pilares, no comissionamento pós-contestação.',
+            'onde': 'Portal (Inteligência)'}
+    if perfil.resultado_media is not None:
+        media, pilares = perfil.resultado_media, []
+        ref = f' ({perfil.resultado_referencia})' if perfil.resultado_referencia else ''
+        origem = ' · lançado pelo SUPERADMIN'
+    elif perfil.resultado_auto is not None:
+        media, pilares = perfil.resultado_auto, perfil.resultado_auto_pilares or []
+        ref = f' ({perfil.resultado_auto_meses})' if perfil.resultado_auto_meses else ''
+        origem = ''
+    else:
+        return {**base, 'situacao': AGUARDANDO, 'progresso': 0,
+                'valor': 'Aguardando o comissionamento pós-contestação',
+                'dica': 'A média dos 7 pilares entra aqui assim que o comissionamento dos seus meses for fechado.'}
     ok = media >= RESULTADO_MINIMO
-    ref = f' ({perfil.resultado_referencia})' if perfil.resultado_referencia else ''
     return {**base, 'situacao': OK if ok else FALTA, 'progresso': float(min(1, media / RESULTADO_MINIMO)),
-            'valor': f'Média de {_fmt_pct(media)}{ref}',
+            'valor': f'Média de {_fmt_pct(media)}{ref}{origem}',
+            'pilares': [{**p, 'ok': p['media'] >= float(RESULTADO_MINIMO)} for p in pilares],
             'dica': 'Meta batida nos 7 pilares. Continue assim!' if ok
             else f'Faltam {_fmt_pct(RESULTADO_MINIMO - media)} na média para chegar a 100%.'}
 

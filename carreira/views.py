@@ -5,6 +5,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.db.models import Max
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -120,6 +121,7 @@ def painel(request):
         'lojas_avaliadas': len(registros),
         'ano': ano, 'tri': tri, 'anos': range(hoje.year - 1, hoje.year + 1),
         'pessoas': pessoas,
+        'resultado_em': PerfilCarreira.objects.aggregate(m=Max('resultado_auto_em'))['m'],
     })
 
 
@@ -136,6 +138,21 @@ def liberar(request):
     cache.delete(regras.CHAVE_LIBERADO)
     messages.success(request, 'Progresso liberado para o comercial: os consultores já veem a jornada no menu.'
                      if config.liberado else 'Progresso escondido: só o SUPERADMIN vê.')
+    return redirect('carreira:painel')
+
+
+@login_required
+@require_POST
+def atualizar_resultado(request):
+    """Relê o comissionamento pós-contestação dos últimos 6 meses para todo o comercial (numa thread)."""
+    if (barra := _so_superadmin(request)) is not None:
+        return barra
+    from .resultado import atualizar_em_segundo_plano
+    if atualizar_em_segundo_plano():
+        messages.success(request, 'Lendo o comissionamento pós-contestação dos últimos 6 meses (cerca de um minuto). '
+                                  'Recarregue a página daqui a pouco.')
+    else:
+        messages.info(request, 'A atualização já está rodando.')
     return redirect('carreira:painel')
 
 

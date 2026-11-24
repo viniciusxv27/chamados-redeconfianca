@@ -11,6 +11,7 @@ urlpatterns = [
     path('painel/', views.painel, name='painel'),
     path('painel/liberar/', views.liberar, name='liberar'),
     path('painel/trilhas/', views.trilhas, name='trilhas'),
+    path('painel/resultado/', views.atualizar_resultado, name='atualizar_resultado'),
     path('painel/lojas/', views.lojas_aptas, name='lojas_aptas'),
     path('pessoa/<int:user_id>/', views.pessoa, name='pessoa'),
     path('pessoa/<int:user_id>/salvar/', views.pessoa_salvar, name='pessoa_salvar'),

@@ -46,6 +46,13 @@ class PerfilCarreira(models.Model):
     resultado_referencia = models.CharField('Meses da média', max_length=60, blank=True, default='')
     satisfacao_nota = models.DecimalField('Satisfação do cliente (nota)', max_digits=4, decimal_places=2,
                                           null=True, blank=True)
+    # Resultado puxado do comissionamento pós-contestação (carreira/resultado.py, 26/11/2026). O lançado acima,
+    # quando preenchido, vale mais.
+    resultado_auto = models.DecimalField('Resultado do comissionamento (%)', max_digits=7, decimal_places=2,
+                                         null=True, blank=True)
+    resultado_auto_meses = models.CharField(max_length=60, blank=True, default='', db_default='')
+    resultado_auto_pilares = models.JSONField(null=True, blank=True)
+    resultado_auto_em = models.DateTimeField(null=True, blank=True)
     # Quando o automático não serve (sem dado no D-1 ou no ponto), o SUPERADMIN lança o número.
     qualidade_manual = models.DecimalField('Qualidade: % de erro (lançado)', max_digits=6, decimal_places=2,
                                            null=True, blank=True)

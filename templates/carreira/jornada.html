@@ -206,6 +206,11 @@
                         <p class="mt-2 text-sm font-semibold text-gray-800">{{ r.valor }}</p>
                         <div class="pg-barra mt-2"><span data-largura="{{ r.progresso_pct }}"></span></div>
                         <p class="mt-2 text-xs text-gray-600">{{ r.dica }}</p>
+                        {% if r.pilares %}
+                        <div class="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-1.5" data-pilares>
+                            {% for p in r.pilares %}<span class="text-[11px] rounded-lg px-2 py-1 {% if p.ok %}bg-emerald-50 text-emerald-800{% else %}bg-amber-50 text-amber-800{% endif %}" title="{{ p.meses }} mês(es) com número">{{ p.nome }} <strong>{{ p.media|floatformat:0 }}%</strong></span>{% endfor %}
+                        </div>
+                        {% endif %}
                         {% if r.trilhas %}
                         <ul class="mt-2 space-y-1">
                             {% for t in r.trilhas %}<li class="text-xs flex items-center gap-1.5 {% if t.feita %}text-emerald-700{% else %}text-gray-500{% endif %}"><i class="fas {% if t.feita %}fa-circle-check{% else %}fa-circle{% endif %} text-[10px]"></i>{{ t.nome }}</li>{% endfor %}
@@ -250,7 +255,7 @@
                 <label class="block text-xs text-gray-600">Última promoção <span class="text-gray-400">(vazio = admissão {{ pessoa.admission_date|date:"d/m/Y"|default:"—" }})</span>
                     <input type="date" name="ultima_promocao" value="{{ perfil.ultima_promocao|date:'Y-m-d' }}" class="pg-campo mt-1"></label>
                 <div class="grid grid-cols-2 gap-2">
-                    <label class="block text-xs text-gray-600">Resultado: média 6 meses (%)
+                    <label class="block text-xs text-gray-600">Resultado (%) <span class="text-gray-400">vazio = comissionamento</span>
                         <input name="resultado_media" inputmode="decimal" value="{{ perfil.resultado_media|default_if_none:'' }}" class="pg-campo mt-1" placeholder="ex.: 104,5"></label>
                     <label class="block text-xs text-gray-600">Meses da média
                         <input name="resultado_referencia" value="{{ perfil.resultado_referencia }}" class="pg-campo mt-1" placeholder="jun–nov/26"></label>

@@ -138,7 +138,7 @@ t('tempo: 6 meses ainda não, e diz quando completa', jb['tempo']['situacao'] ==
 p = regras.perfil_de(beto); p.ultima_promocao = HOJE - timedelta(days=30); p.save()
 t('última promoção reinicia a contagem', regras.avaliar(beto)['requisitos'][0]['valor'].startswith('0 de 12')
   or regras.avaliar(beto)['requisitos'][0]['valor'].startswith('1 de 12'))
-t('resultado e satisfação aguardam lançamento', req['resultado']['situacao'] == 'aguardando' and req['satisfacao']['situacao'] == 'aguardando')
+t('resultado e satisfação aguardam (comissionamento ainda não lido)', req['resultado']['situacao'] == 'aguardando' and req['satisfacao']['situacao'] == 'aguardando')
 t('qualidade: 6 erros em 200 = 3% cumpre', req['qualidade']['situacao'] == 'ok' and '3,0%' in req['qualidade']['valor'], req['qualidade'])
 D1['valor'] = (100, 8)
 t('qualidade: 8% não cumpre', {r['chave']: r for r in regras.avaliar(ana)['requisitos']}['qualidade']['situacao'] == 'falta')
@@ -289,6 +289,87 @@ t('falta conta o dia inteiro, atraso só acima de 10 min, esquecida e abono fica
   a and a['pct'] == esperado and a['dias_sem_batida'] == 1 and a['minutos_atraso'] == 30, (a, esperado))
 User.objects.filter(pk=beto.pk).update(tangerino_employee_id=None)
 t('sem ponto no Tangerino: aguarda', regras.absenteismo(User.objects.get(pk=beto.pk), HOJE) is None)
+
+
+print('Resultado do comissionamento pós-contestação (26/11/2026)')
+from types import SimpleNamespace
+from carreira import resultado as res
+from users import commission_views as cv
+
+
+def linha(nome, pcts):
+    """pcts: {pilar_chave: (pct_1, pct_2, pct_3)} em fração, como na planilha."""
+    dados = {'NOME': nome}
+    for chave, (p1, p2, p3) in pcts.items():
+        dados[f'%ATING_{chave}_1'], dados[f'%ATING_{chave}_2'], dados[f'%ATING_{chave}_3'] = p1, p2, p3
+    return {'nome': nome, 'data': dados}
+
+
+TODOS = ('MOVEL', 'FIXA', 'SMART', 'ELETRO', 'ESSEN', 'SEG', 'SVA')
+PLANILHAS = {
+    'url-2026-09': [linha('Ana ZZ', {k: (1.10, 1.00, 0.50) for k in TODOS}),
+                    linha('Fulano Sem Cadastro', {k: (2.0, 2.0, 2.0) for k in TODOS})],
+    'url-2026-07': [linha('Ana ZZ', {**{k: (1.20, 0.90, 0.80) for k in TODOS}, 'SVA': (0, 0.90, 0.80)})],
+}
+versoes = [SimpleNamespace(pk=9, year=2026, month=9), SimpleNamespace(pk=7, year=2026, month=7)]
+with mock.patch.object(cv, 'get_excel_urls', lambda y, m, p=None: {'comissao': f'url-{y}-{m:02d}'}), \
+        mock.patch.object(cv, 'fetch_all_users_from_sheet',
+                          lambda sheet, excel_url=None, cache_suffix=None: {'success': True, 'users': PLANILHAS[excel_url]}):
+    pessoas = res.atingimentos_por_pessoa(versoes)
+meses = pessoas[cv.normalize_person_name('ANA ZZ')]
+t('cada mês usa a própria versão; o mês sem versão vem da seguinte', sorted(meses) == [(2026, 5), (2026, 6), (2026, 7), (2026, 8), (2026, 9)]
+  and meses[(2026, 9)]['Móvel'] == 110.0 and meses[(2026, 8)]['Móvel'] == 100.0 and meses[(2026, 7)]['Móvel'] == 120.0
+  and meses[(2026, 6)]['Móvel'] == 90.0, meses)
+t('o 3º mês da versão de 09 não passa por cima da própria versão de 07', meses[(2026, 7)]['Fixa'] == 120.0)
+t('pilar zerado no mês é "sem dado", não 0%', 'SVA' not in meses[(2026, 7)] and meses[(2026, 6)]['SVA'] == 90.0)
+media, rotulo, pilares, quantos = res.media_da_pessoa(meses)
+valores = [v for m in meses.values() for v in m.values()]
+t('média de todos os atingimentos (pilar x mês)', media == Decimal(str(round(sum(valores) / len(valores), 2))) and quantos == 5
+  and rotulo == 'mai–set/26', (media, rotulo))
+t('média por pilar para mostrar na tela', [p['nome'] for p in pilares] == list(res.PILARES)
+  and next(p for p in pilares if p['nome'] == 'SVA')['meses'] == 4, pilares)
+t('sem meses, sem média', res.media_da_pessoa({}) is None)
+jan = res.janela(versoes)
+t('a janela são os 6 meses a partir da versão mais nova (abr–set/26)', jan == {(2026, m) for m in range(4, 10)}, jan)
+t('mês fora da janela não entra na média', res.media_da_pessoa({(2026, 2): {'Móvel': 150.0}}, jan) is None
+  and res.media_da_pessoa({(2026, 2): {'Móvel': 150.0}, (2026, 9): {'Móvel': 90.0}}, jan)[0] == Decimal('90.0'))
+with mock.patch.object(res, 'atingimentos_por_pessoa', lambda versoes=None, falhas=None: pessoas), \
+        mock.patch.object(res, 'janela', lambda versoes: {(2026, m) for m in range(4, 10)}):
+    atualizados, sem_dado = res.atualizar_todos()
+pa = PerfilCarreira.objects.get(user=ana)
+t('grava no perfil de quem bate o nome (o resto fica sem dado)', atualizados == 1 and sem_dado >= 1
+  and pa.resultado_auto == media and pa.resultado_auto_meses.startswith('mai–set/26') and pa.resultado_auto_em)
+PerfilCarreira.objects.filter(user=ana).update(resultado_media=None)
+r = {x['chave']: x for x in regras.avaliar(User.objects.get(pk=ana.pk))['requisitos']}['resultado']
+t('sem lançamento manual, o Resultado vem do comissionamento', r['situacao'] == ('ok' if media >= 100 else 'falta')
+  and 'mai–set/26' in r['valor'] and 'lançado' not in r['valor'] and len(r['pilares']) == 7, r)
+PerfilCarreira.objects.filter(user=ana).update(resultado_media=Decimal('80'))
+r = {x['chave']: x for x in regras.avaliar(User.objects.get(pk=ana.pk))['requisitos']}['resultado']
+t('o lançado pelo SUPERADMIN vale mais', r['situacao'] == 'falta' and 'lançado pelo SUPERADMIN' in r['valor'])
+PerfilCarreira.objects.filter(user=ana).update(resultado_media=None)
+h = csa.get(f'/progresso/pessoa/{ana.pk}/').content.decode()
+t('a tela mostra o atingimento de cada pilar', 'data-pilares' in h and 'Móvel <strong>' in h)
+with mock.patch('carreira.resultado.atualizar_em_segundo_plano', return_value=True) as disparo:
+    r = csa.post('/progresso/painel/resultado/', follow=True)
+t('o painel tem o botão que relê o comissionamento', disparo.called and 'Lendo o comissionamento' in r.content.decode()
+  and 'data-resultado' in r.content.decode())
+with mock.patch('carreira.resultado.atualizar_em_segundo_plano') as disparo:
+    cana.post('/progresso/painel/resultado/')
+t('consultor não dispara a leitura', not disparo.called)
+antes_auto = PerfilCarreira.objects.get(user=ana).resultado_auto
+falhou = {'url-2026-09': {'error': 'o OneDrive respondeu com uma página'}}
+with mock.patch.object(cv, 'get_excel_urls', lambda y, m, p=None: {'comissao': f'url-{y}-{m:02d}'}), \
+        mock.patch.object(cv, 'fetch_all_users_from_sheet',
+                          lambda sheet, excel_url=None, cache_suffix=None: falhou.get(excel_url) or {'success': True, 'users': PLANILHAS[excel_url]}), \
+        mock.patch.object(res.time, 'sleep', lambda s: None), \
+        mock.patch('users.models.CommissionSpreadsheetVersion.objects') as vobj:
+    vobj.filter.return_value.exclude.return_value.order_by.return_value.__getitem__.return_value = versoes
+    saida = res.atualizar_todos()
+t('planilha que não baixa (mesmo tentando 3 vezes): não regrava nada', saida is None
+  and PerfilCarreira.objects.get(user=ana).resultado_auto == antes_auto)
+from core.agendador_diario import TAREFAS
+t('roda sozinho todo dia (agendador diário)', any(c == 'carreira_resultado' and f == 'carreira.resultado.tarefa_diaria'
+                                                 for c, _h, f, _d in TAREFAS))
 
 print(f'\n{ok} OK, {fail} falha(s)')
 sys.exit(1 if fail else 0)
