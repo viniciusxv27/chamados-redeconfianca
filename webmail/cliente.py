@@ -199,6 +199,7 @@ class Sessao:
         self.trava = threading.RLock()
         self._pastas = None
         self._pastas_em = 0.0
+        self.prefixo = ''          # namespace pessoal ("INBOX." na UNI5; "" no servidor novo)
 
     def abrir(self):
         if not self._senha:
@@ -210,6 +211,7 @@ class Sessao:
             self.caps = set((dados[0] or b'').decode().upper().split()) if typ == 'OK' else set()
         except imaplib.IMAP4.error:
             self.caps = set()
+        self.prefixo = _prefixo_pessoal(con) if 'NAMESPACE' in self.caps else ''
         self.con, self.pasta, self.usada = con, None, time.time()
 
     def fechar(self):
@@ -231,8 +233,12 @@ class Sessao:
                 self.fechar()
                 self.abrir()
 
-    def selecionar(self, pasta, forcar=False):
+    def selecionar(self, pasta, forcar=False, sincronizar=False):
         if self.pasta == pasta and not forcar:
+            if sincronizar:
+                # A pasta já estava aberta: o NOOP traz o que chegou desde então
+                # (o servidor só conta mensagem nova quando o cliente pergunta).
+                self.con.noop()
             return
         typ, dados = self.con.select(_q(pasta))
         if typ != 'OK':
@@ -245,6 +251,17 @@ class Sessao:
         if typ != 'OK':
             raise ErroEmail(f'O servidor recusou {comando}: {(dados or [b""])[0]!r}')
         return dados
+
+
+def _prefixo_pessoal(con):
+    """Prefixo das pastas da pessoa, do NAMESPACE: '(("INBOX." ".")) NIL NIL' → 'INBOX.'."""
+    try:
+        typ, dados = con.namespace()
+    except (imaplib.IMAP4.error, OSError):
+        return ''
+    texto = (dados[0] or b'').decode('utf-8', 'replace') if typ == 'OK' and dados else ''
+    m = re.match(r'\s*\(\("([^"]*)"', texto)
+    return m.group(1) if m else ''
 
 
 _SESSOES = {}
@@ -324,8 +341,13 @@ def _listar_pastas(s, forcar=False):
             continue
         nome = p['nome']
         legivel = utf7_decodificar(nome)
-        folha = legivel.split(p['delim'])[-1] if p['delim'] else legivel
-        nivel = legivel.count(p['delim']) if p['delim'] else 0
+        # Servidor com namespace "INBOX." (UNI5) guarda tudo abaixo da entrada: "INBOX.Sent"
+        # é a pasta Enviados de primeiro nível para quem lê.
+        relativo = legivel
+        if s.prefixo and nome.upper() != 'INBOX' and legivel.upper().startswith(s.prefixo.upper()):
+            relativo = legivel[len(s.prefixo):]
+        folha = relativo.split(p['delim'])[-1] if p['delim'] else relativo
+        nivel = relativo.count(p['delim']) if p['delim'] else 0
         papel = 'entrada' if nome.upper() == 'INBOX' else None
         if not papel:
             papel = next((PAPEL_POR_FLAG[f] for f in p['flags'] if f in PAPEL_POR_FLAG), None)
@@ -338,7 +360,7 @@ def _listar_pastas(s, forcar=False):
         pastas.append({
             'id': nome,
             'nome': ROTULO_PAPEL.get(papel) or folha,
-            'caminho': legivel,
+            'caminho': relativo,
             'nivel': nivel,
             'papel': papel or '',
         })
@@ -358,13 +380,15 @@ def pasta_do_papel(s, papel, criar=True):
             return p['id']
     if not criar:
         return None
-    nome = NOME_PADRAO[papel]
-    s.con.create(_q(nome))
+    nome = s.prefixo + NOME_PADRAO[papel]
+    typ, _dados = s.con.create(_q(nome))
     try:
         s.con.subscribe(_q(nome))
     except imaplib.IMAP4.error:
         pass
     _listar_pastas(s, forcar=True)
+    if typ != 'OK' and nome not in {p['id'] for p in s._pastas or []}:
+        raise ErroEmail(f'O servidor não criou a pasta {ROTULO_PAPEL.get(papel, nome)}.')
     return nome
 
 
@@ -396,7 +420,7 @@ def criar_pasta(s, nome):
     nome = (nome or '').strip().replace('"', '')[:80]
     if not nome:
         raise ErroEmail('Dê um nome à pasta.')
-    bruto = utf7_codificar(nome)
+    bruto = s.prefixo + utf7_codificar(nome)
     typ, _ = s.con.create(_q(bruto))
     if typ != 'OK':
         raise ErroEmail('O servidor não criou a pasta (o nome já existe?).')
@@ -506,9 +530,11 @@ def _resumos(s, uids):
 def _buscar(s, criterios, busca=''):
     """UIDs que batem, do mais recente para o mais antigo.
 
-    Com SORT (o Dovecot tem), a ordem é a da chegada na caixa: uma mensagem
-    antiga movida de pasta ganha UID novo e, ordenando só por UID, subiria
-    para o topo como se tivesse acabado de chegar.
+    Com SORT (o Dovecot tem), a ordem é a da data da mensagem — a mesma que a
+    lista mostra. Ordenar só por UID põe no topo a mensagem antiga movida de
+    pasta (ganha UID novo); e a data de chegada (ARRIVAL) se embaralha quando a
+    caixa é migrada de servidor ou a entrega atrasa — foi o que aconteceu na
+    troca para o mail.redeconfianca.com em 24/11/2026.
     """
     criterios = list(criterios or [])
     if busca:
@@ -517,7 +543,7 @@ def _buscar(s, criterios, busca=''):
     elif not criterios:
         criterios = ['ALL']
     if 'SORT' in s.caps:
-        dados = s.uid('SORT', '(REVERSE ARRIVAL)', 'UTF-8', *criterios)
+        dados = s.uid('SORT', '(REVERSE DATE)', 'UTF-8', *criterios)
         vistos, ordem = set(), []
         for u in (dados[0] or b'').split():
             if u.isdigit() and int(u) not in vistos:
@@ -532,7 +558,7 @@ def _buscar(s, criterios, busca=''):
 
 
 def listar(s, pasta, pagina=1, busca='', filtro=''):
-    s.selecionar(pasta)
+    s.selecionar(pasta, sincronizar=True)
     criterios = []
     if filtro == 'nao_lidas':
         criterios.append('UNSEEN')
@@ -815,6 +841,8 @@ def resumo(s):
 
 
 def novidades(s):
+    if s.pasta == 'INBOX':
+        s.con.noop()                       # entrada aberta: sincroniza antes de contar
     st = _status(s, 'INBOX', '(MESSAGES UNSEEN UIDNEXT)')
     return {'uidnext': st.get('UIDNEXT', 0), 'nao_lidas': st.get('UNSEEN', 0),
             'total': st.get('MESSAGES', 0)}
@@ -931,6 +959,7 @@ def enviar(conta, msg, destinos):
 def depois_do_envio(s, msg, destinos, rascunho_uid=None, respondida=None):
     """Cópia em Enviados (com o Cco), rascunho apagado e original marcado como respondido."""
     copia = msg
+    aviso = ''
     if destinos['cco']:
         copia = email_lib.message_from_bytes(msg.as_bytes(), policy=policy.default)
         copia['Bcc'] = ', '.join(formataddr(x) for x in destinos['cco'])
@@ -938,6 +967,7 @@ def depois_do_envio(s, msg, destinos, rascunho_uid=None, respondida=None):
         _guardar(s, 'enviados', copia, '(\\Seen)')
     except (ErroEmail, imaplib.IMAP4.error) as exc:
         logger.warning('E-mail enviado, mas a cópia em Enviados falhou: %s', exc)
+        aviso = 'Enviado, mas a cópia não foi guardada em Enviados.'
     if rascunho_uid:
         try:
             s.selecionar(pasta_do_papel(s, 'rascunhos'), forcar=True)
@@ -951,6 +981,7 @@ def depois_do_envio(s, msg, destinos, rascunho_uid=None, respondida=None):
             s.uid('STORE', str(int(uid)), '+FLAGS.SILENT', '(\\Answered)')
         except (ErroEmail, ValueError, imaplib.IMAP4.error):
             pass
+    return aviso
 
 
 def salvar_rascunho(s, msg, rascunho_uid=None):

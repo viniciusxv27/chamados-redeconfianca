@@ -527,9 +527,9 @@ GOOGLE_DRIVE_IMPERSONATE = config('GOOGLE_DRIVE_IMPERSONATE', default='')
 # (Dovecot). Os apelidos imap./smtp.redeconfianca.com apontam para lá, mas o
 # certificado é *.uni5.net — por isso o portal fala direto com imap-vip/smtp-vip
 # e o certificado passa na verificação normal, sem pino.
-WEBMAIL_IMAP_HOST = config('WEBMAIL_IMAP_HOST', default='imap-vip.uni5.net')
+WEBMAIL_IMAP_HOST = config('WEBMAIL_IMAP_HOST', default='imap.redeconfianca.com')
 WEBMAIL_IMAP_PORT = config('WEBMAIL_IMAP_PORT', default=993, cast=int)
-WEBMAIL_SMTP_HOST = config('WEBMAIL_SMTP_HOST', default='smtp-vip.uni5.net')
+WEBMAIL_SMTP_HOST = config('WEBMAIL_SMTP_HOST', default='smtp.redeconfianca.com')
 WEBMAIL_SMTP_PORT = config('WEBMAIL_SMTP_PORT', default=465, cast=int)
 # O primeiro é o que a tela de entrar sugere; os outros continuam aceitos.
 WEBMAIL_DOMINIOS = config('WEBMAIL_DOMINIOS', default='redeconfianca.com,redeconfianca.com.br')

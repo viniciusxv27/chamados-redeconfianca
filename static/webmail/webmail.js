@@ -20,7 +20,7 @@
     const E = {
         pastas: [], pasta: 'INBOX', pagina: 1, paginas: 1, total: 0, busca: '', filtro: '',
         lista: [], marcadas: new Set(), ultimaMarcada: null, aberta: null, foco: -1, msg: null,
-        uidnext: 0, carregandoLista: 0, contatos: new Map(), resumo: null,
+        uidnext: 0, carregandoLista: 0, novos: new Set(), sincronizadoEm: 0, semConexao: false, ultimoTotal: null, contatos: new Map(), resumo: null,
     };
 
     // ── Utilidades ────────────────────────────────────────────────────────
@@ -218,11 +218,16 @@
     async function carregarLista(opcoes) {
         opcoes = opcoes || {};
         const pedido = ++E.carregandoLista;
+        const antes = new Set(E.lista.map(m => m.uid));
         if (!opcoes.silencioso) esqueletoLista();
         try {
             const d = await api(URL.lista, {params: {pasta: E.pasta, pagina: E.pagina, busca: E.busca, filtro: E.filtro}});
             if (pedido !== E.carregandoLista) return;
+            // Atualização silenciosa: o que não estava na lista chega com destaque.
+            E.novos = new Set(opcoes.silencioso && antes.size ? d.mensagens.filter(m => !antes.has(m.uid)).map(m => m.uid) : []);
+            E.entrada = !opcoes.silencioso;
             E.lista = d.mensagens; E.total = d.total; E.paginas = d.paginas;
+            sincronizou(true);
             if (E.msg) { const aberta = E.lista.find(m => m.uid === E.msg.uid); if (aberta) aberta.lida = true; }
             E.lista.forEach(m => lembrarContato(m.de));
             const visiveis = new Set(E.lista.map(m => m.uid));
@@ -230,6 +235,8 @@
             desenharLista();
         } catch (e) {
             if (pedido !== E.carregandoLista) return;
+            sincronizou(false);
+            if (opcoes.silencioso && E.lista.length) return;      // mantém a lista; o selo avisa
             itensEl.innerHTML = `<div class="wm-vazio"><div class="wm-vazio-icone"><i class="fas fa-plug"></i></div>
                 <p class="font-semibold" style="color:var(--wm-texto)">Não deu para abrir a pasta</p><p class="text-sm mt-1">${esc(e.message)}</p>
                 <button type="button" class="wm-botao mt-4" data-wm="atualizar"><i class="fas fa-rotate-right"></i>Tentar de novo</button></div>`;
@@ -247,8 +254,10 @@
 
     function itemHtml(m) {
         const pessoa = (pastaAtual().papel === 'enviados' || pastaAtual().papel === 'rascunhos') ? (m.para || [])[0] : m.de;
-        const classes = ['wm-item', m.lida ? '' : 'wm-nao-lida', E.aberta === m.uid ? 'wm-aberto' : '', E.marcadas.has(m.uid) ? 'wm-marcado' : ''].join(' ');
-        return `<div class="${classes}" data-uid="${m.uid}" draggable="true" role="option" aria-selected="${E.aberta === m.uid}">
+        const classes = ['wm-item', m.lida ? '' : 'wm-nao-lida', E.aberta === m.uid ? 'wm-aberto' : '', E.marcadas.has(m.uid) ? 'wm-marcado' : '',
+            E.novos.has(m.uid) ? 'wm-nova' : '', E.entrada && E.indiceEntrada < 14 ? 'wm-entra' : ''].join(' ');
+        const atraso = E.entrada ? ` style="--wm-i:${E.indiceEntrada++}"` : '';
+        return `<div class="${classes}" data-uid="${m.uid}" draggable="true" role="option" aria-selected="${E.aberta === m.uid}"${atraso}>
             <div class="wm-avatar-cx" data-acao="marcar" title="Selecionar">${avatar(pessoa)}<span class="wm-check"><i class="fas fa-check"></i></span></div>
             <div class="wm-item-miolo">
                 <div class="wm-item-linha">
@@ -291,12 +300,16 @@
             return;
         }
         let html = '', grupo = null;
+        E.indiceEntrada = 0;
         for (const m of E.lista) {
             const g = grupoData(m.data);
             if (g !== grupo) { html += `<div class="wm-grupo-data">${esc(g)}</div>`; grupo = g; }
             html += itemHtml(m);
         }
         itensEl.innerHTML = html;
+        // Entrada animada e destaque de "nova" valem só para este desenho (marcar como lida redesenha).
+        E.entrada = false;
+        E.novos = new Set();
         atualizarLote();
         marcarFoco();
     }
@@ -1036,7 +1049,9 @@
             try {
                 const d = await api(URL.enviar, {method: 'POST', form: montarForm()});
                 c.fechar(true);
-                aviso((d.recusados || []).length ? 'Enviada, mas recusada para: ' + d.recusados.join(', ') : 'Mensagem enviada', {icone: 'fa-paper-plane', erro: (d.recusados || []).length > 0});
+                const recusa = (d.recusados || []).length > 0;
+                aviso(recusa ? 'Enviada, mas recusada para: ' + d.recusados.join(', ') : (d.aviso || 'Mensagem enviada'),
+                      {icone: 'fa-paper-plane', erro: recusa || !!d.aviso});
                 E.resumo = null;
                 const papel = pastaAtual().papel;
                 if (papel === 'enviados' || papel === 'rascunhos') carregarLista({silencioso: true});
@@ -1200,7 +1215,14 @@
         if (wm) {
             const qual = wm.dataset.wm;
             if (qual === 'escrever') { fecharPastasMovel(); abrirCompor(); }
-            else if (qual === 'atualizar') { E.resumo = null; carregarPastas(); carregarLista(); if (!E.aberta) mostrarVisaoGeral(true); }
+            else if (qual === 'atualizar') {
+                E.resumo = null;
+                const icone = $('[data-wm="atualizar"] i');
+                if (icone) icone.classList.add('wm-girando');
+                carregarPastas();
+                carregarLista({silencioso: E.lista.length > 0}).finally(() => { if (icone) icone.classList.remove('wm-girando'); });
+                if (!E.aberta) mostrarVisaoGeral(true);
+            }
             else if (qual === 'visao-geral') { app.dataset.vista = 'leitura'; E.aberta = null; $$('.wm-item.wm-aberto', itensEl).forEach(el => el.classList.remove('wm-aberto')); mostrarVisaoGeral(true); historico(false); }
             else if (qual === 'configurar') mostrarConfiguracoes();
             else if (qual === 'atalhos') mostrarAtalhos();
@@ -1402,13 +1424,39 @@
         return null;
     }
 
+    // ── Selo "ao vivo": quando a caixa conversou com o servidor pela última vez ──
+    const vivoEl = document.getElementById('wmVivo');
+    function sincronizou(ok) {
+        E.semConexao = !ok;
+        if (ok) E.sincronizadoEm = Date.now();
+        desenharVivo();
+    }
+    function desenharVivo() {
+        if (!vivoEl) return;
+        const texto = vivoEl.querySelector('[data-vivo-texto]');
+        vivoEl.classList.toggle('wm-vivo-erro', E.semConexao);
+        if (E.semConexao) { texto.textContent = 'Sem conexão · tentando de novo'; return; }
+        if (!E.sincronizadoEm) { texto.textContent = 'Conectando…'; return; }
+        const s = Math.round((Date.now() - E.sincronizadoEm) / 1000);
+        texto.textContent = s < 15 ? 'Sincronizado agora' : s < 60 ? `Sincronizado há ${s} s` : `Sincronizado há ${Math.round(s / 60)} min`;
+        vivoEl.title = 'Última conversa com o servidor: ' + new Date(E.sincronizadoEm).toLocaleTimeString('pt-BR');
+    }
+    setInterval(desenharVivo, 5000);
+
     // ── Novidades: confere a caixa de entrada de tempos em tempos ─────────
     async function conferirNovidades() {
         if (document.hidden) return;
         try {
             const d = await api(URL.novidades);
+            sincronizou(true);
             const entrada = pastaPorPapel('entrada');
             if (entrada && entrada.nao_lidas !== d.nao_lidas) { entrada.nao_lidas = d.nao_lidas; entrada.total = d.total; desenharPastas(); atualizarTitulo(); }
+            // Mexeram na caixa em outro lugar (celular, Outlook): a lista acompanha.
+            const naEntrada = E.pasta === 'INBOX' && E.pagina === 1 && !E.busca;
+            if (naEntrada && E.ultimoTotal !== null && d.total !== E.ultimoTotal && !(E.uidnext && d.uidnext > E.uidnext)) {
+                carregarLista({silencioso: true});
+            }
+            E.ultimoTotal = d.total;
             if (E.uidnext && d.uidnext > E.uidnext) {
                 const novas = d.uidnext - E.uidnext;
                 E.resumo = null;
@@ -1417,10 +1465,11 @@
                     acao: E.pasta === 'INBOX' ? null : {rotulo: 'Ver', fn: () => irParaPasta('INBOX')}});
             }
             E.uidnext = d.uidnext;
-        } catch (e) { /* tenta de novo na próxima volta */ }
+        } catch (e) { sincronizou(false); /* tenta de novo na próxima volta */ }
     }
-    setInterval(conferirNovidades, 45000);
+    setInterval(conferirNovidades, 20000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) conferirNovidades(); });
+    window.addEventListener('focus', debounce(conferirNovidades, 400));
 
     // ── Início ────────────────────────────────────────────────────────────
     ajustarAltura();

@@ -363,12 +363,14 @@ def api_enviar(request, conta):
     recusados = cliente.enviar(conta, msg, destinos)
     p = request.POST
     respondida = (p.get('respondida_pasta'), p.get('respondida_uid')) if p.get('respondida_uid') else None
+    aviso = ''
     try:
-        cliente.executar(conta, lambda s: cliente.depois_do_envio(
-            s, msg, destinos, rascunho_uid=p.get('rascunho_uid') or None, respondida=respondida))
+        aviso = cliente.executar(conta, lambda s: cliente.depois_do_envio(
+            s, msg, destinos, rascunho_uid=p.get('rascunho_uid') or None, respondida=respondida)) or ''
     except cliente.ErroEmail as exc:
         logger.warning('Envio feito; arrumação depois falhou: %s', exc)
-    return JsonResponse({'ok': True, 'recusados': list(recusados)})
+        aviso = 'Enviado, mas a cópia não foi guardada em Enviados.'
+    return JsonResponse({'ok': True, 'recusados': list(recusados), 'aviso': aviso})
 
 
 @_api

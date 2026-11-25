@@ -4,7 +4,7 @@
 {% block title %}E-mail{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'webmail/webmail.css' %}?v=4">
+<link rel="stylesheet" href="{% static 'webmail/webmail.css' %}?v=5">
 {# A caixa calcula a própria altura para caber na tela; sem isto a página rola e o topo some sob o cabeçalho. #}
 <style>#rc-conteudo { min-height: 0 !important; }</style>
 {% endblock %}
@@ -28,6 +28,7 @@
             <input type="search" id="wmBusca" placeholder="Buscar e-mails" aria-label="Buscar e-mails">
             <kbd>/</kbd>
         </form>
+        <span class="wm-vivo" id="wmVivo" title="Atualiza sozinho a cada 20 segundos"><span class="wm-vivo-ponto"></span><span data-vivo-texto>Conectando…</span></span>
         <div class="flex items-center gap-0.5 ml-auto">
             <button type="button" class="wm-icone-botao" data-wm="atualizar" title="Atualizar (R)" aria-label="Atualizar"><i class="fas fa-rotate-right"></i></button>
             <button type="button" class="wm-icone-botao" data-wm="visao-geral" title="Visão geral" aria-label="Visão geral"><i class="fas fa-chart-bar"></i></button>
@@ -129,5 +130,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'webmail/webmail.js' %}?v=4"></script>
+<script src="{% static 'webmail/webmail.js' %}?v=5"></script>
 {% endblock %}

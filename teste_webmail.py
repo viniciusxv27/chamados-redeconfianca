@@ -677,6 +677,72 @@ try:
         t('redeconfianca.com.br segue no servidor dele', wc._host_imap('ana@redeconfianca.com.br') == ('mail.redeconfianca.com.br', 993)
           and wc._host_smtp('ANA@RedeConfianca.com.br') == ('mail.redeconfianca.com.br', 465))
         t('sem e-mail, o principal', wc._host_imap() == ('imap-vip.uni5.net', 993))
+    t('padrão agora é o mail.redeconfianca.com (MX desde 24/11/2026)',
+      settings.WEBMAIL_IMAP_HOST in ('imap.redeconfianca.com',) or os.environ.get('WEBMAIL_IMAP_HOST'),
+      settings.WEBMAIL_IMAP_HOST)
+
+    print('\n== SERVIDOR COM PREFIXO "INBOX." E CAIXA VIVA (25/11/2026) ==')
+
+    class ConStub:
+        def __init__(self, linhas, namespace=b'(("INBOX." ".")) NIL NIL'):
+            self.linhas, self.ns, self.noops, self.criadas = linhas, namespace, 0, []
+
+        def list(self, ref, padrao):
+            return 'OK', self.linhas
+
+        def namespace(self):
+            return 'OK', [self.ns]
+
+        def noop(self):
+            self.noops += 1
+            return 'OK', [b'']
+
+        def create(self, nome):
+            self.criadas.append(nome)
+            self.linhas.append(f'(\\HasNoChildren) "." {nome}'.encode())
+            return 'OK', [b'']
+
+        def subscribe(self, nome):
+            return 'OK', [b'']
+
+    uni5 = ConStub([b'(\\HasChildren) "." INBOX', b'(\\HasNoChildren) "." INBOX.Sent', b'(\\HasNoChildren) "." INBOX.Drafts',
+                    b'(\\HasNoChildren) "." INBOX.Trash', b'(\\HasNoChildren \\Junk) "." INBOX.Junk',
+                    b'(\\HasNoChildren) "." INBOX.GGP', b'(\\HasNoChildren) "." INBOX.Spam'])
+    t('prefixo do namespace lido', wc._prefixo_pessoal(uni5) == 'INBOX.'
+      and wc._prefixo_pessoal(ConStub([], b'(("" ".")) NIL NIL')) == '')
+    sessao_stub = type('S', (), {})()
+    sessao_stub.con, sessao_stub.prefixo, sessao_stub._pastas, sessao_stub._pastas_em = uni5, 'INBOX.', None, 0
+    papeis = {p['id']: p['papel'] for p in wc._listar_pastas(sessao_stub, forcar=True)}
+    t('INBOX.Sent / Drafts / Trash viram Enviados, Rascunhos e Lixeira', papeis['INBOX.Sent'] == 'enviados'
+      and papeis['INBOX.Drafts'] == 'rascunhos' and papeis['INBOX.Trash'] == 'lixeira' and papeis['INBOX.Junk'] == 'spam', papeis)
+    nomes = {p['id']: (p['nome'], p['nivel']) for p in wc._listar_pastas(sessao_stub)}
+    t('pasta comum aparece no primeiro nível, sem o "INBOX."', nomes['INBOX.GGP'] == ('GGP', 0), nomes)
+    sem_arquivo = ConStub([b'(\\HasChildren) "." INBOX'])
+    sessao_stub.con, sessao_stub._pastas = sem_arquivo, None
+    t('pasta que falta é criada dentro do prefixo', wc.pasta_do_papel(sessao_stub, 'arquivo') == 'INBOX.Archive'
+      and sem_arquivo.criadas == ['"INBOX.Archive"'], sem_arquivo.criadas)
+
+    viva = wc.Sessao.__new__(wc.Sessao)
+    viva.con, viva.pasta = ConStub([]), 'INBOX'
+    viva.selecionar('INBOX', sincronizar=True)
+    viva.selecionar('INBOX')
+    t('listar a pasta já aberta pergunta ao servidor o que chegou (NOOP)', viva.con.noops == 1)
+    import inspect
+    t('lista ordenada pela data da mensagem, não pela chegada na caixa', "'(REVERSE DATE)'" in inspect.getsource(wc._buscar))
+
+    conta2 = ContaEmail.objects.filter(usuario=beto).first() or ContaEmail(usuario=beto)
+    conta2.email, conta2.nome_exibicao = 'ana.souza@redeconfianca.com.br', 'Beto'
+    conta2.definir_senha('senha-nova')
+    conta2.save()
+    cb = Client()
+    cb.force_login(beto)
+    from unittest import mock
+    with mock.patch('webmail.cliente._guardar', side_effect=wc.ErroEmail('sem pasta')):
+        r = cb.post('/email/api/enviar/', {'para': 'maria@redeconfianca.com.br', 'assunto': 'Oi', 'corpo': '<p>Oi</p>'})
+    t('envio sem cópia em Enviados avisa a pessoa', r.status_code == 200 and r.json()['ok']
+      and 'Enviados' in r.json().get('aviso', ''), r.content[:200])
+    r = cb.get('/email/')
+    t('tela traz o selo "ao vivo"', 'id="wmVivo"' in r.content.decode())
 finally:
     imaplib.IMAP4_SSL, smtplib.SMTP_SSL = original_imap, original_smtp
     transaction.set_rollback(True)
