@@ -243,6 +243,95 @@ try:
         t('com aviso de que está preparando', 'dvAvisarZip' in html and 'Preparando o ZIP' in html)
         html = cv.get(f'/drive/s/{setor.id}/f/CONTRATOS/').content.decode()
         t('quem só vê não recebe a opção', 'zip/' not in html)
+        t('nem a seleção', 'class="dv-check"' not in html and 'id="dv-btn-sel"' not in html and 'id="dv-selecao"' not in html)
+
+        print('\n== SELEÇÃO: VÁRIAS PASTAS NUM ZIP SÓ (26/11/2026) ==')
+        falso.add('PROPOSTAS', 'Propostas', FOLDER, 'SETOR')
+        falso.add('P1', 'proposta.pdf', 'application/pdf', 'PROPOSTAS', b'zz-proposta' * 3)
+        falso.add('SOLTO', 'leia-me.txt', 'text/plain', 'SETOR', b'zz-leia')
+        volta = f'/drive/s/{setor.id}/'
+
+        def selecao(cliente, pasta, ids, **extra):
+            q = [('pasta', pasta)] + [('id', i) for i in ids] + [('volta', volta)] + list(extra.items())
+            return cliente.get('/drive/zip/selecao/', q)
+
+        html = c.get(f'/drive/s/{setor.id}/').content.decode()
+        t('a pasta mostra a caixinha de seleção em cada item e o botão Selecionar',
+          'class="dv-check" value="CONTRATOS"' in html and 'value="PROPOSTAS"' in html
+          and 'dv-btn-sel' in html and 'Baixar selecionados' in html)
+        r = selecao(c, 'SETOR', ['CONTRATOS', 'PROPOSTAS', 'SOLTO'], t='marca123')
+        t('duas pastas e um arquivo marcados descem num zip só', r.status_code == 200
+          and r['Content-Type'] == 'application/zip', (r.status_code, r.get('Content-Type')))
+        nomes = sorted(abrir_zip(r).namelist())
+        t('cada pasta vira uma pasta dentro do zip, o arquivo fica na raiz',
+          nomes == ['Contratos/Assinados/assinado.pdf', 'Contratos/contrato.pdf', 'Contratos/foto.jpg',
+                    'Propostas/proposta.pdf', 'leia-me.txt'], nomes)
+        t('o nome diz de onde e quantos', 'ZZ Comercial - 3 itens.zip' in r['Content-Disposition'],
+          r.get('Content-Disposition'))
+        t('a tela sabe quando o download começou (cookie)', r.cookies.get('dv_zip_pronto').value == 'marca123')
+        t('e fica na auditoria', DriveAuditLog.objects.filter(
+            user=ana, acao='DOWNLOAD', detalhe__startswith='zip seleção · 3 item').exists())
+        r = selecao(c, 'SETOR', ['PROPOSTAS'])
+        t('uma pasta só abre direto no conteúdo dela', sorted(abrir_zip(r).namelist()) == ['proposta.pdf'])
+
+        print('  -- quem pode --')
+        r = selecao(cv, 'SETOR', ['CONTRATOS', 'PROPOSTAS'])
+        t('sem nível de download, não baixa', r.status_code in (302, 403) and 'application/zip' not in r.get('Content-Type', ''),
+          r.status_code)
+        r = selecao(c, 'SETOR', ['CONTRATOS', 'FORA'])
+        t('item de fora da pasta aberta (URL montada) é negado', r.status_code == 403, r.status_code)
+        t('e registrado', DriveAuditLog.objects.filter(user=ana, acao='DENY',
+                                                        detalhe='zip seleção fora da pasta').exists())
+        r = selecao(c, 'FORA', ['A4'])
+        t('pasta de outro setor não passa', r.status_code == 403, r.status_code)
+        r = selecao(c, 'SETOR', ['ASSINADOS'])
+        t('subpasta de outra pasta (não está na aberta) não passa', r.status_code == 403, r.status_code)
+        r = selecao(cc, 'SETOR', ['CONTRATOS', 'PROPOSTAS'])
+        t('o SUPERADMIN baixa', r.status_code == 200)
+
+        print('  -- recusas voltam para a pasta com a mensagem --')
+        r = selecao(c, 'SETOR', [], )
+        t('nada marcado volta para a pasta', r.status_code == 302 and r['Location'] == volta, r.get('Location'))
+        r = c.get('/drive/zip/selecao/', [('pasta', 'SETOR'), ('id', 'CONTRATOS'), ('id', 'PROPOSTAS'),
+                                          ('volta', 'https://golpe.exemplo/x')])
+        t('volta para fora do portal é ignorada', r.status_code == 200
+          or (r.status_code == 302 and r['Location'].startswith('/drive/')), r.get('Location'))
+        with mock.patch.object(zip_copia, 'LIMITE_ARQUIVOS', 2):
+            r = selecao(c, 'SETOR', ['CONTRATOS', 'PROPOSTAS'], )
+            msgs = [str(m) for m in r.wsgi_request._messages] if r.status_code == 302 else []
+            t('seleção grande demais volta com a mensagem do limite', r.status_code == 302
+              and any('passa do limite' in m and 'seleção' in m.lower() for m in msgs), (r.status_code, msgs))
+        r = selecao(c, 'SETOR', ['VAZIA'])
+        t('pasta vazia marcada avisa', r.status_code == 302)
+        r = c.get('/drive/zip/selecao/', [('pasta', 'SETOR')] + [('id', f'X{i}') for i in range(zip_copia.MAX_SELECAO + 1)]
+                  + [('volta', volta)])
+        t(f'mais de {zip_copia.MAX_SELECAO} itens é recusado antes de ir ao Google', r.status_code == 302)
+        r = c.get('/drive/zip/selecao/', [('pasta', 'SETOR'), ('id', '../etc'), ('volta', volta)])
+        t('id inválido é recusado', r.status_code == 302)
+        lo = zip_copia._vez
+        lo.acquire()
+        try:
+            with mock.patch.object(zip_copia, 'ESPERA_PELA_VEZ', 0.05):
+                r = selecao(c, 'SETOR', ['CONTRATOS', 'PROPOSTAS'])
+            msgs = [str(m) for m in r.wsgi_request._messages] if r.status_code == 302 else []
+            t('outro zip montando: espera a vez e, passou do tempo, pede para tentar de novo',
+              r.status_code == 302 and any('Outro ZIP' in m for m in msgs), (r.status_code, msgs))
+        finally:
+            lo.release()
+
+        print('  -- pasta liberada --')
+        from drive.models import PastaLiberada
+        try:
+            liberada = PastaLiberada.objects.create(folder_id='PROPOSTAS', folder_name='Propostas', alvo='USER',
+                                                    target_user=so_ver, nivel='DOWNLOAD')
+        except Exception as exc:  # noqa: BLE001
+            liberada = None
+            print('   (pasta liberada não criada:', exc, ')')
+        if liberada:
+            falso.add('P2', 'outra.pdf', 'application/pdf', 'PROPOSTAS', b'zz-outra')
+            r = selecao(cv, 'PROPOSTAS', ['P1', 'P2'])
+            t('na pasta liberada também (pelo nível dela)', r.status_code == 200
+              and sorted(abrir_zip(r).namelist()) == ['outra.pdf', 'proposta.pdf'], r.status_code)
 finally:
     transaction.set_rollback(True)
     marcador.__exit__(None, None, None)

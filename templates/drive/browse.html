@@ -13,6 +13,21 @@
     #dv-grid .dv-alvo, #dv-trilha .dv-alvo { box-shadow: 0 0 0 2px #3b82f6; background-color: rgba(59,130,246,.10); border-radius: .75rem; }
     html.dark #dv-grid .dv-alvo, html.dark #dv-trilha .dv-alvo { box-shadow: 0 0 0 2px #60a5fa; background-color: rgba(96,165,250,.14); }
     .dv-mv-pasta[aria-disabled="true"] { opacity: .5; }
+    /* Seleção para baixar em ZIP: a caixinha ocupa o lugar do ícone ao passar o mouse,
+       em todos quando há algo marcado ou o modo "Selecionar" está ligado (celular). */
+    .dv-sel { position: absolute; z-index: 5; top: .75rem; left: .75rem; width: 2.5rem; height: 2.5rem;
+              display: flex; align-items: center; justify-content: center; border-radius: .5rem;
+              background: #fff; border: 1px solid #e5e7eb; opacity: 0; pointer-events: none;
+              transition: opacity .12s ease; cursor: pointer; }
+    .dv-visao-lista .dv-sel { top: .5rem; left: .75rem; width: 1.75rem; height: 1.75rem; }
+    .dv-sel input { width: 1rem; height: 1rem; accent-color: #2563eb; cursor: pointer; }
+    @media (hover: hover) { #dv-grid .dv-item:hover .dv-sel { opacity: 1; pointer-events: auto; } }
+    #dv-grid.dv-selecionando .dv-sel, #dv-grid .dv-sel:has(input:checked) { opacity: 1; pointer-events: auto; }
+    #dv-grid .dv-marcado { box-shadow: 0 0 0 2px #3b82f6; background-color: rgba(59,130,246,.06); }
+    html.dark .dv-sel { background: #1f2937; border-color: #374151; }
+    html.dark #dv-grid .dv-marcado { box-shadow: 0 0 0 2px #60a5fa; background-color: rgba(96,165,250,.12); }
+    #dv-btn-sel[aria-pressed="true"] { background: #eff6ff; color: #2563eb; border-color: #bfdbfe; }
+    html.dark #dv-btn-sel[aria-pressed="true"] { background: rgba(96,165,250,.15); color: #93c5fd; border-color: rgba(96,165,250,.45); }
 </style>
 <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
     <!-- Barra de caminho + ações -->
@@ -20,7 +35,7 @@
         <div id="dv-trilha" class="flex items-center gap-1.5 text-sm dv-scroll-x min-w-0">
             {% include 'drive/_trilha.html' %}
         </div>
-        <div class="flex items-center gap-2 flex-shrink-0">
+        <div class="flex items-center gap-2 flex-wrap max-w-full">
             {% comment %}
             Visão, ordem e "nome inteiro": a escolha fica guardada na sessão, então
             trocar de pasta não devolve ninguém para o começo.
@@ -45,6 +60,11 @@
                 <i class="fas fa-text-width"></i>
             </button>
             {% if pode_download %}
+            <button type="button" id="dv-btn-sel" onclick="dvModoSelecao()" aria-pressed="false"
+                    title="Selecionar pastas e arquivos para baixar juntos" aria-label="Selecionar pastas e arquivos para baixar juntos"
+                    class="px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
+                <i class="fas fa-square-check sm:mr-1.5"></i><span class="hidden sm:inline">Selecionar</span>
+            </button>
             {% comment %}Cópia zipada desta pasta, com tudo o que está dentro dela.{% endcomment %}
             <a id="dv-btn-zip" href="{% url 'drive:baixar_zip' folder_id %}" onclick="dvAvisarZip()"
                title="Baixar esta pasta em ZIP" aria-label="Baixar esta pasta em ZIP"
@@ -64,6 +84,21 @@
             {% endif %}
         </div>
     </div>
+
+    {% if pode_download %}
+    <div id="dv-selecao" class="hidden px-4 py-2.5 border-b border-blue-100 bg-blue-50 flex items-center justify-between gap-3 flex-wrap text-sm" role="region" aria-label="Seleção">
+        <span class="text-blue-800" aria-live="polite"><i class="fas fa-square-check mr-1.5"></i><strong id="dv-sel-n">0</strong> <span id="dv-sel-rotulo">selecionados</span>
+            <span class="hidden sm:inline text-blue-700">· clique nas pastas e arquivos para marcar</span></span>
+        <div class="flex items-center gap-2 flex-wrap">
+            <button type="button" onclick="dvSelecionarTodos()" class="px-3 py-1.5 rounded-lg text-blue-700 hover:bg-blue-100">Selecionar todos</button>
+            <button type="button" onclick="dvModoSelecao(false)" class="px-3 py-1.5 rounded-lg text-gray-600 hover:bg-white">Cancelar</button>
+            <button type="button" id="dv-sel-baixar" onclick="dvBaixarSelecionados()" disabled
+                    class="px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                <i class="fas fa-file-zipper mr-1.5"></i>Baixar selecionados
+            </button>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Grade (dropzone) -->
     <div id="dv-grid-wrap" class="dv-drop p-3 sm:p-4">
@@ -226,16 +261,108 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') dvFecharMenu
         e.stopPropagation();
     }, true);
 })();
+{% if pode_download %}
+/* ── Seleção: várias pastas e arquivos desta pasta num ZIP só ────────────
+   Baixar a pasta-mãe inteira pesava (e travava o portal); uma pasta por vez
+   cansava. Marca o que quer e leva junto: drive/zip_copia.baixar_zip_selecao. */
+const DV_URL_ZIP_SEL = "{% url 'drive:baixar_zip_selecao' %}";
+const DV_URL_ARQUIVO = "{% url 'drive:file_content' '__ID__' %}";
+let dvModoSel = false;
+
+function dvMarcados(){ return Array.from(document.querySelectorAll('#dv-grid .dv-check:checked')); }
+
+function dvAtualizarSelecao(){
+    const n = dvMarcados().length;
+    const barra = document.getElementById('dv-selecao');
+    if (!barra) return;
+    barra.classList.toggle('hidden', !n && !dvModoSel);
+    document.getElementById('dv-sel-n').textContent = n;
+    document.getElementById('dv-sel-rotulo').textContent = n === 1 ? 'selecionado' : 'selecionados';
+    document.getElementById('dv-sel-baixar').disabled = !n;
+    document.getElementById('dv-grid').classList.toggle('dv-selecionando', n > 0 || dvModoSel);
+    const botao = document.getElementById('dv-btn-sel');
+    if (botao) botao.setAttribute('aria-pressed', (n > 0 || dvModoSel) ? 'true' : 'false');
+    document.querySelectorAll('#dv-grid .dv-item').forEach(card => {
+        const c = card.querySelector('.dv-check');
+        card.classList.toggle('dv-marcado', !!(c && c.checked));
+    });
+}
+
+function dvModoSelecao(liga){
+    const ativo = dvModoSel || dvMarcados().length > 0;
+    dvModoSel = liga === undefined ? !ativo : !!liga;
+    if (!dvModoSel) document.querySelectorAll('#dv-grid .dv-check').forEach(c => { c.checked = false; });
+    dvAtualizarSelecao();
+}
+
+function dvSelecionarTodos(){
+    document.querySelectorAll('#dv-grid .dv-check').forEach(c => { c.checked = true; });
+    dvModoSel = true;
+    dvAtualizarSelecao();
+}
+
+document.addEventListener('change', e => {
+    if (e.target.classList && e.target.classList.contains('dv-check')) dvAtualizarSelecao();
+});
+
+// Selecionando, clicar no cartão marca em vez de abrir (no celular é o jeito de marcar).
+(function(){
+    const grade = document.getElementById('dv-grid-wrap');
+    if (!grade) return;
+    grade.addEventListener('click', e => {
+        if (!dvModoSel && !dvMarcados().length) return;
+        const card = e.target.closest('.dv-item');
+        if (!card || e.target.closest('.dv-sel, .dv-fav-form, .dv-kebab, .dv-menu')) return;
+        const c = card.querySelector('.dv-check');
+        if (!c) return;
+        e.preventDefault();
+        e.stopPropagation();
+        c.checked = !c.checked;
+        dvAtualizarSelecao();
+    }, true);
+})();
+
+function dvLerCookie(nome){
+    const achado = document.cookie.split('; ').find(c => c.indexOf(nome + '=') === 0);
+    return achado ? achado.slice(nome.length + 1) : '';
+}
+
+function dvBaixarSelecionados(){
+    const itens = dvMarcados();
+    if (!itens.length) return;
+    // Um arquivo só não precisa de ZIP: baixa ele mesmo.
+    if (itens.length === 1 && !itens[0].dataset.pasta) {
+        window.location.href = DV_URL_ARQUIVO.replace('__ID__', encodeURIComponent(itens[0].value)) + '?dl=1';
+        return;
+    }
+    const marca = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+    const q = new URLSearchParams();
+    q.set('pasta', dvPastaAberta());
+    itens.forEach(c => q.append('id', c.value));
+    q.set('volta', window.location.pathname + window.location.search);
+    q.set('t', marca);
+    dvAvisarZip(marca, itens.length);
+    window.location.href = DV_URL_ZIP_SEL + '?' + q.toString();
+}
+{% endif %}
+
 /* O ZIP é montado no servidor (baixa tudo do Google e comprime): em pasta
-   grande demora, e sem aviso parece que o clique não fez nada. */
-function dvAvisarZip(){
+   grande demora, e sem aviso parece que o clique não fez nada. Com `marca`, o
+   aviso fica até o servidor devolver o cookie — é quando o download começa. */
+function dvAvisarZip(marca, quantos){
     const aviso = document.createElement('div');
     aviso.className = 'fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-lg '
         + 'bg-gray-900 text-white text-sm shadow-lg';
-    aviso.innerHTML = '<i class="fas fa-file-zipper mr-2"></i>Preparando o ZIP… '
-        + 'o download começa quando ficar pronto.';
+    aviso.innerHTML = '<i class="fas ' + (marca ? 'fa-spinner fa-spin' : 'fa-file-zipper') + ' mr-2"></i>Preparando o ZIP'
+        + (quantos ? ' de ' + quantos + ' itens' : '') + '… o download começa quando ficar pronto.';
     document.body.appendChild(aviso);
-    setTimeout(function(){ aviso.remove(); }, 9000);
+    if (!marca) { setTimeout(function(){ aviso.remove(); }, 9000); return; }
+    const espera = setInterval(function(){
+        if (dvLerCookie('dv_zip_pronto') !== marca) return;
+        clearInterval(espera); aviso.remove();
+        dvModoSelecao(false);                  // baixou: a seleção sai
+    }, 700);
+    setTimeout(function(){ clearInterval(espera); aviso.remove(); }, 10 * 60 * 1000);
 }
 
 /* Criar pasta e renomear iam por submit e recarregavam a tela inteira. Vão por
@@ -607,6 +734,7 @@ function dvAplicarFragmento(dados){
     window.DV_FOLDER = dados.folder_id;
     if (window.RCUsoLocal) window.RCUsoLocal.marcarMenus();
     dvFecharMenus();
+    if (window.dvAtualizarSelecao) dvAtualizarSelecao();   // a seleção é da pasta: trocou, zera
 }
 
 async function dvIrPara(url, opcoes){
@@ -717,6 +845,7 @@ function dvCarregarMais(btn){
             wrap.remove();
             // Os cartões novos também precisam saber o que já está em uso local.
             if (window.RCUsoLocal) window.RCUsoLocal.marcarMenus();
+            if (window.dvAtualizarSelecao) dvAtualizarSelecao();
         }).catch(() => { btn.disabled = false; btn.textContent = 'Carregar mais'; });
 }
 {% if pode_upload %}

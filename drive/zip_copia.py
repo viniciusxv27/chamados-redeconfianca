@@ -27,8 +27,14 @@ from concurrent.futures import ThreadPoolExecutor
 
 from django.db import connections
 
+import re
+
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import FileResponse, JsonResponse
+from django.shortcuts import redirect
+from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET
 
 from . import audit, gdrive, uso_local
@@ -220,4 +226,96 @@ def baixar_zip(request, file_id):
     resposta = FileResponse(temporario, as_attachment=True, filename=nome,
                             content_type='application/zip')
     resposta['Cache-Control'] = 'no-store'
+    return resposta
+
+
+# ── Baixar só o que foi selecionado (26/11/2026) ─────────────────────────────
+# Pedido: "Para evitar que ele continue travando o portal, adicionar a função de
+# seleção de pastas, assim podendo baixar múltiplas pastas e não só 1 ou todas ao
+# mesmo tempo." Na pasta do setor (/drive/s/<setor>/f/<pasta>/) e na pasta
+# liberada a pessoa marca as pastas e arquivos que quer e leva tudo num ZIP só —
+# em vez de baixar a pasta-mãe inteira (pesado) ou uma pasta de cada vez.
+# Mesmo montador e mesmos limites do ZIP de uma pasta.
+MAX_SELECAO = 200
+_ID_DRIVE = re.compile(r'^[A-Za-z0-9_-]{1,160}$')
+
+
+def _volta(request):
+    volta = request.GET.get('volta') or ''
+    if volta.startswith('/drive/') and url_has_allowed_host_and_scheme(
+            volta, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        return volta
+    return reverse('drive:index')
+
+
+@login_required
+@require_GET
+def baixar_zip_selecao(request):
+    """`?pasta=<pasta aberta>&id=…&id=…`: os itens marcados dessa pasta num ZIP só.
+
+    A permissão é a da pasta aberta (o nível só cresce para dentro: o que está
+    nela herda), conferida uma vez; e cada item marcado precisa estar mesmo
+    dentro dela — o pai vem do Google na hora, num lote só (``gdrive.pais_de``).
+    Item de outra pasta (URL montada à mão) é negado e registrado.
+
+    `t` volta num cookie quando o ZIP fica pronto: a tela tira o "Preparando…"
+    na hora em que o download começa. Erro volta para a pasta com a mensagem.
+    """
+    from .views import _deny
+
+    ids = list(dict.fromkeys(i.strip() for i in request.GET.getlist('id') if i.strip()))
+    pasta = (request.GET.get('pasta') or '').strip()
+    volta = _volta(request)
+
+    def recusa(msg):
+        messages.error(request, msg)
+        return redirect(volta)
+
+    if not ids:
+        return recusa('Selecione ao menos uma pasta ou arquivo para baixar.')
+    if len(ids) > MAX_SELECAO or not _ID_DRIVE.match(pasta) or not all(_ID_DRIVE.match(i) for i in ids):
+        return recusa(f'Seleção inválida (até {MAX_SELECAO} itens).')
+
+    raiz, nivel = perms.file_allowed(request.user, pasta)
+    if not raiz or nivel < ORDEM['DOWNLOAD']:
+        _deny(request, file_id=pasta, detalhe='zip seleção')
+    try:
+        pais = gdrive.pais_de(ids)
+    except gdrive.DriveNaoConfigurado as exc:
+        return recusa(str(exc))
+    except gdrive.DriveError as exc:
+        return recusa(f'Google Drive: {exc}')
+    fora = [i for i in ids if pais.get(i) != pasta]
+    if fora:
+        _deny(request, sector=raiz.sector, file_id=fora[0], folder_id=pasta, detalhe='zip seleção fora da pasta')
+
+    nome = ''
+    if len(ids) > 1:
+        try:
+            nome = gdrive.obter(pasta).get('name', '')
+        except gdrive.DriveError:
+            nome = ''
+        nome = f'{nome or "Drive"} - {len(ids)} itens'
+    try:
+        temporario, nome_zip, resumo = montar_zip_de(ids, nome=nome)
+    except ZipGrandeDemais as exc:
+        return recusa(str(exc))
+    except gdrive.DriveNaoConfigurado as exc:
+        return recusa(str(exc))
+    except gdrive.DriveError as exc:
+        return recusa(f'Google Drive: {exc}')
+
+    detalhe = f"zip seleção · {len(ids)} item(ns) · {resumo['arquivos']} arquivo(s)"
+    if resumo['ignorados']:
+        detalhe += f" · {len(resumo['ignorados'])} do Google fora"
+    if resumo['com_erro']:
+        detalhe += f" · {len(resumo['com_erro'])} sem resposta"
+    audit.registrar(request.user, 'DOWNLOAD', request=request, file_id=ids[0] if len(ids) == 1 else '',
+                    folder_id=pasta, file_name=resumo['nome'], sector=raiz.sector, detalhe=detalhe)
+
+    resposta = FileResponse(temporario, as_attachment=True, filename=nome_zip, content_type='application/zip')
+    resposta['Cache-Control'] = 'no-store'
+    marca = request.GET.get('t', '')
+    if re.fullmatch(r'[A-Za-z0-9]{6,40}', marca):
+        resposta.set_cookie('dv_zip_pronto', marca, max_age=120, samesite='Lax')
     return resposta

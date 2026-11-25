@@ -4,6 +4,13 @@
 <div class="dv-card dv-item bg-white border border-gray-100 rounded-xl p-3 relative group"
      data-id="{{ item.id }}" data-nome="{{ item.name }}" data-tipo="{% if item.is_folder %}pasta{% else %}arquivo{% endif %}"
      {% if pode_editar %}draggable="true"{% endif %}>
+    {% if pode_download %}
+    {% comment %}Seleção para baixar várias pastas/arquivos num ZIP só (browse.html: dvBaixarSelecionados).{% endcomment %}
+    <label class="dv-sel" title="Selecionar para baixar">
+        <input type="checkbox" class="dv-check" value="{{ item.id }}" data-pasta="{{ item.is_folder|yesno:'1,' }}"
+               aria-label="Selecionar {{ item.name }}">
+    </label>
+    {% endif %}
     <a href="{% if item.is_folder %}{{ url_raiz }}f/{{ item.id }}/{% else %}{% url 'drive:file_preview' item.id %}{% endif %}"
        {% if item.is_folder %}data-dv-ir{% endif %}
        class="block">

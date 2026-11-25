@@ -36,6 +36,8 @@ urlpatterns = [
     path('file/<str:file_id>/uso-local/finalizar/', uso_local.finalizar, name='uso_local_finalizar'),
     # Cópia zipada: a pasta (ou o arquivo) inteira num .zip só.
     path('file/<str:file_id>/zip/', zip_copia.baixar_zip, name='baixar_zip'),
+    # Vários itens marcados na pasta (setor ou pasta liberada) num ZIP só.
+    path('zip/selecao/', zip_copia.baixar_zip_selecao, name='baixar_zip_selecao'),
     # Liberar aquele arquivo/pasta para uma pessoa, pelo menu da própria listagem.
     path('file/<str:file_id>/acesso/', views.item_acesso, name='item_acesso'),
     path('file/<str:file_id>/acesso/remover/', views.item_acesso_remover, name='item_acesso_remover'),
