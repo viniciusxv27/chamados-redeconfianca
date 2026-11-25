@@ -20,7 +20,7 @@
     const E = {
         pastas: [], pasta: 'INBOX', pagina: 1, paginas: 1, total: 0, busca: '', filtro: '',
         lista: [], marcadas: new Set(), ultimaMarcada: null, aberta: null, foco: -1, msg: null,
-        uidnext: 0, carregandoLista: 0, novos: new Set(), sincronizadoEm: 0, semConexao: false, ultimoTotal: null, contatos: new Map(), resumo: null,
+        uidnext: 0, carregandoLista: 0, novos: new Set(), buscaToken: 0, texto: {estado: '', total: 0, ativo: false}, soNoTexto: new Set(), totalNoTexto: 0, sincronizadoEm: 0, semConexao: false, ultimoTotal: null, contatos: new Map(), resumo: null,
     };
 
     // ── Utilidades ────────────────────────────────────────────────────────
@@ -201,7 +201,7 @@
             return;
         }
         E.pasta = id; E.pagina = 1; E.marcadas.clear(); E.foco = -1;
-        if (!opcoes.manterBusca) { E.busca = ''; buscaEl.value = ''; }
+        if (!opcoes.manterBusca) { E.busca = ''; buscaEl.value = ''; E.buscaToken++; E.texto = {estado: '', total: 0, ativo: false}; }
         desenharPastas();
         fecharPastasMovel();
         carregarLista();
@@ -221,8 +221,11 @@
         const antes = new Set(E.lista.map(m => m.uid));
         if (!opcoes.silencioso) esqueletoLista();
         try {
-            const d = await api(URL.lista, {params: {pasta: E.pasta, pagina: E.pagina, busca: E.busca, filtro: E.filtro}});
+            const d = await api(URL.lista, {params: {pasta: E.pasta, pagina: E.pagina, busca: E.busca, filtro: E.filtro,
+                texto: E.busca && E.texto.ativo ? '1' : ''}});
             if (pedido !== E.carregandoLista) return;
+            E.soNoTexto = new Set(d.so_no_texto || []);
+            E.totalNoTexto = d.total_no_texto || 0;
             // Atualização silenciosa: o que não estava na lista chega com destaque.
             E.novos = new Set(opcoes.silencioso && antes.size ? d.mensagens.filter(m => !antes.has(m.uid)).map(m => m.uid) : []);
             E.entrada = !opcoes.silencioso;
@@ -243,13 +246,33 @@
         }
     }
 
+    // Termo da busca destacado (sobre o texto já escapado, sem diferenciar acento nem maiúscula).
+    function semAcento(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
+    function realce(texto) {
+        const seguro = esc(texto);
+        const termo = (E.busca || '').trim();
+        if (termo.length < 2) return seguro;
+        const alvo = semAcento(termo);
+        const base = semAcento(seguro);
+        if (base.length !== seguro.length) return seguro;          // normalização mudou o tamanho: não arrisca
+        let saida = '', i = 0, pos;
+        while ((pos = base.indexOf(alvo, i)) !== -1) {
+            // não corta entidade HTML (&amp; etc.) ao meio
+            const antes = seguro.lastIndexOf('&', pos), fimEnt = seguro.indexOf(';', antes);
+            if (antes !== -1 && fimEnt >= pos && pos - antes < 8) { saida += seguro.slice(i, pos + 1); i = pos + 1; continue; }
+            saida += seguro.slice(i, pos) + '<mark class="wm-marca">' + seguro.slice(pos, pos + alvo.length) + '</mark>';
+            i = pos + alvo.length;
+        }
+        return saida + seguro.slice(i);
+    }
+
     function linhaPessoas(m) {
         const papel = pastaAtual().papel;
         if (papel === 'enviados' || papel === 'rascunhos') {
             const para = (m.para || []).map(nomeDe).join(', ');
             return (papel === 'rascunhos' ? '<span style="color:#DC2626;font-weight:600">Rascunho</span> · ' : 'Para: ') + esc(para || '(sem destinatário)');
         }
-        return esc(nomeDe(m.de));
+        return realce(nomeDe(m.de));
     }
 
     function itemHtml(m) {
@@ -267,10 +290,10 @@
                     <span class="wm-item-data" title="${esc(dataLonga(m.data))}">${esc(dataCurta(m.data))}</span>
                 </div>
                 <div class="wm-item-linha">
-                    <span class="wm-item-assunto flex-1">${esc(m.assunto)}</span>
+                    <span class="wm-item-assunto flex-1">${E.soNoTexto.has(m.uid) ? '<span class="wm-no-texto" title="O termo está no texto da mensagem">no texto</span>' : ''}${realce(m.assunto)}</span>
                     <button type="button" class="wm-estrela ${m.sinalizada ? 'wm-ligada' : ''}" data-acao="estrela" title="${m.sinalizada ? 'Tirar de Importante' : 'Marcar como Importante'}"><i class="${m.sinalizada ? 'fas' : 'far'} fa-star text-[12px]"></i></button>
                 </div>
-                ${m.previa ? `<div class="wm-item-previa">${esc(m.previa)}</div>` : ''}
+                ${m.previa ? `<div class="wm-item-previa">${realce(m.previa)}</div>` : ''}
             </div>
             <div class="wm-acoes-rapidas">
                 <button type="button" data-rapida="arquivo" title="Arquivar"><i class="fas fa-box-archive"></i></button>
@@ -280,7 +303,32 @@
         </div>`;
     }
 
+    // Faixa da busca: quantos achou nos cabeçalhos e o andamento da busca no texto.
+    const statusBuscaEl = document.getElementById('wmBuscaStatus');
+    function desenharStatusBusca(provisorio) {
+        if (!statusBuscaEl) return;
+        if (!E.busca) { statusBuscaEl.hidden = true; return; }
+        statusBuscaEl.hidden = false;
+        const t = E.texto;
+        let html;
+        if (provisorio) {
+            html = `<i class="fas fa-circle-notch wm-girando"></i><span>Buscando “${esc(E.busca)}”…</span>`;
+        } else {
+            const n = E.total;
+            html = `<i class="fas fa-magnifying-glass"></i><span><strong>${n}</strong> resultado${n === 1 ? '' : 's'}`;
+            if (E.totalNoTexto) html += ` · <strong>${E.totalNoTexto}</strong> só no texto`;
+            html += '</span>';
+            if (E.busca.length < 2) { /* nada */ }
+            else if (t.estado === 'procurando') html += `<span class="wm-busca-texto"><i class="fas fa-circle-notch wm-girando"></i>procurando no texto das mensagens recentes…</span>`;
+            else if (t.estado === 'parcial') html += `<span class="wm-busca-texto"><i class="fas fa-circle-notch wm-girando"></i>recentes prontas · lendo as mais antigas…</span>`;
+            else if (t.estado === 'pronto') html += `<span class="wm-busca-texto wm-ok"><i class="fas fa-check"></i>texto de todas as mensagens conferido</span>`;
+            else if (t.estado === 'erro') html += `<span class="wm-busca-texto wm-falhou"><i class="fas fa-triangle-exclamation"></i>${esc(t.erro || 'busca no texto indisponível')}</span>`;
+        }
+        statusBuscaEl.innerHTML = html + '<button type="button" class="wm-limpar-busca" data-wm="limpar-busca" title="Limpar busca (Esc)"><i class="fas fa-xmark"></i></button>';
+    }
+
     function desenharLista() {
+        desenharStatusBusca(false);
         document.getElementById('wmNomePasta').textContent = E.busca ? `Busca: “${E.busca}”` : pastaAtual().nome;
         const ini = E.total ? (E.pagina - 1) * 50 + 1 : 0;
         document.getElementById('wmFaixa').textContent = E.total ? `${ini}–${ini + E.lista.length - 1} de ${E.total}` : '';
@@ -1215,6 +1263,7 @@
         if (wm) {
             const qual = wm.dataset.wm;
             if (qual === 'escrever') { fecharPastasMovel(); abrirCompor(); }
+            else if (qual === 'limpar-busca') { limparBusca(); }
             else if (qual === 'atualizar') {
                 E.resumo = null;
                 const icone = $('[data-wm="atualizar"] i');
@@ -1270,7 +1319,7 @@
                 if (E.pasta !== 'INBOX') irParaPasta('INBOX');
                 abrirMensagem(uid, {ler: true});
             } else if (geral.dataset.geralBusca) {
-                buscaEl.value = geral.dataset.geralBusca; E.pasta = 'INBOX'; E.busca = buscaEl.value; E.pagina = 1; desenharPastas(); carregarLista();
+                buscaEl.value = geral.dataset.geralBusca; E.pasta = 'INBOX'; E.busca = ''; executarBusca(buscaEl.value);
             } else if (geral.dataset.geralPasta) irParaPasta(geral.dataset.geralPasta, {forcar: true});
             else {
                 const f = {nao_lidas: 'nao_lidas', importantes: 'importantes'}[geral.dataset.geral] || '';
@@ -1373,16 +1422,70 @@
         else executarAcao('mover', uids, destino.id);
     });
 
-    // Busca
+    // Busca — como o webmail do servidor: assunto, remetente e destinatários na hora (~0,2 s);
+    // o texto das mensagens vem depois, em segundo plano, e entra na lista quando chega.
+    const espera = ms => new Promise(r => setTimeout(r, ms));
+    function filtroInstantaneo(termo) {
+        // Enquanto o servidor responde, já filtra o que está na tela.
+        const alvo = semAcento(termo);
+        const vistos = E.lista.filter(m => semAcento([m.assunto, nomeDe(m.de), (m.de || {}).email, m.previa].join(' ')).includes(alvo));
+        const guardada = E.lista;
+        E.lista = vistos; E.total = vistos.length; E.soNoTexto = new Set(); E.totalNoTexto = 0;
+        desenharLista();
+        E.lista = guardada;
+        desenharStatusBusca(true);
+    }
+    async function executarBusca(termo) {
+        termo = (termo || '').trim();
+        if (termo === E.busca) return;
+        const token = ++E.buscaToken;
+        E.busca = termo; E.pagina = 1;
+        E.texto = {estado: '', total: 0, ativo: false};
+        E.soNoTexto = new Set(); E.totalNoTexto = 0;
+        desenharPastas();
+        if (!termo) { await carregarLista({silencioso: E.lista.length > 0}); return; }
+        filtroInstantaneo(termo);
+        await carregarLista({silencioso: true});
+        if (token !== E.buscaToken || termo.length < 3) { desenharStatusBusca(false); return; }
+        acompanharBuscaTexto(token, termo);
+    }
+    async function acompanharBuscaTexto(token, termo) {
+        E.texto = {estado: 'procurando', total: 0, ativo: true};
+        desenharStatusBusca(false);
+        await espera(500);                                 // a pessoa ainda pode estar digitando
+        let ultimoTotal = -1;
+        for (let volta = 0; volta < 240; volta++) {
+            if (token !== E.buscaToken) return;
+            let d;
+            try {
+                d = await api(URL.buscaTexto, {params: {pasta: E.pasta, busca: termo, filtro: E.filtro}});
+            } catch (e) {
+                E.texto = {estado: 'erro', erro: e.message, ativo: false}; desenharStatusBusca(false); return;
+            }
+            if (token !== E.buscaToken) return;
+            E.texto = {estado: d.estado, total: d.total || 0, erro: d.erro, ativo: d.estado !== 'erro'};
+            if ((d.estado === 'parcial' || d.estado === 'pronto') && d.total !== ultimoTotal) {
+                ultimoTotal = d.total;
+                await carregarLista({silencioso: true});       // o que só está no texto entra com destaque
+            } else {
+                desenharStatusBusca(false);
+            }
+            if (d.estado === 'pronto' || d.estado === 'erro') return;
+            await espera(volta < 10 ? 800 : 1500);
+        }
+    }
+    function limparBusca() { buscaEl.value = ''; executarBusca(''); }
+    const buscaDigitando = debounce(() => {
+        const v = buscaEl.value.trim();
+        if (v.length >= 2 || !v) executarBusca(v);
+    }, 280);
+    buscaEl.addEventListener('input', buscaDigitando);
     document.getElementById('wmBuscaForm').addEventListener('submit', ev => {
         ev.preventDefault();
-        E.busca = buscaEl.value.trim(); E.pagina = 1;
-        desenharPastas();
-        carregarLista();
+        executarBusca(buscaEl.value);
     });
-    buscaEl.addEventListener('search', () => {
-        if (!buscaEl.value && E.busca) { E.busca = ''; E.pagina = 1; desenharPastas(); carregarLista(); }
-    });
+    buscaEl.addEventListener('search', () => { if (!buscaEl.value && E.busca) executarBusca(''); });
+    buscaEl.addEventListener('keydown', ev => { if (ev.key === 'Escape' && buscaEl.value) { ev.preventDefault(); limparBusca(); } });
 
     // Teclado
     document.addEventListener('keydown', ev => {

@@ -14,6 +14,7 @@ urlpatterns = [
     path('api/pastas/', views.api_pastas, name='api_pastas'),
     path('api/pastas/criar/', views.api_criar_pasta, name='api_criar_pasta'),
     path('api/lista/', views.api_lista, name='api_lista'),
+    path('api/busca-texto/', views.api_busca_texto, name='api_busca_texto'),
     path('api/mensagem/', views.api_mensagem, name='api_mensagem'),
     path('api/acao/', views.api_acao, name='api_acao'),
     path('api/resumo/', views.api_resumo, name='api_resumo'),

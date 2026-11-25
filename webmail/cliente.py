@@ -38,6 +38,7 @@ from .seguranca import (CertificadoNaoConfere, conferir_pino, contexto_pinado,
 logger = logging.getLogger(__name__)
 
 TIMEOUT = 20
+TIMEOUT_TEXTO = 150    # busca no corpo (sem índice de texto no servidor) pode demorar
 OCIOSA = 240            # segundos sem uso até a conexão ser fechada
 CONFERIR_APOS = 25      # sem uso há mais que isso, um NOOP confirma que está viva
 POR_PAGINA = 50
@@ -200,6 +201,7 @@ class Sessao:
         self._pastas = None
         self._pastas_em = 0.0
         self.prefixo = ''          # namespace pessoal ("INBOX." na UNI5; "" no servidor novo)
+        self.buscas = {}           # (pasta, busca, filtro) → (marca da pasta, UIDs em ordem)
 
     def abrir(self):
         if not self._senha:
@@ -527,8 +529,12 @@ def _resumos(s, uids):
     return [por_uid[u] for u in uids if u in por_uid]
 
 
-def _buscar(s, criterios, busca=''):
-    """UIDs que batem, do mais recente para o mais antigo.
+CAMPOS_CABECALHO = ('SUBJECT', 'FROM', 'TO', 'CC')
+MAX_BUSCAS_GUARDADAS = 24
+
+
+def _ordenar(s, criterios):
+    """UIDs que batem com os critérios, da mensagem mais nova para a mais antiga.
 
     Com SORT (o Dovecot tem), a ordem é a da data da mensagem — a mesma que a
     lista mostra. Ordenar só por UID põe no topo a mensagem antiga movida de
@@ -536,12 +542,7 @@ def _buscar(s, criterios, busca=''):
     caixa é migrada de servidor ou a entrega atrasa — foi o que aconteceu na
     troca para o mail.redeconfianca.com em 24/11/2026.
     """
-    criterios = list(criterios or [])
-    if busca:
-        s.con.literal = busca.encode('utf-8')
-        criterios.append('TEXT')
-    elif not criterios:
-        criterios = ['ALL']
+    criterios = list(criterios or []) or ['ALL']
     if 'SORT' in s.caps:
         dados = s.uid('SORT', '(REVERSE DATE)', 'UTF-8', *criterios)
         vistos, ordem = set(), []
@@ -550,23 +551,104 @@ def _buscar(s, criterios, busca=''):
                 vistos.add(int(u))
                 ordem.append(int(u))
         return ordem
-    if busca:
-        dados = s.uid('SEARCH', 'CHARSET', 'UTF-8', *criterios)
-    else:
-        dados = s.uid('SEARCH', *criterios)
+    dados = s.uid('SEARCH', 'CHARSET', 'UTF-8', *criterios) if any(isinstance(c, bytes) for c in criterios) \
+        else s.uid('SEARCH', *criterios)
     return sorted({int(u) for u in (dados[0] or b'').split() if u.isdigit()}, reverse=True)
 
 
-def listar(s, pasta, pagina=1, busca='', filtro=''):
-    s.selecionar(pasta, sincronizar=True)
-    criterios = []
+def _literal_mais(texto):
+    """String do IMAP em LITERAL+ ({n+}): vai junto do comando, sem esperar o servidor."""
+    dado = texto.encode('utf-8')
+    return b'{%d+}\r\n' % len(dado) + dado
+
+
+def _criterio_cabecalho(s, busca):
+    """Critério "assunto, remetente, para ou cópia contém" — como o webmail do servidor busca.
+
+    Os cabeçalhos ficam no índice do Dovecot: 0,2 s numa caixa de 4,7 mil mensagens,
+    contra 7 a 12 s do TEXT (que lê o corpo de todas). Com LITERAL+, os quatro campos
+    vão numa consulta só; sem ele, uma busca por campo e o resultado vira um conjunto
+    de UIDs.
+    """
+    if 'LITERAL+' in s.caps:
+        lit = _literal_mais(busca)
+        return [b'OR OR OR SUBJECT ' + lit + b' FROM ' + lit + b' TO ' + lit + b' CC ' + lit]
+    achados = set()
+    for campo in CAMPOS_CABECALHO:
+        s.con.literal = busca.encode('utf-8')
+        dados = s.uid('SEARCH', 'CHARSET', 'UTF-8', campo)
+        achados.update(int(u) for u in (dados[0] or b'').split() if u.isdigit())
+    if not achados:
+        return None
+    return ['UID', ','.join(str(u) for u in sorted(achados))]
+
+
+def _buscar(s, criterios, busca=''):
+    """UIDs (mais nova primeiro) que batem com os critérios e com a busca nos cabeçalhos."""
+    criterios = list(criterios or [])
+    busca = (busca or '').strip()
+    if busca:
+        extra = _criterio_cabecalho(s, busca)
+        if extra is None:
+            return []
+        criterios += extra
+    return _ordenar(s, criterios)
+
+
+def marca(s, pasta):
+    """O "estado" da pasta: muda com mensagem nova, apagada ou marca trocada (CONDSTORE).
+
+    Uma consulta de 0,03 s que diz se uma lista ou busca guardada ainda vale.
+    """
+    itens = '(MESSAGES UIDNEXT UIDVALIDITY' + (' HIGHESTMODSEQ' if 'CONDSTORE' in s.caps else '') + ')'
+    st = _status(s, pasta, itens)
+    return '|'.join(str(st.get(k, '')) for k in ('MESSAGES', 'UIDNEXT', 'UIDVALIDITY', 'HIGHESTMODSEQ'))
+
+
+def _criterios_do_filtro(filtro):
     if filtro == 'nao_lidas':
-        criterios.append('UNSEEN')
-    elif filtro in ('importantes', 'sinalizadas'):
-        criterios.append('FLAGGED')         # "Importante" é a marca \\Flagged do IMAP
-    elif filtro == 'anexos':
-        criterios += ['HEADER', 'Content-Type', 'multipart/mixed']
-    uids = _buscar(s, criterios, (busca or '').strip()[:200])
+        return ['UNSEEN']
+    if filtro in ('importantes', 'sinalizadas'):
+        return ['FLAGGED']                 # "Importante" é a marca \\Flagged do IMAP
+    if filtro == 'anexos':
+        return ['HEADER', 'Content-Type', 'multipart/mixed']
+    return []
+
+
+def listar(s, pasta, pagina=1, busca='', filtro='', no_texto=None):
+    """Uma página da pasta (ou da busca).
+
+    ``no_texto``: função ``marca -> UIDs | None`` com o que a busca no TEXTO das
+    mensagens já achou (ela roda à parte, ``buscar_no_texto``); o que só aparece lá
+    entra na lista e vem marcado em ``so_no_texto``.
+
+    A lista ordenada de UIDs fica guardada na sessão com a marca da pasta: trocar de
+    página, voltar para a busca ou atualizar sem nada novo não refaz a busca.
+    """
+    s.selecionar(pasta, sincronizar=True)
+    busca = (busca or '').strip()[:200]
+    criterios = _criterios_do_filtro(filtro)
+    estado = marca(s, pasta)
+    chave = (pasta, busca.lower(), filtro)
+    guardada = s.buscas.get(chave)
+    if guardada and guardada[0] == estado:
+        uids = guardada[1]
+    else:
+        uids = _buscar(s, criterios, busca)
+        s.buscas[chave] = (estado, uids)
+        while len(s.buscas) > MAX_BUSCAS_GUARDADAS:
+            s.buscas.pop(next(iter(s.buscas)))
+
+    so_no_texto = []
+    if busca and no_texto is not None:
+        do_texto = no_texto(estado)
+        if do_texto:
+            extras = set(do_texto) - set(uids)
+            if extras:
+                juntos = sorted(set(uids) | extras)
+                uids = _ordenar(s, criterios + ['UID', ','.join(map(str, juntos))])
+                so_no_texto = sorted(extras)
+
     total = len(uids)
     pagina = max(1, pagina)
     fatia = [str(u) for u in uids[(pagina - 1) * POR_PAGINA: pagina * POR_PAGINA]]
@@ -576,7 +658,55 @@ def listar(s, pasta, pagina=1, busca='', filtro=''):
         'pagina': pagina,
         'paginas': max(1, -(-total // POR_PAGINA)),
         'mensagens': _resumos(s, fatia),
+        'marca': estado,
+        'so_no_texto': [u for u in so_no_texto if str(u) in fatia],
+        'total_no_texto': len(so_no_texto),
     }
+
+
+DIAS_TEXTO_RECENTE = 90
+
+
+def buscar_no_texto(conta, pasta, busca, filtro='', ao_achar=None):
+    """Busca no corpo das mensagens, numa conexão SÓ DELA (pasta aberta como leitura).
+
+    O Dovecot do servidor não tem índice de texto: o TEXT lê todas as mensagens
+    (7–12 s numa caixa de 4,7 mil). Por isso roda em segundo plano, sem segurar a
+    conexão da pessoa — ela continua abrindo e lendo e-mails enquanto isso — e em
+    duas etapas: os últimos 90 dias primeiro (~1 s, onde quase sempre está o que se
+    procura) e depois o resto. ``ao_achar(uids, parcial)`` recebe cada etapa.
+    """
+    host, porta = _host_imap(conta.email)
+    con = _abrir_tls(
+        lambda ctx: imaplib.IMAP4_SSL(host, porta, ssl_context=ctx, timeout=TIMEOUT_TEXTO),
+        lambda ctx: imaplib.IMAP4_SSL(host, porta, ssl_context=ctx, timeout=TIMEOUT_TEXTO),
+        lambda c: c.sock, host)
+
+    def procurar(*periodo):
+        con.literal = busca.encode('utf-8')
+        typ, dados = con.uid('SEARCH', 'CHARSET', 'UTF-8', *_criterios_do_filtro(filtro), *periodo, 'TEXT')
+        if typ != 'OK':
+            raise ErroEmail('O servidor recusou a busca no texto.')
+        return {int(u) for u in (dados[0] or b'').split() if u.isdigit()}
+
+    try:
+        _entrar_imap(con, conta.email, conta.senha())
+        typ, _ = con.select(_q(pasta), readonly=True)
+        if typ != 'OK':
+            raise NaoEncontrada('Pasta não encontrada.')
+        corte = _data_imap(timezone.localdate() - timedelta(days=DIAS_TEXTO_RECENTE))
+        achados = procurar('SINCE', corte)
+        if ao_achar:
+            ao_achar(sorted(achados), True)
+        achados |= procurar('BEFORE', corte)
+        if ao_achar:
+            ao_achar(sorted(achados), False)
+        return sorted(achados)
+    finally:
+        try:
+            con.logout()
+        except (imaplib.IMAP4.error, OSError):
+            pass
 
 
 # ── Leitura ───────────────────────────────────────────────────────────────

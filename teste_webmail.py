@@ -134,6 +134,8 @@ class ServidorFalso:
         self.proximo = {p: 1 for p in self.pastas}
         self.conexoes = 0
         self.enviados = []
+        self.buscas = []
+        self.literal_mais = False
 
     def guardar(self, pasta, dados, flags=(), data=None):
         uid = self.proximo[pasta]
@@ -167,7 +169,7 @@ class IMAPFalso:
         return 'OK', [b'Logged in']
 
     def capability(self):
-        return 'OK', [b'IMAP4rev1 AUTH=PLAIN MOVE UIDPLUS QUOTA PREVIEW SORT']
+        return 'OK', [b'IMAP4rev1 AUTH=PLAIN MOVE UIDPLUS QUOTA PREVIEW SORT' + (b' LITERAL+' if SERVIDOR.literal_mais else b'')]
 
     def noop(self):
         return 'OK', [b'NOOP completed']
@@ -195,9 +197,12 @@ class IMAPFalso:
         if msgs is None:
             return 'NO', [b'Mailbox does not exist']
         nao = sum(1 for m in msgs if '\\Seen' not in m.flags)
-        return 'OK', [f'"{nome}" (MESSAGES {len(msgs)} UNSEEN {nao} UIDNEXT {SERVIDOR.proximo[nome]})'.encode()]
+        # HIGHESTMODSEQ de mentira: muda quando muda alguma marca (como o CONDSTORE do Dovecot).
+        modseq = sum(len(m.flags) * 7 + m.uid for m in msgs)
+        return 'OK', [f'"{nome}" (MESSAGES {len(msgs)} UNSEEN {nao} UIDNEXT {SERVIDOR.proximo[nome]} '
+                      f'UIDVALIDITY 1 HIGHESTMODSEQ {modseq})'.encode()]
 
-    def select(self, pasta):
+    def select(self, pasta, readonly=False):
         nome = self._nome(pasta)
         if nome not in SERVIDOR.pastas:
             return 'NO', [b'Mailbox does not exist']
@@ -242,6 +247,7 @@ class IMAPFalso:
             achadas.sort(key=lambda m: (cliente._internaldate(m.data), m.uid), reverse=True)
             return 'OK', [' '.join(str(m.uid) for m in achadas).encode()]
         if comando == 'SEARCH':
+            SERVIDOR.buscas.append(args)
             args = list(args)
             texto = None
             if self.literal is not None:
@@ -249,10 +255,30 @@ class IMAPFalso:
             if args[:2] == ['CHARSET', 'UTF-8']:
                 args = args[2:]
             achadas = list(caixa)
+
+            def cabecalho(m, campo):
+                return str(message_from_bytes(m.dados, policy=policy.default).get(campo, '') or '').lower()
             i = 0
             while i < len(args):
+                if isinstance(args[i], bytes):
+                    # LITERAL+: OR OR OR SUBJECT {n+}\r\ntermo FROM ... (uma consulta para os 4 campos)
+                    termo = re.search(rb'\{(\d+)\+\}\r\n', args[i])
+                    n = int(termo.group(1))
+                    valor = args[i][termo.end():termo.end() + n].decode('utf-8').lower()
+                    campos = [c.decode() for c in re.findall(rb'(SUBJECT|FROM|TO|CC) \{', args[i])]
+                    achadas = [m for m in achadas if any(valor in cabecalho(m, c) for c in campos)]
+                    i += 1
+                    continue
                 a = args[i].upper()
-                if a == 'UNSEEN':
+                if a in ('SUBJECT', 'FROM', 'TO', 'CC'):
+                    achadas = [m for m in achadas if texto in cabecalho(m, a)]
+                elif a == 'UID':
+                    i += 1
+                    quais = {int(u) for u in args[i].split(',')}
+                    achadas = [m for m in achadas if m.uid in quais]
+                elif a == 'BEFORE':
+                    i += 1
+                elif a == 'UNSEEN':
                     achadas = [m for m in achadas if '\\Seen' not in m.flags]
                 elif a == 'FLAGGED':
                     achadas = [m for m in achadas if '\\Flagged' in m.flags]
@@ -728,7 +754,7 @@ try:
     viva.selecionar('INBOX')
     t('listar a pasta já aberta pergunta ao servidor o que chegou (NOOP)', viva.con.noops == 1)
     import inspect
-    t('lista ordenada pela data da mensagem, não pela chegada na caixa', "'(REVERSE DATE)'" in inspect.getsource(wc._buscar))
+    t('lista ordenada pela data da mensagem, não pela chegada na caixa', "'(REVERSE DATE)'" in inspect.getsource(wc._ordenar))
 
     conta2 = ContaEmail.objects.filter(usuario=beto).first() or ContaEmail(usuario=beto)
     conta2.email, conta2.nome_exibicao = 'ana.souza@redeconfianca.com.br', 'Beto'
@@ -743,6 +769,58 @@ try:
       and 'Enviados' in r.json().get('aviso', ''), r.content[:200])
     r = cb.get('/email/')
     t('tela traz o selo "ao vivo"', 'id="wmVivo"' in r.content.decode())
+
+    print('\n== BUSCA RÁPIDA, COMO O WEBMAIL (25/11/2026) ==')
+    SERVIDOR.guardar('INBOX', mensagem_texto('Orçamento das lojas', de='"Beatriz Melo" <bia@fornecedor.com>',
+                                             corpo='Segue a planilha do inventário trimestral.'))
+    cliente.esquecer(conta2.pk)
+
+    def lista(busca, **extra):
+        r = cb.get('/email/api/lista/', {'pasta': 'INBOX', 'busca': busca, **extra})
+        return r.json()
+
+    d = lista('beatriz')
+    t('acha pelo remetente (cabeçalho)', [m['assunto'] for m in d['mensagens']] == ['Orçamento das lojas'], d.get('erro'))
+    t('termo que só está no corpo não vem na busca rápida', lista('trimestral')['total'] == 0)
+    t('acento na busca, sem LITERAL+ (uma busca por campo)', lista('orçamento')['total'] == 1)
+    SERVIDOR.literal_mais = True
+    cliente.esquecer(conta2.pk)
+    antes = len(SERVIDOR.buscas)
+    t('com LITERAL+: acento e os 4 campos numa consulta só', lista('orçamento')['total'] == 1
+      and len(SERVIDOR.buscas) - antes == 1 and any(isinstance(a, bytes) and b'{' in a for a in SERVIDOR.buscas[-1]),
+      SERVIDOR.buscas[-1:])
+    antes = len(SERVIDOR.buscas)
+    lista('orçamento', pagina=1)
+    lista('orçamento', pagina=2)
+    t('repetir a busca / trocar de página não pergunta de novo ao servidor', len(SERVIDOR.buscas) == antes)
+    SERVIDOR.guardar('INBOX', mensagem_texto('Orçamento extra', de='bia@fornecedor.com'))
+    t('chegou mensagem: a busca guardada perde a validade e acha a nova', lista('orçamento')['total'] == 2
+      and len(SERVIDOR.buscas) > antes)
+
+    etapas = []
+    achados = cliente.buscar_no_texto(conta2, 'INBOX', 'trimestral', ao_achar=lambda u, parcial: etapas.append(parcial))
+    t('busca no texto em duas etapas (recentes, depois o resto)', etapas == [True, False] and len(achados) == 1, etapas)
+
+    import threading as _th
+
+    class ThreadNaHora:
+        def __init__(self, target, args=(), **kw):
+            self.target, self.args = target, args
+
+        def start(self):
+            self.target(*self.args)
+
+    import django.db as _db
+    with mock.patch.object(_th, 'Thread', ThreadNaHora), mock.patch.object(_db, 'close_old_connections', lambda: None):
+        r1 = cb.get('/email/api/busca-texto/', {'pasta': 'INBOX', 'busca': 'trimestral'}).json()
+    r2 = cb.get('/email/api/busca-texto/', {'pasta': 'INBOX', 'busca': 'trimestral'}).json()
+    t('busca no texto começa em segundo plano e depois fica pronta', r1['estado'] == 'procurando'
+      and r2 == {'ok': True, 'estado': 'pronto', 'total': 1}, (r1, r2))
+    d = lista('trimestral', texto='1')
+    t('a lista junta o que só está no texto e marca "só no texto"', d['total'] == 1 and d['total_no_texto'] == 1
+      and d['so_no_texto'] == [d['mensagens'][0]['uid']], d.get('total'))
+    t('busca curta não dispara busca no texto', cb.get('/email/api/busca-texto/', {'busca': 'a'}).json()['estado'] == 'pronto')
+    SERVIDOR.literal_mais = False
 finally:
     imaplib.IMAP4_SSL, smtplib.SMTP_SSL = original_imap, original_smtp
     transaction.set_rollback(True)

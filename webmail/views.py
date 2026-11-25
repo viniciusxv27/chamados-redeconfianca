@@ -203,10 +203,79 @@ def _int(valor, padrao=1):
 @require_GET
 def api_lista(request, conta):
     pasta = request.GET.get('pasta') or 'INBOX'
+    busca = (request.GET.get('busca') or '').strip()[:200]
+    filtro = request.GET.get('filtro') or ''
+    no_texto = None
+    if busca and request.GET.get('texto') == '1':
+        # O que a busca no corpo (api_busca_texto, em segundo plano) já achou para esta marca da pasta.
+        def no_texto(marca):
+            achado = cache.get(_chave_texto(conta, pasta, busca, filtro, marca))
+            return achado.get('uids') if isinstance(achado, dict) else None
     dados = cliente.executar(conta, lambda s: cliente.listar(
-        s, pasta, _int(request.GET.get('pagina')), request.GET.get('busca') or '',
-        request.GET.get('filtro') or ''))
+        s, pasta, _int(request.GET.get('pagina')), busca, filtro, no_texto=no_texto))
     return JsonResponse({'ok': True, **dados})
+
+
+# ── Busca no texto das mensagens (em segundo plano) ───────────────────────
+# Assunto/remetente/destinatário respondem em ~0,2 s; o corpo, sem índice de texto no
+# servidor, leva segundos. A tela mostra a primeira parte na hora e pergunta por aqui
+# até a segunda ficar pronta. O resultado fica no cache compartilhado (Redis) para
+# qualquer worker responder, preso à marca da pasta: chegou e-mail, a busca é refeita.
+
+TEXTO_SEGUNDOS = 600
+TEXTO_RODANDO_SEGUNDOS = 180
+
+
+def _chave_texto(conta, pasta, busca, filtro, marca):
+    import hashlib
+    bruto = f'{conta.pk}|{conta.credencial_em.isoformat()}|{pasta}|{busca.lower()}|{filtro}|{marca}'
+    return 'webmail:texto:' + hashlib.sha1(bruto.encode('utf-8')).hexdigest()
+
+
+def _buscar_texto_em_thread(conta_pk, pasta, busca, filtro, chave):
+    from django.db import close_old_connections
+    close_old_connections()
+    try:
+        conta = ContaEmail.objects.select_related('usuario').get(pk=conta_pk)
+        cliente.buscar_no_texto(conta, pasta, busca, filtro, ao_achar=lambda uids, parcial: cache.set(
+            chave, {'uids': uids, 'parcial': parcial}, TEXTO_SEGUNDOS))
+    except cliente.ErroEmail as exc:
+        cache.set(chave, {'erro': str(exc)}, 60)
+    except Exception as exc:  # noqa: BLE001 — a busca de fundo nunca derruba nada
+        logger.warning('Busca no texto falhou: %s', exc, exc_info=True)
+        cache.set(chave, {'erro': 'A busca no texto não terminou.'}, 60)
+    finally:
+        cache.delete(chave + ':rodando')
+        close_old_connections()
+
+
+@_api
+@require_GET
+def api_busca_texto(request, conta):
+    """Começa (uma vez só) ou acompanha a busca no corpo. {'estado': 'procurando'|'pronto'|'erro'}."""
+    import threading
+    pasta = request.GET.get('pasta') or 'INBOX'
+    busca = (request.GET.get('busca') or '').strip()[:200]
+    filtro = request.GET.get('filtro') or ''
+    if len(busca) < 2:
+        return JsonResponse({'ok': True, 'estado': 'pronto', 'total': 0})
+    marca = cliente.executar(conta, lambda s: cliente.marca(s, pasta))
+    chave = _chave_texto(conta, pasta, busca, filtro, marca)
+    achado = cache.get(chave)
+    if isinstance(achado, dict):
+        if 'erro' in achado:
+            return JsonResponse({'ok': True, 'estado': 'erro', 'erro': achado['erro']})
+        if not achado.get('parcial'):
+            return JsonResponse({'ok': True, 'estado': 'pronto', 'total': len(achado['uids'])})
+        # Os últimos 90 dias já foram; o resto da caixa ainda está sendo lido.
+        rodando = cache.get(chave + ':rodando') is not None
+        return JsonResponse({'ok': True, 'estado': 'parcial' if rodando else 'erro', 'total': len(achado['uids']),
+                             **({} if rodando else {'erro': 'A busca nas mensagens antigas não terminou.'})})
+    # cache.add é atômico: só um pedido (de qualquer worker) dispara a busca.
+    if cache.add(chave + ':rodando', 1, TEXTO_RODANDO_SEGUNDOS) or cache.get(chave + ':rodando') is None:
+        threading.Thread(target=_buscar_texto_em_thread, args=(conta.pk, pasta, busca, filtro, chave),
+                         daemon=True, name=f'webmail-texto-{conta.pk}').start()
+    return JsonResponse({'ok': True, 'estado': 'procurando'})
 
 
 @_api

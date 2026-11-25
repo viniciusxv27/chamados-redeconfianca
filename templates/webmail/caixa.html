@@ -4,7 +4,7 @@
 {% block title %}E-mail{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'webmail/webmail.css' %}?v=5">
+<link rel="stylesheet" href="{% static 'webmail/webmail.css' %}?v=6">
 {# A caixa calcula a própria altura para caber na tela; sem isto a página rola e o topo some sob o cabeçalho. #}
 <style>#rc-conteudo { min-height: 0 !important; }</style>
 {% endblock %}
@@ -25,7 +25,7 @@
         </div>
         <form class="wm-busca ml-1 sm:ml-4" id="wmBuscaForm" role="search" autocomplete="off">
             <i class="fas fa-magnifying-glass"></i>
-            <input type="search" id="wmBusca" placeholder="Buscar e-mails" aria-label="Buscar e-mails">
+            <input type="search" id="wmBusca" placeholder="Buscar por assunto, pessoa ou texto" aria-label="Buscar e-mails">
             <kbd>/</kbd>
         </form>
         <span class="wm-vivo" id="wmVivo" title="Atualiza sozinho a cada 20 segundos"><span class="wm-vivo-ponto"></span><span data-vivo-texto>Conectando…</span></span>
@@ -91,6 +91,7 @@
                 <button type="button" class="wm-chip" data-filtro="importantes"><i class="fas fa-star text-[10px] mr-1 text-amber-400"></i>Importantes</button>
                 <button type="button" class="wm-chip" data-filtro="anexos"><i class="fas fa-paperclip text-[10px] mr-1"></i>Com anexo</button>
             </div>
+            <div class="wm-busca-status" id="wmBuscaStatus" aria-live="polite" hidden></div>
             <div class="wm-itens" id="wmItens" tabindex="-1"></div>
             <button type="button" class="wm-fab" data-wm="escrever" title="Escrever" aria-label="Escrever"><i class="fas fa-pen"></i></button>
         </section>
@@ -113,6 +114,7 @@
         "pastas": "{% url 'webmail:api_pastas' %}",
         "criarPasta": "{% url 'webmail:api_criar_pasta' %}",
         "lista": "{% url 'webmail:api_lista' %}",
+        "buscaTexto": "{% url 'webmail:api_busca_texto' %}",
         "mensagem": "{% url 'webmail:api_mensagem' %}",
         "acao": "{% url 'webmail:api_acao' %}",
         "resumo": "{% url 'webmail:api_resumo' %}",
@@ -130,5 +132,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'webmail/webmail.js' %}?v=5"></script>
+<script src="{% static 'webmail/webmail.js' %}?v=6"></script>
 {% endblock %}

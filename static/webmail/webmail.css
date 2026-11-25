@@ -463,3 +463,23 @@ button.wm-card:hover { transform: translateY(-3px); border-color: #FED7C3; box-s
     .wm-topo, .wm-vivo-ponto::after, .wm-item.wm-entra, .wm-item.wm-nova, .wm-msg, .wm-geral, .wm-contador { animation: none !important; }
     .wm-item:hover, .wm-pasta:hover, button.wm-card:hover { transform: none; }
 }
+
+/* Busca rápida (25/11/2026): faixa de andamento, termo destacado e selo "no texto" */
+.wm-busca-status { display: flex; align-items: center; gap: .55rem; flex-wrap: wrap; padding: .5rem .85rem; font-size: .76rem;
+    color: var(--wm-texto-2); background: linear-gradient(90deg, var(--wm-laranja-suave), var(--wm-cartao)); border-bottom: 1px solid var(--wm-borda);
+    animation: wmEntraLeitura .25s ease both; }
+.wm-busca-status > i { color: var(--wm-laranja); }
+.wm-busca-status strong { color: var(--wm-texto); }
+.wm-busca-texto { display: inline-flex; align-items: center; gap: .35rem; padding: .15rem .55rem; border-radius: 999px; font-weight: 600;
+    background: var(--wm-cartao); border: 1px solid var(--wm-borda); color: var(--wm-texto-3); }
+.wm-busca-texto i { color: var(--wm-laranja); font-size: .7rem; }
+.wm-busca-texto.wm-ok i { color: #16A34A; }
+.wm-busca-texto.wm-falhou { color: #B91C1C; }
+.wm-busca-texto.wm-falhou i { color: #DC2626; }
+.wm-limpar-busca { margin-left: auto; width: 1.6rem; height: 1.6rem; border-radius: 999px; color: var(--wm-texto-3); }
+.wm-limpar-busca:hover { background: var(--wm-hover); color: var(--wm-laranja); }
+mark.wm-marca { background: #FFE8A3; color: inherit; padding: 0 .08em; border-radius: .2rem; box-shadow: 0 0 0 1px #FCD34D inset; }
+html.dark mark.wm-marca { background: rgba(250, 204, 21, .3); box-shadow: none; }
+.wm-no-texto { display: inline-flex; align-items: center; margin-right: .35rem; padding: 0 .4rem; border-radius: .35rem; font-size: .64rem;
+    font-weight: 800; letter-spacing: .02em; text-transform: uppercase; vertical-align: 1px; background: #EEF2FF; color: #4338CA; }
+html.dark .wm-no-texto { background: rgba(99, 102, 241, .2); color: #A5B4FC; }
