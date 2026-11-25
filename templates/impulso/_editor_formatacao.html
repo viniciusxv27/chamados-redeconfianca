@@ -1,0 +1,147 @@
+{% comment %}
+Barra de formatação para os textareas com data-formatar (descrição e comentários da meta) — 25/11/2026.
+Guarda texto puro com marcação leve; impulso/formatacao.py transforma em HTML seguro na tela.
+A pré-visualização aqui segue as mesmas regras (o HTML digitado é escapado antes).
+Incluir uma vez por página; os estilos .fmt valem também para o texto já salvo.
+{% endcomment %}
+<style>
+    .fmt { overflow-wrap:anywhere; }
+    .fmt p { margin:0 0 .5rem; } .fmt p:last-child { margin-bottom:0; }
+    .fmt ul { list-style:disc; padding-left:1.25rem; margin:0 0 .5rem; }
+    .fmt ol { list-style:decimal; padding-left:1.4rem; margin:0 0 .5rem; }
+    .fmt li { margin:.1rem 0; }
+    .fmt a { color:#4f46e5; text-decoration:underline; }
+    .fmt code { background:#f3f4f6; border-radius:.25rem; padding:0 .3rem; font-size:.85em; }
+    .fmt blockquote { border-left:3px solid #c7d2fe; padding-left:.6rem; color:#4b5563; margin:0 0 .5rem; }
+    .fmt .fmt-titulo { font-weight:700; color:#111827; }
+    .fmt .fmt-t1 { font-size:1.05rem; } .fmt .fmt-t2 { font-size:.98rem; }
+    .fmt-barra { display:flex; flex-wrap:wrap; gap:.15rem; align-items:center; border:1px solid #d1d5db; border-bottom:0;
+                 border-radius:.5rem .5rem 0 0; padding:.2rem .3rem; background:#f9fafb; }
+    .fmt-barra button { min-width:1.9rem; height:1.75rem; border-radius:.35rem; font-size:.8rem; color:#374151; }
+    .fmt-barra button:hover { background:#e5e7eb; }
+    .fmt-barra button[aria-pressed="true"] { background:#e0e7ff; color:#4338ca; }
+    .fmt-barra .fmt-sep { width:1px; height:1.1rem; background:#d1d5db; margin:0 .2rem; }
+    .fmt-barra .fmt-ver { margin-left:auto; padding:0 .5rem; font-size:.75rem; }
+    textarea.fmt-com-barra { border-top-left-radius:0 !important; border-top-right-radius:0 !important; }
+    .fmt-previa { border:1px solid #d1d5db; border-radius:0 0 .5rem .5rem; padding:.6rem .75rem; font-size:.875rem;
+                  min-height:4rem; background:#fff; color:#1f2937; }
+</style>
+<script>
+(function () {
+    if (window.rcFormatacao) { window.rcFormatacao.ligar(); return; }
+    function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;'); }
+    function inline(t) {
+        var g = [];
+        function guardar(h) { g.push(h); return '\u0000' + (g.length - 1) + '\u0000'; }
+        t = t.replace(/`([^`\n]{1,500})`/g, function (_, c) { return guardar('<code>' + c + '</code>'); });
+        t = t.replace(/\[([^\]\n]{1,300})\]\((https?:\/\/[^\s)]{1,1000})\)/g, function (_, x, u) { return guardar('<a href="' + u + '" target="_blank" rel="noopener noreferrer">' + x + '</a>'); });
+        t = t.replace(/(^|[^="\w\/])(https?:\/\/[^\s<]{3,1000})/g, function (_, a, u) {
+            var fim = ''; while (u && '.,;:!?)'.indexOf(u.slice(-1)) > -1) { fim = u.slice(-1) + fim; u = u.slice(0, -1); }
+            return a + guardar('<a href="' + u + '" target="_blank" rel="noopener noreferrer">' + u + '</a>') + fim;
+        });
+        t = t.replace(/\*\*(?=\S)(.+?)(?<=\S)\*\*/g, '<strong>$1</strong>');
+        t = t.replace(/~~(?=\S)(.+?)(?<=\S)~~/g, '<s>$1</s>');
+        t = t.replace(/(^|[^\w*])\*(?=\S)([^*\n]+?)(?<=\S)\*(?![\w*])/g, '$1<em>$2</em>');
+        t = t.replace(/(^|[^\w_])_(?=\S)([^_\n]+?)(?<=\S)_(?![\w_])/g, '$1<em>$2</em>');
+        return t.replace(/\u0000(\d+)\u0000/g, function (_, i) { return g[+i]; });
+    }
+    function html(texto) {
+        var linhas = esc(texto || '').replace(/\r\n?/g, '\n').split('\n'), out = [], par = [], lista = [], tipo = '';
+        function fp() { if (par.length) { out.push('<p>' + par.map(inline).join('<br>') + '</p>'); par = []; } }
+        function fl() { if (lista.length) { out.push('<' + tipo + '>' + lista.map(function (i) { return '<li>' + inline(i) + '</li>'; }).join('') + '</' + tipo + '>'); lista = []; } tipo = ''; }
+        linhas.forEach(function (l) {
+            var it = l.match(/^\s*[-*•]\s+(.*)$/), nu = l.match(/^\s*(\d{1,3})[.)]\s+(.*)$/), ti = l.match(/^(#{1,3})\s+(.*)$/), ci = l.match(/^&gt;\s?(.*)$/);
+            if (it || nu) { fp(); var n = it ? 'ul' : 'ol'; if (tipo && tipo !== n) fl(); tipo = n; lista.push(it ? it[1] : nu[2]); return; }
+            fl();
+            if (!l.trim()) fp();
+            else if (ti) { fp(); out.push('<p class="fmt-titulo fmt-t' + ti[1].length + '">' + inline(ti[2]) + '</p>'); }
+            else if (ci) { fp(); out.push('<blockquote>' + inline(ci[1]) + '</blockquote>'); }
+            else par.push(l);
+        });
+        fp(); fl();
+        return out.join('');
+    }
+    function envolver(campo, antes, depois, exemplo) {
+        var i = campo.selectionStart, f = campo.selectionEnd, v = campo.value, sel = v.slice(i, f) || exemplo;
+        campo.setRangeText(antes + sel + depois, i, f, 'end');
+        if (i === f) { campo.setSelectionRange(i + antes.length, i + antes.length + sel.length); }
+        campo.focus(); campo.dispatchEvent(new Event('input', {bubbles: true}));
+    }
+    function prefixar(campo, prefixo) {
+        var v = campo.value, i = v.lastIndexOf('\n', campo.selectionStart - 1) + 1, f = campo.selectionEnd;
+        var fimLinha = v.indexOf('\n', f); if (fimLinha < 0) fimLinha = v.length;
+        var n = 0;
+        var bloco = v.slice(i, fimLinha).split('\n').map(function (l) {
+            n += 1; var p = typeof prefixo === 'function' ? prefixo(n) : prefixo;
+            return l.indexOf(p) === 0 ? l.slice(p.length) : p + l;
+        }).join('\n');
+        campo.setRangeText(bloco, i, fimLinha, 'select');
+        campo.focus(); campo.dispatchEvent(new Event('input', {bubbles: true}));
+    }
+    var BOTOES = [
+        ['fa-bold', 'Negrito (Ctrl+B)', function (c) { envolver(c, '**', '**', 'negrito'); }],
+        ['fa-italic', 'Itálico (Ctrl+I)', function (c) { envolver(c, '*', '*', 'itálico'); }],
+        ['fa-strikethrough', 'Riscado', function (c) { envolver(c, '~~', '~~', 'riscado'); }],
+        ['fa-heading', 'Título', function (c) { prefixar(c, '## '); }],
+        null,
+        ['fa-list-ul', 'Lista', function (c) { prefixar(c, '- '); }],
+        ['fa-list-ol', 'Lista numerada', function (c) { prefixar(c, function (n) { return n + '. '; }); }],
+        ['fa-quote-right', 'Citação', function (c) { prefixar(c, '> '); }],
+        null,
+        ['fa-link', 'Link', function (c) {
+            var url = window.prompt('Endereço do link (https://…)', 'https://');
+            if (url && /^https?:\/\/\S+$/.test(url)) envolver(c, '[', '](' + url + ')', 'texto do link');
+        }],
+        ['fa-code', 'Código', function (c) { envolver(c, '`', '`', 'código'); }]
+    ];
+    function ligarCampo(campo) {
+        if (campo.dataset.fmtLigado) return;
+        campo.dataset.fmtLigado = '1';
+        var barra = document.createElement('div');
+        barra.className = 'fmt-barra';
+        barra.setAttribute('role', 'toolbar');
+        barra.setAttribute('aria-label', 'Formatação do texto');
+        BOTOES.forEach(function (b) {
+            if (!b) { var s = document.createElement('span'); s.className = 'fmt-sep'; barra.appendChild(s); return; }
+            var bt = document.createElement('button');
+            bt.type = 'button'; bt.title = b[1]; bt.setAttribute('aria-label', b[1]);
+            bt.innerHTML = '<i class="fas ' + b[0] + '"></i>';
+            bt.addEventListener('mousedown', function (e) { e.preventDefault(); });
+            bt.addEventListener('click', function () { b[2](campo); });
+            barra.appendChild(bt);
+        });
+        var ver = document.createElement('button');
+        ver.type = 'button'; ver.className = 'fmt-ver'; ver.setAttribute('aria-pressed', 'false');
+        ver.innerHTML = '<i class="fas fa-eye mr-1"></i>Ver como fica';
+        var previa = document.createElement('div');
+        previa.className = 'fmt fmt-previa'; previa.hidden = true;
+        ver.addEventListener('click', function () {
+            var abrir = previa.hidden;
+            previa.innerHTML = html(campo.value) || '<span class="text-gray-400">Nada escrito ainda.</span>';
+            previa.style.minHeight = campo.offsetHeight + 'px';
+            previa.hidden = !abrir; campo.hidden = abrir;
+            ver.setAttribute('aria-pressed', abrir ? 'true' : 'false');
+            ver.innerHTML = abrir ? '<i class="fas fa-pen mr-1"></i>Voltar a escrever' : '<i class="fas fa-eye mr-1"></i>Ver como fica';
+            if (!abrir) campo.focus();
+        });
+        barra.appendChild(ver);
+        campo.parentNode.insertBefore(barra, campo);
+        campo.parentNode.insertBefore(previa, campo.nextSibling);
+        campo.classList.add('fmt-com-barra');
+        campo.addEventListener('keydown', function (e) {
+            if (!(e.ctrlKey || e.metaKey)) return;
+            var k = e.key.toLowerCase();
+            if (k === 'b') { e.preventDefault(); envolver(campo, '**', '**', 'negrito'); }
+            else if (k === 'i') { e.preventDefault(); envolver(campo, '*', '*', 'itálico'); }
+        });
+        var form = campo.form;
+        if (form) form.addEventListener('submit', function () { if (campo.hidden) { campo.hidden = false; previa.hidden = true; } });
+    }
+    window.rcFormatacao = {
+        html: html,
+        ligar: function () { document.querySelectorAll('textarea[data-formatar]').forEach(ligarCampo); }
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', window.rcFormatacao.ligar);
+    else window.rcFormatacao.ligar();
+})();
+</script>

@@ -82,3 +82,17 @@ def texto_limpo(texto):
     import re
     linhas = [linha.strip() for linha in str(texto or '').replace('\r\n', '\n').replace('\r', '\n').split('\n')]
     return re.sub(r'\n{3,}', '\n\n', '\n'.join(linhas)).strip()
+
+
+@register.filter
+def formatado(texto):
+    """Descrição/comentário da meta com a formatação leve (negrito, listas, links...) em HTML seguro."""
+    from ..formatacao import para_html
+    return para_html(texto)
+
+
+@register.filter
+def sem_formatacao(texto):
+    """O texto sem os sinais de formatação, para resumos de uma linha."""
+    from ..formatacao import sem_marcacao
+    return sem_marcacao(texto)

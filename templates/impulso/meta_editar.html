@@ -50,9 +50,10 @@
 
         <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
-            <textarea name="descricao" rows="5"
+            <textarea name="descricao" rows="5" data-formatar
                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">{{ meta.descricao }}</textarea>
         </div>
+        {% include 'impulso/_editor_formatacao.html' %}
         {% include 'impulso/_descricao_midia_campos.html' %}
 
         <div>

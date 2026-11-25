@@ -1,4 +1,5 @@
 {% extends 'impulso/base_impulso.html' %}
+{% load impulso_tags %}
 
 {% block impulso_content %}
 {% with s=meta.status %}
@@ -147,7 +148,7 @@
             </div>
             {% endif %}
 
-            <div class="mt-4 text-sm text-gray-700 whitespace-pre-wrap">{{ meta.descricao }}</div>
+            <div class="fmt mt-4 text-sm text-gray-700">{{ meta.descricao|formatado }}</div>
             {% include 'impulso/_descricao_midia.html' %}
 
             {% if meta.entrega_link %}
@@ -321,7 +322,7 @@
                     <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-semibold flex-shrink-0">{{ c.autor.get_full_name|default:c.autor.email|slice:":1"|upper }}</div>
                     <div class="flex-1">
                         <p class="text-xs text-gray-500"><span class="font-medium text-gray-700">{{ c.autor.get_full_name|default:c.autor.email }}</span> · {{ c.criado_em|date:"d/m H:i" }}</p>
-                        <p class="text-sm text-gray-800 whitespace-pre-wrap">{{ c.mensagem }}</p>
+                        <div class="fmt text-sm text-gray-800">{{ c.mensagem|formatado }}</div>
                     </div>
                     {% if is_gestor_da_meta or c.autor_id == request.user.id %}
                     <form method="post" action="{% url 'impulso:meta_excluir_comentario' c.id %}"
@@ -347,11 +348,13 @@
             <form method="post" action="{% url 'impulso:meta_add_comentario' meta.id %}"
                   class="flex gap-2 items-end" id="formComentario">
                 {% csrf_token %}
-                <textarea name="mensagem" required rows="2" id="campoComentario"
+                <div class="flex-1 min-w-0">
+                <textarea name="mensagem" required rows="2" id="campoComentario" data-formatar
                           placeholder="Escreva um comentário…  (Enter quebra a linha · Ctrl+Enter envia)"
-                          class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none
+                          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none
                                  focus:ring-indigo-500 focus:border-indigo-500"
                           style="max-height:220px"></textarea>
+                </div>
                 <button type="submit" class="px-4 py-2 rounded-lg bg-indigo-500 text-white text-sm hover:bg-indigo-600 whitespace-nowrap">Enviar</button>
             </form>
             <script>
@@ -935,4 +938,5 @@
 {% include 'impulso/_modal_duplicar.html' %}
 {% endif %}
 
+{% include 'impulso/_editor_formatacao.html' %}
 {% endblock %}

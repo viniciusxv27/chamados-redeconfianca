@@ -1,4 +1,5 @@
 {% extends 'impulso/base_impulso.html' %}
+{% load impulso_tags %}
 
 {% block impulso_content %}
 <div class="mb-4 flex items-center justify-between gap-3 flex-wrap">
@@ -52,7 +53,7 @@
                     {% if m.duplicada_de %}
                     <p class="text-xs text-indigo-700 mt-1"><i class="fas fa-copy mr-1"></i>Cópia de: {{ m.duplicada_de.titulo }}</p>
                     {% endif %}
-                    <p class="text-sm text-gray-600 mt-2 line-clamp-2">{{ m.descricao|truncatechars:180 }}</p>
+                    <p class="text-sm text-gray-600 mt-2 line-clamp-2">{{ m.descricao|sem_formatacao|truncatechars:180 }}</p>
                 </div>
 
                 {% if m.decide_aqui %}
