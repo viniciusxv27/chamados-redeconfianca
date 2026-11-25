@@ -904,6 +904,113 @@ try:
       and d['so_no_texto'] == [d['mensagens'][0]['uid']], d.get('total'))
     t('busca curta não dispara busca no texto', cb.get('/email/api/busca-texto/', {'busca': 'a'}).json()['estado'] == 'pronto')
     SERVIDOR.literal_mais = False
+
+    print('\n== SENHA ERRADA NÃO VOLTA AO SERVIDOR (bloqueio do IP do portal, 25/11/2026) ==')
+    from django.core.cache import cache as _cache
+    from webmail import views as wv
+    _cache.delete(wc.CHAVE_RECUSAS)
+    SERVIDOR.usuarios['ana.souza@redeconfianca.com.br'] = 'trocada-na-central'
+    wc.esquecer(conta2.pk)
+    _cache.delete_many([wv.chave_nao_lidas(beto.pk), wv.chave_contador_falhou(beto.pk)])
+    antes = SERVIDOR.conexoes
+    r = cb.get('/email/api/contador/').json()
+    conta2.refresh_from_db()
+    t('bolinha do menu com senha trocada: marca a conta e para', r.get('conectado') is False and conta2.senha_recusada
+      and SERVIDOR.conexoes == antes + 1, (r, SERVIDOR.conexoes - antes))
+    ContaEmail.objects.filter(pk=conta2.pk).update(senha_recusada=False)   # outro caminho que não marcou
+    conta2.refresh_from_db()
+    wc.esquecer(conta2.pk)
+    antes = SERVIDOR.conexoes
+    for _ in range(5):
+        cb.get('/email/api/contador/')
+        try:
+            wc.executar(conta2, wc.novidades)
+        except wc.SenhaRecusada:
+            pass
+    t('a mesma senha recusada não vai de novo ao servidor (nem pela bolinha, nem pela caixa)',
+      SERVIDOR.conexoes == antes, SERVIDOR.conexoes - antes)
+    try:
+        wc.testar_login('ana.souza@redeconfianca.com.br', 'senha-nova')
+        lembrada = False
+    except wc.SenhaRecusada:
+        lembrada = True
+    t('tela de entrar com a senha já recusada responde sem ir ao servidor', lembrada and SERVIDOR.conexoes == antes)
+    wc.testar_login('ana.souza@redeconfianca.com.br', 'trocada-na-central')
+    t('a senha nova (outra) entra normalmente', SERVIDOR.conexoes == antes + 1)
+
+    _cache.set(wc.CHAVE_RECUSAS, wc.RECUSAS_NO_PORTAL, 600)
+    antes = SERVIDOR.conexoes
+    try:
+        wc.testar_login('ana.souza@redeconfianca.com.br', 'chute-1')
+        barrou = ''
+    except wc.ServidorFora as exc:
+        barrou = str(exc)
+    t('portal com recusas demais na janela: a tela de entrar espera em vez de arriscar o bloqueio',
+      'Espere' in barrou and SERVIDOR.conexoes == antes, barrou)
+    c3 = Client()
+    c3.force_login(caio)
+    r = c3.post('/email/conectar/', {'email': 'caio@redeconfianca.com.br', 'senha': 'qualquer'}, follow=True)
+    t('e a tela mostra o aviso', 'senhas erradas foram digitadas no portal' in r.content.decode())
+    _cache.delete(wc.CHAVE_RECUSAS)
+    _cache.delete(wc._chave_recusa('ana.souza@redeconfianca.com.br', 'chute-2'))
+    try:
+        wc.testar_login('ana.souza@redeconfianca.com.br', 'chute-2')
+    except wc.SenhaRecusada:
+        pass
+    t('cada recusa conta na janela do portal', _cache.get(wc.CHAVE_RECUSAS) == 1, _cache.get(wc.CHAVE_RECUSAS))
+
+    def ocupado(self, mecanismo, fn):
+        raise imaplib.IMAP4.error('[UNAVAILABLE] Temporary authentication failure')
+    with mock.patch.object(IMAPFalso, 'authenticate', ocupado):
+        try:
+            wc.testar_login('ana.souza@redeconfianca.com.br', 'qualquer-uma')
+            tipo = None
+        except wc.ErroEmail as exc:
+            tipo = type(exc)
+    t('servidor ocupado não é senha errada (nem fica lembrado)', tipo is wc.ServidorFora
+      and _cache.get(wc._chave_recusa('ana.souza@redeconfianca.com.br', 'qualquer-uma')) is None, tipo)
+
+    class SmtpRecusa:
+        def __init__(self, codigo):
+            self.codigo = codigo
+
+        def ehlo(self):
+            return 250, b'ok'
+
+        def login(self, u, s):
+            raise smtplib.SMTPAuthenticationError(self.codigo, b'nao')
+    try:
+        wc._smtp_entrar(SmtpRecusa(454), 'ana.souza@redeconfianca.com.br', 'smtp-1')
+        tipo = None
+    except wc.ErroEmail as exc:
+        tipo = type(exc)
+    t('SMTP 454 (temporário) não é senha errada', tipo is wc.ServidorFora)
+    try:
+        wc._smtp_entrar(SmtpRecusa(535), 'ana.souza@redeconfianca.com.br', 'smtp-2')
+    except wc.SenhaRecusada:
+        pass
+    t('SMTP 535 fica lembrado', bool(_cache.get(wc._chave_recusa('ana.souza@redeconfianca.com.br', 'smtp-2'))))
+    t('a recusa é guardada sem a senha em claro', 'smtp-2' not in wc._chave_recusa('ana.souza@redeconfianca.com.br', 'smtp-2'))
+
+    erro = wc._marcar_fora(('mail.exemplo', 993), ConnectionRefusedError())
+    wc._FORA.pop(('mail.exemplo', 993), None)
+    t('conexão recusada diz que é o bloqueio e que libera sozinho', 'recusou a conexão do portal' in str(erro)
+      and getattr(erro, 'sem_conexao', False))
+
+    ContaEmail.objects.filter(pk=conta2.pk).update(senha_recusada=False)
+    conta2.refresh_from_db()
+    _cache.delete_many([wv.chave_nao_lidas(beto.pk), wv.chave_contador_falhou(beto.pk)])
+    chamadas = []
+
+    def fora(conta, funcao):
+        chamadas.append(1)
+        raise wc.ServidorFora('Servidor de e-mail fora do ar (x).')
+    with mock.patch.object(wc, 'executar', fora):
+        r1 = cb.get('/email/api/contador/').json()
+        r2 = cb.get('/email/api/contador/').json()
+    t('bolinha com servidor fora: não tenta de novo a cada página', r1['ok'] is False and r2['ok'] is False
+      and len(chamadas) == 1, chamadas)
+    SERVIDOR.usuarios['ana.souza@redeconfianca.com.br'] = 'senha-nova'
 finally:
     imaplib.IMAP4_SSL, smtplib.SMTP_SSL = original_imap, original_smtp
     transaction.set_rollback(True)

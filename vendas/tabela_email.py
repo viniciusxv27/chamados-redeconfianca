@@ -92,6 +92,7 @@ def _conectar(servidor):
 
 def _entrar(conta, senha, servidor=None):
     from webmail import cliente
+    cliente.conferir_recusa(conta, senha)      # senha já recusada não volta ao servidor (bloqueio do IP)
     con = _conectar(servidor) if (servidor or '').strip() else cliente._conectar_imap()
     try:
         cliente._entrar_imap(con, conta, senha)

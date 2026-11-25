@@ -12,6 +12,8 @@ roda mais uma vez.
 """
 import base64
 import email as email_lib
+import hashlib
+import hmac
 import imaplib
 import logging
 import re
@@ -144,14 +146,26 @@ _FORA = {}          # (host, porta) → (instante da falha, mensagem)
 def _servidor_em_pausa(chave):
     falha = _FORA.get(chave)
     if falha and time.time() - falha[0] < FORA_PAUSA:
-        raise ServidorFora(falha[1])
+        erro = ServidorFora(falha[1])
+        erro.sem_conexao = True
+        raise erro
     _FORA.pop(chave, None)
 
 
 def _marcar_fora(chave, exc):
-    mensagem = f'Servidor de e-mail fora do ar ({chave[0]}: {exc.__class__.__name__}).'
+    if isinstance(exc, ConnectionRefusedError):
+        # A porta abre para todo mundo e recusa só o portal: é o bloqueio automático do servidor
+        # (fail2ban) depois de senhas erradas vindas do IP do portal — ver "Senha errada" abaixo.
+        mensagem = (f'O servidor de e-mail ({chave[0]}) recusou a conexão do portal. Costuma ser o bloqueio '
+                    'automático depois de várias senhas erradas; ele libera sozinho em alguns minutos.')
+        logger.error('E-mail: %s:%s recusou a conexão (ConnectionRefusedError) — IP do portal bloqueado no '
+                     'servidor de e-mail? (fail2ban: incluir o IP do portal em ignoreip)', chave[0], chave[1])
+    else:
+        mensagem = f'Servidor de e-mail fora do ar ({chave[0]}: {exc.__class__.__name__}).'
     _FORA[chave] = (time.time(), mensagem)
-    return ServidorFora(mensagem)
+    erro = ServidorFora(mensagem)
+    erro.sem_conexao = True               # a porta não abriu (o SMTP tenta a 587)
+    return erro
 
 
 def _abrir_tls(abrir_verificado, abrir_pinado, sock_de, host, porta=None):
@@ -219,14 +233,71 @@ def _conectar_smtp(email=''):
             lambda ctx: smtplib.SMTP_SSL(host, porta, context=ctx, timeout=TIMEOUT),
             lambda con: con.sock, host, porta)
     except ServidorFora as exc:
-        if porta != 465 or 'fora do ar' not in str(exc):
+        if porta != 465 or not getattr(exc, 'sem_conexao', False):
             raise
         logger.warning('E-mail: SMTP %s:465 não abriu (%s); tentando a 587', host, exc)
         return _abrir_tls(lambda ctx: _smtp_starttls(host, 587, ctx), lambda ctx: _smtp_starttls(host, 587, ctx),
                           lambda con: con.sock, host, 587)
 
 
+# ── Senha errada não volta ao servidor ────────────────────────────────────
+# O servidor de e-mail (Virtualmin) bloqueia por alguns minutos o IP de onde vêm várias senhas
+# erradas (fail2ban) — e o portal inteiro sai por um IP só. Uma pessoa com a senha antiga
+# guardada, tentada de novo a cada página (a bolinha do menu), bloqueava o e-mail de todo mundo
+# (ConnectionRefusedError, 24–25/11). Por isso a senha recusada fica lembrada no cache
+# compartilhado e não vai de novo ao servidor; e senhas digitadas na tela de entrar param
+# quando o portal já levou RECUSAS_NO_PORTAL recusas na janela.
+RECUSA_LEMBRADA = 15 * 60
+RECUSAS_NO_PORTAL = 3
+JANELA_RECUSAS = 10 * 60
+CHAVE_RECUSAS = 'webmail:recusas_do_portal'
+MSG_RECUSADA = 'O servidor recusou o e-mail ou a senha.'
+# Respostas do Dovecot que não são senha errada (servidor ocupado, limite de conexões).
+_NAO_E_SENHA = ('[UNAVAILABLE]', '[LIMIT]', '[SERVERBUG]', '[INUSE]', 'TEMPORARY', 'MAXIMUM NUMBER OF CONNECTIONS')
+
+
+def _cache():
+    from django.core.cache import cache
+    return cache
+
+
+def _chave_recusa(email, senha):
+    bruto = f'{(email or "").strip().lower()}\0{senha or ""}'.encode('utf-8')
+    return 'webmail:recusada:' + hmac.new(settings.SECRET_KEY.encode(), bruto, hashlib.sha256).hexdigest()
+
+
+def conferir_recusa(email, senha):
+    """SenhaRecusada na hora, sem ir ao servidor, se essa senha deste e-mail já foi recusada há pouco."""
+    try:
+        recusada = _cache().get(_chave_recusa(email, senha))
+    except Exception:  # noqa: BLE001 — cache fora não impede de entrar
+        recusada = None
+    if recusada:
+        raise SenhaRecusada(MSG_RECUSADA)
+
+
+def lembrar_recusa(email, senha):
+    try:
+        cache = _cache()
+        cache.set(_chave_recusa(email, senha), 1, RECUSA_LEMBRADA)
+        if not cache.add(CHAVE_RECUSAS, 1, JANELA_RECUSAS):
+            cache.incr(CHAVE_RECUSAS)
+    except Exception:  # noqa: BLE001
+        pass
+    logger.warning('E-mail: o servidor recusou a senha de %s (não será tentada de novo por %d min)',
+                   email, RECUSA_LEMBRADA // 60)
+
+
+def portal_no_limite():
+    """O portal já levou recusas demais na janela: mais uma pode bloquear o IP dele no servidor."""
+    try:
+        return int(_cache().get(CHAVE_RECUSAS) or 0) >= RECUSAS_NO_PORTAL
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _entrar_imap(con, email, senha):
+    conferir_recusa(email, senha)
     try:
         if 'AUTH=PLAIN' in con.capabilities:
             # PLAIN em UTF-8: o LOGIN do imaplib só aceita senha ASCII.
@@ -234,11 +305,28 @@ def _entrar_imap(con, email, senha):
         else:
             con.login(email, senha)
     except imaplib.IMAP4.error as exc:
-        raise SenhaRecusada('O servidor recusou o e-mail ou a senha.') from exc
+        texto = str(exc)
+        if any(m in texto.upper() for m in _NAO_E_SENHA):
+            raise ServidorFora(f'O servidor de e-mail não deixou entrar agora ({texto[:150]}). '
+                               'Tente de novo em instantes.') from exc
+        lembrar_recusa(email, senha)
+        raise SenhaRecusada(MSG_RECUSADA) from exc
+
+
+def _fechar_imap(con):
+    try:
+        con.shutdown()
+    except (OSError, AttributeError):
+        pass
 
 
 def testar_login(email, senha):
     """Confere a credencial sem guardar nada. Usado na tela de entrar."""
+    conferir_recusa(email, senha)
+    if portal_no_limite():
+        raise ServidorFora('Várias senhas erradas foram digitadas no portal nos últimos minutos e o servidor '
+                           'de e-mail bloqueia o portal inteiro se vierem mais. Espere uns 10 minutos e '
+                           'confira a senha antes de tentar de novo.')
     con = _conectar_imap(email)
     try:
         _entrar_imap(con, email, senha)
@@ -283,8 +371,13 @@ class Sessao:
     def abrir(self):
         if not self._senha:
             raise SenhaRecusada('A senha guardada não pôde ser lida. Entre de novo.')
+        conferir_recusa(self.email, self._senha)
         con = _conectar_imap(self.email)
-        _entrar_imap(con, self.email, self._senha)
+        try:
+            _entrar_imap(con, self.email, self._senha)
+        except ErroEmail:
+            _fechar_imap(con)
+            raise
         try:
             typ, dados = con.capability()
             self.caps = set((dados[0] or b'').decode().upper().split()) if typ == 'OK' else set()
@@ -753,6 +846,7 @@ def buscar_no_texto(conta, pasta, busca, filtro='', ao_achar=None):
     duas etapas: os últimos 90 dias primeiro (~1 s, onde quase sempre está o que se
     procura) e depois o resto. ``ao_achar(uids, parcial)`` recebe cada etapa.
     """
+    conferir_recusa(conta.email, conta.senha())
     host, porta = _host_imap(conta.email)
     con = _abrir_tls(
         lambda ctx: imaplib.IMAP4_SSL(host, porta, ssl_context=ctx, timeout=TIMEOUT_TEXTO),
@@ -1137,12 +1231,16 @@ def _smtp_entrar(con, email, senha):
             if codigo != 235:
                 raise smtplib.SMTPAuthenticationError(codigo, resposta)
     except smtplib.SMTPAuthenticationError as exc:
-        raise SenhaRecusada('O servidor de envio recusou o e-mail ou a senha.') from exc
+        if exc.smtp_code == 535:
+            lembrar_recusa(email, senha)
+            raise SenhaRecusada('O servidor de envio recusou o e-mail ou a senha.') from exc
+        raise ServidorFora(f'O servidor de envio não deixou entrar agora ({exc.smtp_code}).') from exc
 
 
 def enviar(conta, msg, destinos):
     """Manda pelo SMTP. A cópia em Enviados é feita depois, pelo IMAP."""
     todos = [e for _n, e in destinos['para'] + destinos['cc'] + destinos['cco']]
+    conferir_recusa(conta.email, conta.senha())
     con = _conectar_smtp(conta.email)
     try:
         _smtp_entrar(con, conta.email, conta.senha())

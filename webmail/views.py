@@ -39,7 +39,7 @@ def _conta(request):
 
 def _esquecer_menu(user_id):
     from .context_processors import chave_tem_conta
-    cache.delete_many([chave_tem_conta(user_id), chave_nao_lidas(user_id)])
+    cache.delete_many([chave_tem_conta(user_id), chave_nao_lidas(user_id), chave_contador_falhou(user_id)])
 
 
 def _erro(exc, conta=None):
@@ -336,6 +336,13 @@ def chave_nao_lidas(user_id):
     return f'webmail:nao_lidas:{user_id}'
 
 
+CONTADOR_FALHOU_SEGUNDOS = 120
+
+
+def chave_contador_falhou(user_id):
+    return f'webmail:contador_falhou:{user_id}'
+
+
 def guardar_nao_lidas(user_id, n):
     cache.set(chave_nao_lidas(user_id), int(n or 0), CONTADOR_SEGUNDOS)
 
@@ -347,12 +354,23 @@ def api_contador(request):
     n = cache.get(chave_nao_lidas(request.user.pk))
     if n is not None:
         return JsonResponse({'ok': True, 'nao_lidas': n})
+    if cache.get(chave_contador_falhou(request.user.pk)):
+        return JsonResponse({'ok': False, 'nao_lidas': None})
     conta = _conta(request)
     if conta is None or conta.senha_recusada:
         return JsonResponse({'ok': True, 'nao_lidas': 0, 'conectado': False})
     try:
         n = cliente.executar(conta, cliente.novidades)['nao_lidas']
-    except cliente.ErroEmail:
+    except cliente.SenhaRecusada as exc:
+        # Senha trocada no servidor: para de tentar (cada tentativa errada conta para o bloqueio do
+        # IP do portal inteiro) e a tela do e-mail pede para entrar de novo.
+        _erro(exc, conta)
+        return JsonResponse({'ok': True, 'nao_lidas': 0, 'conectado': False})
+    except cliente.ErroEmail as exc:
+        # Sem número novo: não tenta de novo a cada página por CONTADOR_FALHOU_SEGUNDOS.
+        cache.set(chave_contador_falhou(request.user.pk), 1, CONTADOR_FALHOU_SEGUNDOS)
+        if isinstance(exc, cliente.ServidorFora):
+            ContaEmail.objects.filter(pk=conta.pk).update(ultimo_erro=str(exc)[:300])
         return JsonResponse({'ok': False, 'nao_lidas': None})
     guardar_nao_lidas(request.user.pk, n)
     return JsonResponse({'ok': True, 'nao_lidas': n})
