@@ -1027,7 +1027,7 @@
         }
         function anexar(arquivos) {
             const total = c.arquivos.reduce((a, f) => a + f.size, 0) + Array.from(arquivos).reduce((a, f) => a + f.size, 0);
-            if (total > 25 * 1024 * 1024) { aviso('Os anexos passam de 25 MB. Para arquivos grandes, mande um link do Drive.', {erro: true}); return; }
+            if (total > 7 * 1024 * 1024) { aviso('Os anexos passam de 7 MB (o servidor de e-mail aceita mensagens de até 10 MB). Para arquivos grandes, mande um link do Drive.', {erro: true}); return; }
             c.arquivos.push(...arquivos);
             desenharAnexos();
             sujar();

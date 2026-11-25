@@ -1,4 +1,5 @@
-"""Conversa com o servidor de e-mail (redeconfianca.com na UNI5; .com.br no poste.io): IMAP para ler, SMTP para enviar.
+"""Conversa com o servidor de e-mail (redeconfianca.com no mail.redeconfianca.com; .com.br no poste.io): IMAP para ler,
+SMTP para enviar.
 
 Abrir uma conexão IMAP custa um handshake TLS e um login (~0,5 s). Como cada
 clique na caixa vira uma chamada, a conexão de cada pessoa fica aberta por
@@ -43,7 +44,9 @@ OCIOSA = 240            # segundos sem uso até a conexão ser fechada
 CONFERIR_APOS = 25      # sem uso há mais que isso, um NOOP confirma que está viva
 POR_PAGINA = 50
 LIMITE_INLINE = 4 * 1024 * 1024      # imagens cid: embutidas na leitura
-LIMITE_ENVIO = 25 * 1024 * 1024      # anexos de um envio
+# O Postfix do mail.redeconfianca.com aceita mensagens de até 10 MB (SIZE 10240000) e o anexo vai em base64
+# (+37%): 7 MB de arquivos é o que cabe. Se o servidor anunciar outro SIZE, o envio confere com ele.
+LIMITE_ENVIO = 7 * 1024 * 1024       # anexos de um envio
 
 
 class ErroEmail(Exception):
@@ -67,25 +70,55 @@ def _host_porta(texto, porta_padrao):
     return host.strip(), int(porta) if porta.strip().isdigit() else porta_padrao
 
 
+# O servidor de cada domínio da empresa, fixo no código: um .env antigo apontando para a UNI5 ou para o
+# poste.io (WEBMAIL_IMAP_HOST de antes da virada de 24/11) não pode desviar o redeconfianca.com. O servidor
+# é o da Central de E-mails (VPS 143.95.186.27, Virtualmin): IMAP 993 e SMTP 465 em mail.redeconfianca.com,
+# os mesmos do Outlook e do celular. WEBMAIL_SERVIDORES_POR_DOMINIO ainda pode trocar um domínio de propósito.
+SERVIDORES_FIXOS = {
+    'redeconfianca.com': (('mail.redeconfianca.com', 993), ('mail.redeconfianca.com', 465)),
+    'redeconfianca.com.br': (('mail.redeconfianca.com.br', 993), ('mail.redeconfianca.com.br', 465)),
+}
+# Servidores que deixaram de ter as caixas: configuração apontando para eles é ignorada.
+HOSTS_DESATIVADOS = ('uni5.net',)
+
+
+def _desativado(host):
+    host = (host or '').strip().lower().rstrip('.')
+    return any(host == h or host.endswith('.' + h) for h in HOSTS_DESATIVADOS)
+
+
 def servidores_por_dominio():
-    """{domínio: ((imap, porta), (smtp, porta))} de WEBMAIL_SERVIDORES_POR_DOMINIO."""
-    saida = {}
+    """{domínio: ((imap, porta), (smtp, porta))}: os fixos + WEBMAIL_SERVIDORES_POR_DOMINIO."""
+    saida = dict(SERVIDORES_FIXOS)
     for item in (getattr(settings, 'WEBMAIL_SERVIDORES_POR_DOMINIO', '') or '').split(';'):
         dominio, _, hosts = item.partition('=')
         imap, _, smtp = hosts.partition(',')
         if dominio.strip() and imap.strip():
-            saida[dominio.strip().lower()] = (_host_porta(imap, 993), _host_porta(smtp or imap, 465))
+            par = (_host_porta(imap, 993), _host_porta(smtp or imap, 465))
+            if _desativado(par[0][0]) or _desativado(par[1][0]):
+                logger.warning('E-mail: %s ignorado (servidor desativado) — fica %s', item.strip(),
+                               saida.get(dominio.strip().lower()))
+                continue
+            saida[dominio.strip().lower()] = par
     return saida
 
 
 def _servidores(email=''):
-    """O servidor do domínio do e-mail; sem regra própria, o principal (redeconfianca.com, UNI5)."""
+    """O servidor do domínio do e-mail; domínio sem regra própria vai para WEBMAIL_IMAP_HOST/SMTP_HOST."""
     dominio = (email or '').rpartition('@')[2].strip().lower()
-    proprio = servidores_por_dominio().get(dominio)
-    if proprio:
-        return proprio
-    return ((settings.WEBMAIL_IMAP_HOST, settings.WEBMAIL_IMAP_PORT),
-            (settings.WEBMAIL_SMTP_HOST, settings.WEBMAIL_SMTP_PORT))
+    mapa = servidores_por_dominio()
+    if dominio in mapa:
+        return mapa[dominio]
+    imap = (settings.WEBMAIL_IMAP_HOST, settings.WEBMAIL_IMAP_PORT)
+    smtp = (settings.WEBMAIL_SMTP_HOST, settings.WEBMAIL_SMTP_PORT)
+    principal = mapa.get(_dominio_principal())
+    if principal and (_desativado(imap[0]) or _desativado(smtp[0])):
+        return principal
+    return imap, smtp
+
+
+def _dominio_principal():
+    return ((getattr(settings, 'WEBMAIL_DOMINIOS', '') or '').split(',')[0] or '').strip().lower()
 
 
 def _host_imap(email=''):
@@ -112,15 +145,15 @@ def _abrir_tls(abrir_verificado, abrir_pinado, sock_de, host):
         except ssl.SSLCertVerificationError:
             _USA_PINO[host] = time.time()
         except (OSError, socket.timeout) as exc:
-            raise ServidorFora(f'Servidor de e-mail fora do ar ({exc.__class__.__name__}).') from exc
+            raise ServidorFora(f'Servidor de e-mail fora do ar ({host}: {exc.__class__.__name__}).') from exc
     ctx = contexto_pinado()
     if ctx is None:
-        raise ServidorFora('O certificado do servidor de e-mail não é válido e o portal não tem '
+        raise ServidorFora(f'O certificado do servidor de e-mail ({host}) não é válido e o portal não tem '
                            'a impressão digital dele (WEBMAIL_TLS_SHA256).')
     try:
         con = abrir_pinado(ctx)
     except (OSError, socket.timeout) as exc:
-        raise ServidorFora(f'Servidor de e-mail fora do ar ({exc.__class__.__name__}).') from exc
+        raise ServidorFora(f'Servidor de e-mail fora do ar ({host}: {exc.__class__.__name__}).') from exc
     try:
         conferir_pino(sock_de(con))
     except CertificadoNaoConfere as exc:
@@ -141,12 +174,34 @@ def _conectar_imap(email=''):
         lambda con: con.sock, host)
 
 
+def _smtp_starttls(host, porta, ctx):
+    con = smtplib.SMTP(host, porta, timeout=TIMEOUT)
+    try:
+        con.ehlo()
+        con.starttls(context=ctx)
+    except Exception:
+        try:
+            con.close()
+        except OSError:
+            pass
+        raise
+    return con
+
+
 def _conectar_smtp(email=''):
+    """SMTP com TLS direto (465); se a porta não abrir — rede que barra a 465 —, a 587 com STARTTLS."""
     host, porta = _host_smtp(email)
-    return _abrir_tls(
-        lambda ctx: smtplib.SMTP_SSL(host, porta, context=ctx, timeout=TIMEOUT),
-        lambda ctx: smtplib.SMTP_SSL(host, porta, context=ctx, timeout=TIMEOUT),
-        lambda con: con.sock, host)
+    try:
+        return _abrir_tls(
+            lambda ctx: smtplib.SMTP_SSL(host, porta, context=ctx, timeout=TIMEOUT),
+            lambda ctx: smtplib.SMTP_SSL(host, porta, context=ctx, timeout=TIMEOUT),
+            lambda con: con.sock, host)
+    except ServidorFora as exc:
+        if porta != 465 or 'fora do ar' not in str(exc):
+            raise
+        logger.warning('E-mail: SMTP %s:465 não abriu (%s); tentando a 587', host, exc)
+        return _abrir_tls(lambda ctx: _smtp_starttls(host, 587, ctx), lambda ctx: _smtp_starttls(host, 587, ctx),
+                          lambda con: con.sock, host)
 
 
 def _entrar_imap(con, email, senha):
@@ -1069,6 +1124,13 @@ def enviar(conta, msg, destinos):
     con = _conectar_smtp(conta.email)
     try:
         _smtp_entrar(con, conta.email, conta.senha())
+        maximo = (getattr(con, 'esmtp_features', None) or {}).get('size', '')
+        maximo = int(maximo) if maximo.isdigit() else 0
+        tamanho = len(msg.as_bytes())
+        if maximo and tamanho > maximo:
+            raise ErroEmail(f'A mensagem ficou com {tamanho / 1048576:.1f} MB e o servidor aceita até '
+                            f'{maximo / 1048576:.1f} MB (os anexos crescem cerca de 37% no envio). '
+                            'Tire um anexo ou mande um link do Drive.')
         recusados = con.send_message(msg, from_addr=conta.email, to_addrs=todos)
     except smtplib.SMTPRecipientsRefused as exc:
         raise ErroEmail('O servidor recusou: ' + ', '.join(exc.recipients)) from exc

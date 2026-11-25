@@ -82,7 +82,7 @@ def caixa(request):
         return render(request, 'webmail/conectar.html', {
             'conta': conta,
             'dominio': (_dominios() or [''])[0],
-            'servidor': settings.WEBMAIL_IMAP_HOST,
+            'servidor': cliente._host_imap('@' + ((_dominios() or [''])[0]))[0],
         })
     nome = conta.remetente or conta.email
     return render(request, 'webmail/caixa.html', {
@@ -109,6 +109,8 @@ def conectar(request):
     email = (request.POST.get('email') or '').strip().lower()
     senha = request.POST.get('senha') or ''
     dominios = _dominios()
+    if email and '@' not in email and dominios:
+        email = f'{email}@{dominios[0]}'          # como no webmail: "joao" vale joao@redeconfianca.com
     if not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email):
         messages.error(request, 'Digite o e-mail completo, como nome@' + (dominios[0] if dominios else 'empresa.com.br') + '.')
         return redirect('webmail:caixa')

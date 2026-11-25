@@ -47,7 +47,7 @@
                     <label for="wmEmail" class="wm-rotulo">E-mail institucional</label>
                     <div class="wm-campo-icone">
                         <i class="fas fa-at"></i>
-                        <input id="wmEmail" name="email" type="email" required autocomplete="username"
+                        <input id="wmEmail" name="email" type="text" inputmode="email" autocapitalize="none" spellcheck="false" required autocomplete="username"
                                value="{{ conta.email|default:'' }}" placeholder="seu.nome@{{ dominio|default:'empresa.com.br' }}"
                                class="wm-campo">
                     </div>

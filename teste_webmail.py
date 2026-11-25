@@ -475,6 +475,12 @@ try:
     t('domínio de fora: recusa', 'institucional' in r.content.decode() and not ContaEmail.objects.filter(usuario=ana).exists())
     r = c.post('/email/conectar/', {'email': 'ana.souza@redeconfianca.com.br', 'senha': 'errada'}, follow=True)
     t('senha errada: recusa sem gravar', 'não conferem' in r.content.decode() and not ContaEmail.objects.filter(usuario=ana).exists())
+    from django.test import override_settings as _os
+    with _os(WEBMAIL_DOMINIOS='redeconfianca.com.br,redeconfianca.com'):
+        r = c.post('/email/conectar/', {'email': 'Ana.Souza', 'senha': 'S3nh@-Çerta'}, follow=True)
+    conta = ContaEmail.objects.filter(usuario=ana).first()
+    t('só o nome (como no webmail) completa com o domínio', conta is not None and conta.email == 'ana.souza@redeconfianca.com.br')
+    ContaEmail.objects.filter(usuario=ana).delete()
     r = c.post('/email/conectar/', {'email': 'Ana.Souza@redeconfianca.com.br', 'senha': 'S3nh@-Çerta'}, follow=True)
     conta = ContaEmail.objects.filter(usuario=ana).first()
     t('senha certa (com acento): grava a conta', conta is not None and conta.email == 'ana.souza@redeconfianca.com.br')
@@ -698,14 +704,67 @@ try:
     with override_settings(WEBMAIL_IMAP_HOST='imap-vip.uni5.net', WEBMAIL_SMTP_HOST='smtp-vip.uni5.net',
                            WEBMAIL_IMAP_PORT=993, WEBMAIL_SMTP_PORT=465,
                            WEBMAIL_SERVIDORES_POR_DOMINIO='redeconfianca.com.br=mail.redeconfianca.com.br:993,mail.redeconfianca.com.br:465'):
-        t('redeconfianca.com vai para a UNI5', wc._host_imap('ana@redeconfianca.com') == ('imap-vip.uni5.net', 993)
-          and wc._host_smtp('ana@redeconfianca.com') == ('smtp-vip.uni5.net', 465))
+        t('.env antigo na UNI5 não desvia o redeconfianca.com', wc._host_imap('ana@redeconfianca.com') == ('mail.redeconfianca.com', 993)
+          and wc._host_smtp('ana@redeconfianca.com') == ('mail.redeconfianca.com', 465))
         t('redeconfianca.com.br segue no servidor dele', wc._host_imap('ana@redeconfianca.com.br') == ('mail.redeconfianca.com.br', 993)
           and wc._host_smtp('ANA@RedeConfianca.com.br') == ('mail.redeconfianca.com.br', 465))
-        t('sem e-mail, o principal', wc._host_imap() == ('imap-vip.uni5.net', 993))
-    t('padrão agora é o mail.redeconfianca.com (MX desde 24/11/2026)',
-      settings.WEBMAIL_IMAP_HOST in ('imap.redeconfianca.com',) or os.environ.get('WEBMAIL_IMAP_HOST'),
-      settings.WEBMAIL_IMAP_HOST)
+        t('sem e-mail, host desativado cai no principal', wc._host_imap() == ('mail.redeconfianca.com', 993))
+    with override_settings(WEBMAIL_IMAP_HOST='mail.redeconfianca.com.br', WEBMAIL_SMTP_HOST='mail.redeconfianca.com.br',
+                           WEBMAIL_SERVIDORES_POR_DOMINIO=''):
+        t('.env antigo no poste.io não desvia o redeconfianca.com', wc._host_imap('a@redeconfianca.com') == ('mail.redeconfianca.com', 993))
+        t('domínio sem regra usa WEBMAIL_IMAP_HOST', wc._host_imap('a@outra.com') == ('mail.redeconfianca.com.br', 993))
+    with override_settings(WEBMAIL_SERVIDORES_POR_DOMINIO='redeconfianca.com=imap-vip.uni5.net,smtp-vip.uni5.net'):
+        t('regra por domínio para a UNI5 é ignorada', wc._host_smtp('a@redeconfianca.com') == ('mail.redeconfianca.com', 465))
+    with override_settings(WEBMAIL_SERVIDORES_POR_DOMINIO='redeconfianca.com=outro.exemplo.com:1993,outro.exemplo.com:2465'):
+        t('regra por domínio de propósito ainda vale', wc._host_imap('a@redeconfianca.com') == ('outro.exemplo.com', 1993)
+          and wc._host_smtp('a@redeconfianca.com') == ('outro.exemplo.com', 2465))
+    t('padrão é o mail.redeconfianca.com (Central de E-mails, 25/11/2026)',
+      settings.WEBMAIL_IMAP_HOST == 'mail.redeconfianca.com' or os.environ.get('WEBMAIL_IMAP_HOST'), settings.WEBMAIL_IMAP_HOST)
+
+    print('\n== SMTP: 587 QUANDO A 465 NÃO ABRE, E LIMITE DO SERVIDOR (25/11/2026) ==')
+    chamadas = []
+
+    class SmtpPlano:
+        def __init__(self, host, porta, timeout=None):
+            chamadas.append(('plano', host, porta)); self.sock = None
+        def ehlo(self): chamadas.append('ehlo')
+        def starttls(self, context=None): chamadas.append('starttls')
+        def close(self): pass
+
+    def ssl_fora(*a, **k):
+        chamadas.append(('ssl', a[0], a[1])); raise ConnectionRefusedError('465 fechada')
+    orig_ssl, orig_plano, orig_pino = smtplib.SMTP_SSL, smtplib.SMTP, wc._USA_PINO.copy()
+    smtplib.SMTP_SSL, smtplib.SMTP = ssl_fora, SmtpPlano
+    try:
+        con = wc._conectar_smtp('a@redeconfianca.com')
+        t('465 fechada → 587 com STARTTLS', isinstance(con, SmtpPlano) and ('plano', 'mail.redeconfianca.com', 587) in chamadas
+          and 'starttls' in chamadas, chamadas)
+    finally:
+        smtplib.SMTP_SSL, smtplib.SMTP = orig_ssl, orig_plano
+        wc._USA_PINO.clear(); wc._USA_PINO.update(orig_pino)
+
+    class SmtpPequeno:
+        esmtp_features = {'size': '1000'}
+        enviados = []
+        def ehlo(self): pass
+        def login(self, e, s): pass
+        def send_message(self, *a, **k): SmtpPequeno.enviados.append(a)
+        def quit(self): pass
+    orig_con = wc._conectar_smtp
+    wc._conectar_smtp = lambda email='': SmtpPequeno()
+    try:
+        class ContaFalsa:
+            email = 'a@redeconfianca.com'
+            def senha(self): return 'x'
+        grande = EmailMessage(); grande['From'] = 'a@redeconfianca.com'; grande.set_content('x' * 5000)
+        try:
+            wc.enviar(ContaFalsa(), grande, {'para': [('', 'b@redeconfianca.com')], 'cc': [], 'cco': []})
+            t('mensagem maior que o SIZE do servidor é barrada com aviso', False)
+        except wc.ErroEmail as exc:
+            t('mensagem maior que o SIZE do servidor é barrada com aviso', 'aceita até' in str(exc) and not SmtpPequeno.enviados, str(exc))
+    finally:
+        wc._conectar_smtp = orig_con
+    t('limite dos anexos cabe nos 10 MB do servidor', wc.LIMITE_ENVIO * 1.37 < 10240000)
 
     print('\n== SERVIDOR COM PREFIXO "INBOX." E CAIXA VIVA (25/11/2026) ==')
 
