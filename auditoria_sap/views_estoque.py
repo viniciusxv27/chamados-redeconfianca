@@ -27,7 +27,7 @@ from functools import wraps
 from django.contrib import messages
 from django.shortcuts import redirect
 
-from .permissions import pode_escolher_gestores, pode_ver_estoque, so_estoque
+from .permissions import pode_escolher_gestores, pode_ver_estoque, pode_ver_estoque_lp, so_estoque
 
 
 def so_quem_ve_estoque(view):
@@ -42,6 +42,21 @@ def so_quem_ve_estoque(view):
         return view(request, *args, **kwargs)
     return _view
 
+
+
+def so_superadmin_lp(view):
+    """A aba Estoque LP (26/11/2026): só o SUPERADMIN. O ``lp=True`` vai para a view."""
+    @wraps(view)
+    def _view(request, *args, **kwargs):
+        if not pode_ver_estoque_lp(request.user):
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('X-Estoque-Parcial'):
+                return JsonResponse({'ok': False, 'erro': 'O estoque LP é só do SUPERADMIN.'}, status=403)
+            messages.error(request, 'O estoque LP é só do SUPERADMIN.')
+            return redirect('auditoria_sap:estoque')
+        return view(request, *args, lp=True, **kwargs)
+    return _view
+
+
 logger = logging.getLogger(__name__)
 
 # Panorama (24/11/2026, "mais intuitiva e dinâmica, com melhor visualização"): a abertura
@@ -54,6 +69,8 @@ ABAS = (
     ('detalhado', 'Detalhado', 'fa-list'),
     ('produtos', 'Produtos', 'fa-tags'),
 )
+# LP: só o saldo da MB52 — sem vendas no Vivo GO (sem reposição) e sem seriais na IQ09 (sem Detalhado).
+ABAS_LP = tuple(a for a in ABAS if a[0] not in ('reposicao', 'detalhado'))
 SITUACOES_REPOSICAO = (
     ('', 'Todas'), ('critico', 'Críticos'), ('ruptura', 'Em ruptura'),
     ('insuficiente', 'Insuficiente'), ('ok', 'Coberto'),
@@ -106,7 +123,7 @@ def _loja_padrao(user):
     return est.centro_da_loja(setor.name) if setor else ''
 
 
-def _filtros(request, foto):
+def _filtros(request, foto, abas=ABAS):
     g = request.GET
     centros = est.centros_da_foto(foto)
     loja = (g.get('loja') or '').strip().upper()
@@ -116,7 +133,7 @@ def _filtros(request, foto):
         loja = '' if 'loja' in g else _loja_padrao(request.user)
         if loja not in centros:
             loja = ''
-    aba = g.get('aba') if g.get('aba') in {a for a, _r, _i in ABAS} else ''
+    aba = g.get('aba') if g.get('aba') in {a for a, _r, _i in abas} else ''
     if not aba:
         # Abriu sem escolher nada: o Panorama. Com filtro (busca, loja...), a tabela.
         aba = 'disponivel' if any(g.get(k) for k in FILTROS_DE_TELA) else 'inicio'
@@ -149,7 +166,7 @@ def _lojas_para_escolher(foto):
     grupos = {}
     for centro in est.centros_da_foto(foto):
         loja = est.POR_CENTRO.get(centro)
-        uf = loja.uf if loja else 'Outras'
+        uf = est.uf_do_centro(centro) or 'Outras'
         grupos.setdefault(uf, []).append({'centro': centro, 'nome': est.nome_do_centro(foto, centro),
                                           'cidade': loja.cidade if loja else ''})
     return sorted(grupos.items(), key=lambda par: ('ES', 'RJ', 'SP').index(par[0]) if par[0] in ('ES', 'RJ', 'SP') else 9)
@@ -230,7 +247,7 @@ def _panorama(foto, loja, repos):
     lojas = []
     for centro in est.centros_da_foto(foto):
         info = est.POR_CENTRO.get(centro)
-        lojas.append({'centro': centro, 'nome': est.nome_do_centro(foto, centro), 'uf': info.uf if info else '',
+        lojas.append({'centro': centro, 'nome': est.nome_do_centro(foto, centro), 'uf': est.uf_do_centro(centro),
                       'cidade': info.cidade if info else '', 'cor': cor_da_loja(centro),
                       'livre': int(livre.get(centro, 0)), 'transito': int(transito.get(centro, 0)),
                       'minha': centro == loja})
@@ -319,23 +336,26 @@ def _matriz(foto, filtros, modo):
 @gzip_page
 @login_required
 @so_quem_ve_estoque
-def estoque(request):
+def estoque(request, lp=False):
+    abas = ABAS_LP if lp else ABAS
+    aba_do_topo = 'estoque_lp' if lp else 'estoque'
     try:
-        foto = est.fotografia()
+        foto = est.fotografia(lp=lp)
     except SapIndisponivel as exc:
         logger.warning('Estoque SAP indisponível', exc_info=True)
         return render(request, 'auditoria_sap/estoque.html', {
-            'aba': 'estoque', 'erro': str(exc), 'abas': ABAS, 'so_estoque': so_estoque(request.user),
-            'pode_escolher_gestores': pode_escolher_gestores(request.user)})
+            'aba': aba_do_topo, 'erro': str(exc), 'abas': abas, 'so_estoque': so_estoque(request.user),
+            'lp': lp, 'pode_escolher_gestores': pode_escolher_gestores(request.user)})
 
-    filtros = _filtros(request, foto)
+    filtros = _filtros(request, foto, abas)
     aba = filtros['aba']
     inicial = aba == 'inicio'
     repos = _reposicao_da_loja(foto, filtros['loja'])
     contexto = {
         'inicial': inicial,
-        'aba': 'estoque',
-        'abas': ABAS,
+        'aba': aba_do_topo,
+        'abas': abas,
+        'lp': lp,
         'f': filtros,
         'foto': foto,
         'lojas': _lojas_para_escolher(foto),
@@ -346,10 +366,10 @@ def estoque(request):
                       'cor': cor_da_loja(c)}
                      for c, km in est.vizinhas(filtros['loja'], centros=est.centros_da_foto(foto))]
                     if filtros['loja'] else [],
-        'minha_loja': _loja_padrao(request.user),
+        'minha_loja': '' if lp else _loja_padrao(request.user),
         'categorias': est.categorias(foto),
         'resumo': _resumo_da_loja(foto, filtros['loja'], repos),
-        'sem_vendas': foto['vendas'] is None,
+        'sem_vendas': foto['vendas'] is None and not lp,
         'pode_escolher_gestores': pode_escolher_gestores(request.user),
         'so_estoque': so_estoque(request.user),
         'q_base': _query(filtros, aba='', situacao='', deposito='', fabricante='', idade=''),
@@ -573,10 +593,10 @@ def _renova_para_json(renova, preco):
 
 @login_required
 @so_quem_ve_estoque
-def estoque_produto(request):
+def estoque_produto(request, lp=False):
     """A gaveta do produto: preço (base, PIX/Vivo Pay, 12x, 21x, por plano), Renova e onde tem."""
     try:
-        foto = est.fotografia()
+        foto = est.fotografia(lp=lp)
     except SapIndisponivel as exc:
         return JsonResponse({'ok': False, 'erro': str(exc)}, status=503)
     material = (request.GET.get('material') or '').strip().upper()
@@ -603,7 +623,7 @@ def estoque_produto(request):
 
 @login_required
 @so_quem_ve_estoque
-def estoque_sugestoes(request):
+def estoque_sugestoes(request, lp=False):
     """O campo Produto se autopreenche (25/11/2026): até 12 produtos que batem com o que foi digitado.
 
     Um por nome (as cores do mesmo aparelho viram uma sugestão só), quem tem mais estoque primeiro."""
@@ -611,7 +631,7 @@ def estoque_sugestoes(request):
     if len(termo) < 2:
         return JsonResponse({'ok': True, 'sugestoes': []})
     try:
-        foto = est.fotografia()
+        foto = est.fotografia(lp=lp)
     except SapIndisponivel:
         return JsonResponse({'ok': True, 'sugestoes': []})
     categoria = (request.GET.get('categoria') or '').strip()
@@ -636,10 +656,10 @@ def estoque_sugestoes(request):
 
 @login_required
 @so_quem_ve_estoque
-def estoque_unidades(request):
+def estoque_unidades(request, lp=False):
     """A gaveta: as unidades de uma loja e um material (disponível ou em trânsito)."""
     try:
-        foto = est.fotografia()
+        foto = est.fotografia(lp=lp)
     except SapIndisponivel as exc:
         return JsonResponse({'ok': False, 'erro': str(exc)}, status=503)
     centro = (request.GET.get('centro') or '').strip().upper()
@@ -672,3 +692,10 @@ def estoque_unidades(request):
             'desde': u['desde'].strftime('%d/%m/%Y') if u['desde'] else '', 'dias': u['dias'],
         } for u in unidades],
     })
+
+
+# ── Estoque LP (26/11/2026): a mesma tela e as mesmas gavetas, com a fotografia só do LP ──
+estoque_lp = gzip_page(login_required(so_superadmin_lp(estoque.__wrapped__.__wrapped__.__wrapped__)))
+estoque_lp_produto = login_required(so_superadmin_lp(estoque_produto.__wrapped__.__wrapped__))
+estoque_lp_sugestoes = login_required(so_superadmin_lp(estoque_sugestoes.__wrapped__.__wrapped__))
+estoque_lp_unidades = login_required(so_superadmin_lp(estoque_unidades.__wrapped__.__wrapped__))

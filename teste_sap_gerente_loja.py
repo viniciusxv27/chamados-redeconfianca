@@ -1,5 +1,8 @@
 """Visão SAP para os gerentes (PADRÃO do grupo GERENTES) e no tema escuro.
 
+26/11/2026: a regra mudou — todo mundo entra pelo Estoque; auditoria, painel e Renova só com a
+liberação (Acessos e gestores). O gerente liberado vê a rede inteira; o Estoque LP é do SUPERADMIN.
+
 Pedido (07/10/2026): "para os gerentes — usuários padrão no grupo GERENTES —
 deve aparecer o /sap 'Visão SAP' em 'Gestão Administrativa'" e "adapte /sap ao
 tema escuro".
@@ -96,79 +99,64 @@ try:
     minha2 = linha(2, 'ZZ PÔRTO TESTE', 'ZZSAP Cliente da minha loja 2')     # o SAP escreve com acento
     dela = linha(3, 'ZZ OUTRA TESTE', 'ZZSAP Cliente da outra loja')
 
-    print('== QUEM ENTRA ==')
-    t('gerente PADRÃO do GERENTES entra', perm.pode_ver(gerente) and perm.e_gerente_de_loja(gerente))
-    t('mas não vê a rede', not perm.ve_a_rede(gerente))
-    t('o menu do portal (tem_acesso sap) reconhece', tem_acesso(gerente, 'sap'))
-    t('PADRÃO fora do GERENTES continua de fora', not perm.pode_ver(vendedor))
-    t('gerente sem loja no cadastro não entra (não há o que mostrar)', not perm.pode_ver(sem_loja))
-    t('a administração continua vendo a rede', perm.ve_a_rede(admin) and perm.lojas_visiveis(admin) is None)
-    t('a loja do gerente é o setor principal, não o M2M',
-      perm.lojas_visiveis(gerente) == {'ZZ PORTO TESTE'}, perm.lojas_visiveis(gerente))
-    t('a comparação ignora "Loja", acento e caixa',
-      perm.normalizar_loja('Loja Glória') == perm.normalizar_loja('GLÓRIA') == 'GLORIA')
+    # 26/11/2026: "A visão SAP, todo mundo deveria ter acesso, porém, de início, só liberado o
+    # ESTOQUE, os demais, só naquele campo de liberação dentro de acessos e gestores." Acabou a
+    # Visão SAP recortada pela loja do gerente: sem a liberação ele fica no Estoque; liberado,
+    # vê a rede inteira, como qualquer liberado.
+    from users.models import UserModuleAccess
+    print('== QUEM ENTRA (todos pelo Estoque; o resto pela liberação) ==')
+    t('gerente não entra mais sozinho na auditoria, mas tem o Estoque',
+      not perm.pode_ver(gerente) and perm.pode_ver_estoque(gerente) and perm.so_estoque(gerente))
+    t('ADMIN também não entra pela hierarquia', not perm.pode_ver(admin) and not perm.e_gestor(admin))
+    t('PADRÃO comum entra no Estoque', perm.pode_ver_estoque(vendedor) and perm.so_estoque(vendedor))
+    t('o menu (tem_acesso sap) não abre a auditoria para eles', not tem_acesso(gerente, 'sap') and not tem_acesso(admin, 'sap'))
+    t('SUPERADMIN vê tudo e o Estoque LP', perm.ve_a_rede(chefe) and perm.e_gestor(chefe) and perm.pode_ver_estoque_lp(chefe))
+    t('o Estoque LP é só do SUPERADMIN', not perm.pode_ver_estoque_lp(admin) and not perm.pode_ver_estoque_lp(gerente))
+    t('não há mais link recortado por loja no menu', not sap_na_gestao(gerente) and not sap_na_gestao(admin))
 
-    print('\n== O MENU ==')
-    t('o gerente acha a Visão SAP em "Gestão Administrativa"', sap_na_gestao(gerente))
-    t('a administração continua com ela no ADMINISTRATIVO, sem link repetido', not sap_na_gestao(admin))
-    t('quem não entra não vê link nenhum', not sap_na_gestao(vendedor) and not tem_acesso(vendedor, 'sap'))
-    cg = Client()
-    cg.force_login(gerente)
+    cg = Client(); cg.force_login(gerente)
     r = cg.get('/sap/')
-    html = r.content.decode()
-    t('a tela abre para o gerente', r.status_code == 200, r.status_code)
-    menu = html.split('id="gestao-menu"')[1].split('</ul>')[0] if 'id="gestao-menu"' in html else ''
-    t('com o link dentro de Gestão Administrativa', 'href="/sap/"' in menu)
-    # A própria tela também aponta para /sap/ (aba e "Limpar"); o menu é quem tem data-rota.
-    t('e só uma vez no menu', html.count('data-rota="/sap/"') == 1, html.count('data-rota="/sap/"'))
-    ca = Client()
-    ca.force_login(admin)
-    html_admin = ca.get('/sap/').content.decode()
-    menu_admin = html_admin.split('id="gestao-menu"')[1].split('</ul>')[0]
-    t('para a administração o link não vai para Gestão Administrativa', 'href="/sap/"' not in menu_admin)
-
-    print('\n== SÓ A LOJA DELE ==')
-    t('a tela diz que é só a loja dele', 'Só a sua loja: Loja Zz Pôrto Teste' in html)
-    t('as linhas da loja dele aparecem (com e sem acento no SAP)',
-      'ZZSAP Cliente da minha loja 1' in html and 'ZZSAP Cliente da minha loja 2' in html)
-    t('a da outra loja não', 'ZZSAP Cliente da outra loja' not in html)
-    t('o resumo conta só a loja dele', r.context['resumo']['total'] == 2, r.context['resumo'])
-    t('o filtro de loja vira o nome da loja (sem seletor)', 'name="loja"' not in html)
-    r = cg.get('/sap/', {'loja': 'ZZ OUTRA TESTE', 'q': 'ZZSAP'})
-    t('pedir a outra loja pela URL não abre nada', r.context['resumo']['total'] == 0
-      and 'ZZSAP Cliente da outra loja' not in r.content.decode())
-    r = cg.get('/sap/painel/')
-    t('o painel por loja tem só a loja dele', [l['pdv'] for l in r.context['por_loja']] == sorted(['ZZ PORTO TESTE', 'ZZ PÔRTO TESTE'])
-      or {l['pdv'] for l in r.context['por_loja']} == {'ZZ PORTO TESTE', 'ZZ PÔRTO TESTE'},
-      [l['pdv'] for l in r.context['por_loja']])
-
-    print('\n== DETALHE E MARCAR ==')
-    t('abre a ficha de uma linha dela', cg.get(f'/sap/linha/{minha1.id}/').status_code == 200)
-    t('a ficha de outra loja é 404', cg.get(f'/sap/linha/{dela.id}/').status_code == 404)
-    r = cg.post(f'/sap/linha/{dela.id}/marcar/', {'resolvida': '1'})
-    dela.refresh_from_db()
-    t('marcar linha de outra loja é 404 e não muda nada', r.status_code == 404 and not dela.resolvida)
-    r = cg.post(f'/sap/linha/{minha1.id}/marcar/', {'resolvida': '1', 'observacao': 'ZZ NF emitida'})
+    t('sem a liberação, /sap/ leva ao Estoque', r.status_code == 302 and r['Location'] == '/sap/estoque/', r.get('Location'))
+    t('o painel e a Renova também', cg.get('/sap/painel/')['Location'] == '/sap/estoque/'
+      and cg.get('/sap/renova/')['Location'] == '/sap/estoque/')
+    t('a ficha por AJAX dá 403', cg.get(f'/sap/linha/{minha1.id}/', HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code == 403)
+    cg.post(f'/sap/linha/{minha1.id}/marcar/', {'resolvida': '1'})
     minha1.refresh_from_db()
-    t('marca a da loja dele, com quem marcou', r.status_code == 200 and minha1.resolvida
-      and minha1.resolvida_por_id == gerente.id)
+    t('e não marca linha nenhuma', not minha1.resolvida)
+    r = cg.get('/sap/estoque-lp/')
+    t('nem abre o Estoque LP (volta para o Estoque)', r.status_code == 302 and r['Location'] == '/sap/estoque/', r.get('Location'))
+    r = cg.get('/sap/estoque-lp/unidades/', HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+    t('nem a gaveta do LP', r.status_code == 403, r.status_code)
 
-    print('\n== RELER O SAP CONTINUA COM A ADMINISTRAÇÃO ==')
+    print('\n== LIBERADO EM "ACESSOS E GESTORES" ==')
+    UserModuleAccess.objects.create(user=gerente, module_key='sap')
+    gerente = User.objects.get(pk=gerente.pk)          # a liberação fica guardada na instância
+    t('entra e vê a rede inteira', perm.pode_ver(gerente) and perm.lojas_visiveis(gerente) is None
+      and tem_acesso(gerente, 'sap'))
+    r = cg.get('/sap/', {'q': 'ZZSAP', 'situacao': 'todas'})
+    html = r.content.decode()
+    t('a tela abre', r.status_code == 200, r.status_code)
+    t('com as três lojas, sem o aviso "só a sua loja"',
+      all(n in html for n in ('loja 1', 'loja 2', 'outra loja')) and 'Só a sua loja' not in html)
+    menu = html.split('id="gestao-menu"')[1].split('</ul>')[0] if 'id="gestao-menu"' in html else ''
+    t('o menu leva à auditoria, em Gestão Operacional', 'href="/sap/"' in menu)
+    t('e só uma vez no menu', html.count('data-rota="/sap/"') == 1, html.count('data-rota="/sap/"'))
+    t('as abas da auditoria aparecem, a do Estoque LP não', '>Auditoria' in html.replace('\n', '').replace('  ', '')
+      or 'fa-list-check' in html)
+    t('a aba Estoque LP não aparece para ele', '/sap/estoque-lp/' not in html)
+    r = cg.post(f'/sap/linha/{dela.id}/marcar/', {'resolvida': '1', 'observacao': 'ZZ NF emitida'})
+    dela.refresh_from_db()
+    t('marca linha de qualquer loja, com quem marcou', r.status_code == 200 and dela.resolvida
+      and dela.resolvida_por_id == gerente.id)
     with mock.patch.object(sap_views, 'sincronizar') as reler:
         r = cg.post('/sap/atualizar/', {'voltar': '/sap/'})
-    t('o gerente não dispara a leitura do SAP', not reler.called and r.status_code == 302)
+    t('liberado não é gestor: não dispara a leitura do SAP', not reler.called and r.status_code == 302)
 
-    print('\n== QUEM NÃO ENTRA ==')
-    cv = Client()
-    cv.force_login(vendedor)
-    t('PADRÃO fora do GERENTES volta para a home', cv.get('/sap/').status_code == 302)
-    t('nem pela ficha', cv.get(f'/sap/linha/{minha2.id}/', HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code == 403)
-
-    print('\n== A ADMINISTRAÇÃO VÊ A REDE ==')
-    r = ca.get('/sap/', {'q': 'ZZSAP', 'situacao': 'todas'})
-    html_admin = r.content.decode()
-    t('as três lojas', all(n in html_admin for n in ('loja 1', 'loja 2', 'outra loja')))
-    t('sem o aviso de loja', 'Só a sua loja' not in html_admin)
+    print('\n== O SUPERADMIN ==')
+    cs = Client(); cs.force_login(chefe)
+    html = cs.get('/sap/').content.decode()
+    t('vê a aba Estoque LP', '/sap/estoque-lp/' in html and 'Estoque LP' in html)
+    UserModuleAccess.objects.create(user=gerente_escuro, module_key='sap')
 
     print('\n== TEMA ESCURO ==')
     ce = Client()

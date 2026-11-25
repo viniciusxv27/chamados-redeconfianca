@@ -54,8 +54,10 @@ def so_auditoria(view):
         if not _pode_ver(request.user):
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return JsonResponse({'ok': False, 'erro': 'Sem acesso à Visão SAP.'}, status=403)
-            messages.error(request, 'A Visão SAP é restrita à administração.')
-            return redirect('home')
+            # Todo mundo entra na Visão SAP pelo Estoque (26/11/2026); o resto é liberado pelo SUPERADMIN.
+            messages.info(request, 'Auditoria, Painel e Visão Renova são liberados pelo SUPERADMIN '
+                                   '(Visão SAP → Acessos e gestores). Aqui está o estoque.')
+            return redirect('auditoria_sap:estoque')
         return view(request, *args, **kwargs)
     return _view
 

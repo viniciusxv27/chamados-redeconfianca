@@ -139,7 +139,7 @@ MODULOS = [
      ]},
     {'chave': 'sap', 'rotulo': 'Visão SAP (auditoria)', 'grupo': 'Administrativo',
      'acesso': True,
-     'descricao': 'Ver a auditoria SAP x Vivo go e marcar linha como resolvida (nasce só para a administração).',
+     'descricao': 'Auditoria SAP × Vivo GO, Painel e Visão Renova (o Estoque é de todos; o resto só para quem for liberado aqui ou em Visão SAP → Acessos e gestores).',
      'permissoes': [
          ('sap.gestor', 'Gestor da auditoria SAP', 'Atualizar o espelho lendo o MySQL do SAP.'),
      ]},

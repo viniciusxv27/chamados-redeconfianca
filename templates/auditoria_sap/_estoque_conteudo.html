@@ -91,7 +91,7 @@ X-Estoque-Parcial) e troca no lugar, sem recarregar — o endereço acompanha (v
 </div>
 {% endif %}
 {# -------------------------------------------------------- números coloridos #}
-<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+<div class="grid grid-cols-2 {% if not lp %}lg:grid-cols-4{% endif %} gap-3 mb-4">
     <a href="?{{ q_base }}&aba=disponivel" class="est-kpi" style="--k:#0EA5E9;--k2:#2563EB">
         <div class="flex items-center justify-between"><span class="est-kpi-icone"><i class="fas fa-boxes-stacked"></i></span><span class="sap-rotulo">Livre para venda</span></div>
         <p class="est-kpi-num text-gray-900 mt-3" data-contar="{{ resumo.livre }}">{{ resumo.livre|floatformat:"0g" }}</p>
@@ -102,6 +102,7 @@ X-Estoque-Parcial) e troca no lugar, sem recarregar — o endereço acompanha (v
         <p class="est-kpi-num text-violet-700 mt-3" data-contar="{{ resumo.transito }}">{{ resumo.transito|floatformat:"0g" }}</p>
         <p class="text-xs text-gray-500 mt-1 truncate">{% if f.loja %}a caminho de {{ loja_nome }}{% else %}a caminho das lojas{% endif %}</p>
     </a>
+    {% if not lp %}{% comment %}LP: sem vendas no Vivo GO, sem reposição.{% endcomment %}
     <a href="?{{ q_base }}&aba=reposicao&situacao=ruptura" class="est-kpi" style="--k:#F43F5E;--k2:#DB2777">
         <div class="flex items-center justify-between"><span class="est-kpi-icone"><i class="fas fa-circle-exclamation"></i></span><span class="sap-rotulo">Em ruptura</span></div>
         <p class="est-kpi-num {% if resumo.ruptura %}text-rose-600{% else %}text-gray-900{% endif %} mt-3" data-contar="{{ resumo.ruptura }}">{{ resumo.ruptura|floatformat:"0g" }}</p>
@@ -112,6 +113,7 @@ X-Estoque-Parcial) e troca no lugar, sem recarregar — o endereço acompanha (v
         <p class="est-kpi-num text-amber-600 mt-3" data-contar="{{ resumo.sugestao }}">{{ resumo.sugestao|floatformat:"0g" }}</p>
         <p class="text-xs text-gray-500 mt-1 truncate">unidades para cobrir 30 dias</p>
     </a>
+    {% endif %}
 </div>
 
 {# -------------------------------------------------------------------- abas #}
@@ -181,6 +183,15 @@ X-Estoque-Parcial) e troca no lugar, sem recarregar — o endereço acompanha (v
         {% if f.loja %}<p class="mt-3 text-[11px] text-gray-400"><i class="fas fa-location-dot mr-1"></i>{{ loja_nome }} em destaque · clique nela de novo para ver a rede.</p>{% endif %}
     </section>
 
+    {% if lp %}
+    {% comment %}Estoque LP (26/11/2026): só o saldo da MB52 — reposição, tempo parado e urgentes dependem
+    das vendas do Vivo GO e dos seriais da IQ09, que o LP não tem.{% endcomment %}
+    <section class="sap-card p-4 min-w-0 lg:row-span-3">
+        <h3 class="font-bold text-gray-900"><i class="fas fa-lock mr-1.5 text-indigo-500"></i>Estoque LP</h3>
+        <p class="text-xs text-gray-500 mt-1 leading-relaxed">Saldo por loja e produto da MB52 do SAP ({{ panorama.lojas|length }} centro{{ panorama.lojas|length|pluralize }} de LP). Fica fora do estoque que as lojas veem e só o SUPERADMIN abre.</p>
+        <p class="text-xs text-gray-500 mt-2 leading-relaxed">Sem reposição e sem tempo parado: o LP não vende pelo Vivo GO e os seriais (IQ09) não vêm para esses centros.</p>
+    </section>
+    {% else %}
     {# Saúde da reposição: uma barra empilhada; cada pedaço abre a lista. #}
     <section class="sap-card p-4 min-w-0">
         <h3 class="font-bold text-gray-900"><i class="fas fa-heart-pulse mr-1.5 text-rose-500"></i>Saúde da reposição</h3>
@@ -254,6 +265,7 @@ X-Estoque-Parcial) e troca no lugar, sem recarregar — o endereço acompanha (v
         <p class="mt-3 text-sm text-emerald-600"><i class="fas fa-circle-check mr-1"></i>Nada zerado que esteja vendendo.</p>
         {% endif %}
     </section>
+    {% endif %}
 </div>
 {% else %}
 <div class="sap-card overflow-hidden">

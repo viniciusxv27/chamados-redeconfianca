@@ -131,7 +131,7 @@
     </div>
 
     <nav class="flex items-center gap-1 mt-4 overflow-x-auto -mb-px">
-        {% comment %}Liberado só para o estoque (sap.estoque): só a aba Estoque aparece.{% endcomment %}
+        {% comment %}Sem a liberação da Visão SAP (o padrão desde 26/11/2026): só a aba Estoque aparece.{% endcomment %}
         {% if not so_estoque %}
         <a href="{% url 'auditoria_sap:lista' %}{% if query %}?{{ query }}{% endif %}"
            class="sap-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'lista' %}sap-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
@@ -146,6 +146,14 @@
            class="sap-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'estoque' %}sap-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
             <i class="fas fa-warehouse mr-1.5"></i>Estoque
         </a>
+        {% load sap_tags %}
+        {% if request.user|ve_estoque_lp %}
+        {% comment %}Estoque LP (26/11/2026): os centros de LP da MB52, só para o SUPERADMIN.{% endcomment %}
+        <a href="{% url 'auditoria_sap:estoque_lp' %}"
+           class="sap-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'estoque_lp' %}sap-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+            <i class="fas fa-lock mr-1.5"></i>Estoque LP
+        </a>
+        {% endif %}
         {% if not so_estoque %}
         <a href="{% url 'auditoria_sap:renova' %}"
            class="sap-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'renova' %}sap-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">

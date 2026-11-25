@@ -39,7 +39,7 @@ from django.core.cache import cache
 from django.utils import timezone
 
 from . import mysql
-from .permissions import normalizar_loja
+from .permissions import e_centro_lp, normalizar_loja
 
 logger = logging.getLogger(__name__)
 
@@ -442,16 +442,50 @@ def categorias_automaticas(catalogo, descricoes, nomes_vendas, materiais):
     return saida
 
 
-_MEMORIA = {}
+_MEMORIA = {}        # 'completa' → (chave, fotografia inteira); (chave, lp) → a parte da tela
 
 
-def fotografia(forcar=False):
-    """O estoque da última carga, pronto para a tela. Levanta ``mysql.SapIndisponivel``."""
+def fotografia(forcar=False, lp=False):
+    """O estoque da última carga, pronto para a tela. Levanta ``mysql.SapIndisponivel``.
+
+    A MB52 traz, desde 25/11/2026, também os centros de LP (``permissions.CENTROS_LP``). Eles
+    ficam fora da fotografia que todo mundo vê; ``lp=True`` devolve só eles (aba Estoque LP,
+    do SUPERADMIN) — sem vendas do Vivo GO (o LP não vende por ele) e sem seriais (a IQ09
+    não traz esses centros).
+    """
+    chave, completa = _fotografia_completa(forcar)
+    parte = (chave, lp)
+    if not forcar and parte in _MEMORIA:
+        return _MEMORIA[parte]
+    foto = _separar(completa, lp)
+    for velha in [k for k in _MEMORIA if isinstance(k, tuple) and k[0] != chave]:
+        _MEMORIA.pop(velha, None)
+    _MEMORIA[parte] = foto
+    return foto
+
+
+def _separar(completa, lp):
+    """Só as lojas (``lp=False``) ou só o LP (``lp=True``) de uma fotografia inteira."""
+    fica = e_centro_lp if lp else (lambda c: not e_centro_lp(c))
+    foto = dict(completa)
+    foto['saldos'] = {k: v for k, v in completa['saldos'].items() if fica(k[0])}
+    foto['transito'] = {k: v for k, v in completa['transito'].items() if fica(k[0])}
+    foto['unidades'] = [u for u in completa['unidades'] if fica(u[2])]
+    foto['nomes_sap'] = {c: n for c, n in completa['nomes_sap'].items() if fica(c)}
+    foto['lp'] = lp
+    if lp:
+        foto['vendas'] = None
+    return foto
+
+
+def _fotografia_completa(forcar=False):
+    """(chave, fotografia com todos os centros da carga) — guardada no cache e na memória."""
     iq09, mb52 = ultimas_cargas()
     hoje = timezone.localdate()
     chave = f'sap_estoque:foto:v4:{iq09}:{mb52}:{hoje.isoformat()}'
-    if not forcar and _MEMORIA.get('chave') == chave:
-        return _MEMORIA['foto']
+    guardada = _MEMORIA.get('completa')
+    if not forcar and guardada and guardada[0] == chave:
+        return guardada
     foto = None
     if not forcar:
         try:
@@ -492,8 +526,8 @@ def fotografia(forcar=False):
         except Exception:                                        # noqa: BLE001 — grande demais para o cache: fica só na memória
             logger.info('Estoque SAP: fotografia não coube no cache', exc_info=True)
     _MEMORIA.clear()
-    _MEMORIA.update(chave=chave, foto=foto)
-    return foto
+    _MEMORIA['completa'] = (chave, foto)
+    return chave, foto
 
 
 # ---------------------------------------------------------------------------
@@ -516,7 +550,22 @@ def nome_do_centro(foto, centro):
     loja = POR_CENTRO.get(centro)
     if loja:
         return loja.nome
-    return (foto['nomes_sap'].get(centro) or centro).title()
+    # Centro fora de LOJAS (o LP, uma loja nova): o nome da MB52 sem "LOJA" e sem o estado.
+    nome = ' '.join(str(foto['nomes_sap'].get(centro) or '').split())
+    nome = re.sub(r'^(LOJA|EA MASTERCEL|VIVO)\s+', '', nome, flags=re.I)
+    nome = re.sub(r'\s+(ES|RJ|SP)$', '', nome, flags=re.I)
+    if not nome:
+        return centro
+    # "LARANJEIRAS II" → "Laranjeiras II" (o title() deixaria "Ii").
+    return re.sub(r'\b(Ii|Iii|Iv|Vi|Vii)\b', lambda m: m.group(1).upper(), nome.title())
+
+
+def uf_do_centro(centro):
+    """ES/RJ/SP pela letra do centro do SAP ("018E" → ES), para o centro fora de LOJAS."""
+    loja = POR_CENTRO.get(centro)
+    if loja:
+        return loja.uf
+    return {'E': 'ES', 'J': 'RJ', 'L': 'SP'}.get(str(centro or '')[-1:].upper(), '')
 
 
 def produto(foto, material):

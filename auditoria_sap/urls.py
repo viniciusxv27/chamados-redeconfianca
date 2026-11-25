@@ -16,6 +16,11 @@ urlpatterns = [
     path('estoque/unidades/', views_estoque.estoque_unidades, name='estoque_unidades'),
     path('estoque/produto/', views_estoque.estoque_produto, name='estoque_produto'),
     path('estoque/sugestoes/', views_estoque.estoque_sugestoes, name='estoque_sugestoes'),
+    # Estoque LP (26/11/2026): só o SUPERADMIN; a mesma tela com os centros de LP.
+    path('estoque-lp/', views_estoque.estoque_lp, name='estoque_lp'),
+    path('estoque-lp/unidades/', views_estoque.estoque_lp_unidades, name='estoque_lp_unidades'),
+    path('estoque-lp/produto/', views_estoque.estoque_lp_produto, name='estoque_lp_produto'),
+    path('estoque-lp/sugestoes/', views_estoque.estoque_lp_sugestoes, name='estoque_lp_sugestoes'),
     path('renova/', views.renova, name='renova'),
     path('renova/<int:venda_id>/marcar/', views.renova_marcar, name='renova_marcar'),
     path('renova/configurar/', views.renova_config, name='renova_config'),

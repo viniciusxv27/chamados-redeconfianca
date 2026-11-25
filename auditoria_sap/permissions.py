@@ -5,23 +5,28 @@ importar views num context processor puxaria o módulo inteiro a cada request.
 """
 import unicodedata
 
-GESTORES = ('SUPERADMIN', 'ADMIN', 'ADMINISTRATIVO')
+# 26/11/2026: "A visão SAP, todo mundo deveria ter acesso, porém, de início, só liberado o
+# ESTOQUE, os demais, só naquele campo de liberação dentro de acessos e gestores." Todo mundo
+# entra na Visão SAP e cai no Estoque; Auditoria, Painel, Renova e Automação só para o
+# SUPERADMIN e para quem estiver liberado (``sap``, em /sap/gestores/ ou na edição do usuário)
+# ou for gestor (``sap.gestor``). ADMIN/ADMINISTRATIVO e o gerente de loja deixaram de entrar
+# sozinhos — quem precisar é liberado pessoa a pessoa (e aí vê a rede inteira).
+GESTORES = ('SUPERADMIN',)
+
+
+def _e_superadmin(user):
+    return bool(user and getattr(user, 'is_authenticated', False)
+                and (user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN'))
 
 
 def ve_a_rede(user):
-    """Vê a auditoria de todas as lojas.
-
-    É a administração: conferência de nota fiscal e de dinheiro, com nome e
-    documento de cliente na tela. Quem mais precisar da rede inteira entra pela
-    liberação individual (``sap``), uma pessoa de cada vez.
-    """
+    """Vê a auditoria de todas as lojas: o SUPERADMIN e quem foi liberado (``sap`` ou ``sap.gestor``)."""
     if not user or not getattr(user, 'is_authenticated', False):
         return False
+    if _e_superadmin(user):
+        return True
     from users.module_access import user_has_module
-    return bool(user.is_superuser
-                or getattr(user, 'hierarchy', '') in GESTORES
-                or user_has_module(user, 'sap')
-                or user_has_module(user, 'sap.gestor'))
+    return bool(user_has_module(user, CHAVE_ACESSO) or user_has_module(user, CHAVE_GESTOR))
 
 
 def e_gerente_de_loja(user):
@@ -41,8 +46,8 @@ def e_gerente_de_loja(user):
 
 
 def pode_ver(user):
-    """Abre a auditoria e marca linha como resolvida (o gerente, na loja dele)."""
-    return ve_a_rede(user) or e_gerente_de_loja(user)
+    """Abre a auditoria, o painel e a Renova e marca linha como resolvida — só quem foi liberado."""
+    return ve_a_rede(user)
 
 
 CHAVE_ESTOQUE = 'sap.estoque'
@@ -59,17 +64,36 @@ def pode_ver_estoque(user):
 
 
 def so_estoque(user):
-    """Liberado só para o estoque: não vê a auditoria, o painel nem a Renova."""
+    """Entra só no estoque: não vê a auditoria, o painel nem a Renova (o padrão desde 26/11/2026)."""
     return pode_ver_estoque(user) and not pode_ver(user)
 
 
-def no_menu_da_gestao(user):
-    """O gerente acha a Visão SAP em "Gestão Administrativa".
+# Centros do estoque de LP (26/11/2026): chegam na mesma MB52 das lojas, desde a carga de
+# 25/11 13:49 — "LOJA SHOPPING VILA VELHA ES", "LOJA GUARAPARI"... Ficam FORA do estoque
+# que todo mundo vê e vão para a aba "Estoque LP", só do SUPERADMIN (``estoque.fotografia``
+# separa as duas). Centro novo de LP: acrescentar aqui (a imagem do pedido usa "E018" = "018E").
+CENTROS_LP = frozenset({
+    '018E', '019E', '020E', '021E', '022E', '023E', '024E',
+    '101E', '104E', '105E', '106E', '107E', '108E', '109E', '110E', '113E', '114E',
+})
 
-    A administração continua com ela no menu ADMINISTRATIVO; quem vê a rede
-    não ganha um segundo link.
-    """
-    return e_gerente_de_loja(user) and not ve_a_rede(user)
+
+def e_centro_lp(centro):
+    """"018E", "E018" e "e018 " são o mesmo centro de LP."""
+    texto = str(centro or '').strip().upper()
+    if len(texto) == 4 and texto[0].isalpha() and texto[1:].isdigit():
+        texto = texto[1:] + texto[0]
+    return texto in CENTROS_LP
+
+
+def pode_ver_estoque_lp(user):
+    """A aba Estoque LP: só o SUPERADMIN."""
+    return _e_superadmin(user)
+
+
+def no_menu_da_gestao(user):
+    """Não há mais Visão SAP recortada pela loja do gerente (26/11/2026): o menu tem uma entrada só."""
+    return False
 
 
 def e_gestor(user):
@@ -80,10 +104,10 @@ def e_gestor(user):
     """
     if not user or not getattr(user, 'is_authenticated', False):
         return False
+    if _e_superadmin(user):
+        return True
     from users.module_access import user_has_module
-    return bool(user.is_superuser
-                or getattr(user, 'hierarchy', '') in GESTORES
-                or user_has_module(user, 'sap.gestor'))
+    return user_has_module(user, CHAVE_GESTOR)
 
 
 CHAVE_GESTOR = 'sap.gestor'
@@ -93,8 +117,7 @@ CHAVE_ACESSO = 'sap'
 
 def pode_escolher_gestores(user):
     """Só o SUPERADMIN escolhe quem gere a Visão SAP."""
-    return bool(user and getattr(user, 'is_authenticated', False)
-                and (user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN'))
+    return _e_superadmin(user)
 
 
 def gestores_escolhidos():
@@ -140,6 +163,4 @@ def lojas_visiveis(user):
     """
     if ve_a_rede(user):
         return None
-    if e_gerente_de_loja(user):
-        return {normalizar_loja(user.sector.name)}
     return set()

@@ -109,9 +109,16 @@ def pacote(nome='AutomacaoSAP_v1.2.1.zip', exe=True, internal=True, extra=None, 
 sa = novo('super', hierarchy='SUPERADMIN')
 adm = novo('adm', hierarchy='ADMIN')
 comum = novo('comum', hierarchy='PADRAO')
+# 26/11/2026: ADMIN não entra mais na Visão SAP pela hierarquia — este é um ADMIN liberado ("sap").
+from users.models import UserModuleAccess as _UMA  # noqa: E402
+_UMA.objects.create(user=adm, module_key='sap')
+adm_sem = novo('admsem', hierarchy='ADMIN')
 csa, cadm, ccomum, anon = Client(), Client(), Client(), Client()
 csa.force_login(sa); cadm.force_login(adm); ccomum.force_login(comum)
 U = '/sap/automacao/'
+_c = Client(); _c.force_login(adm_sem)
+_r = _c.get(U)
+t('ADMIN sem a liberação não entra na Automação (cai no Estoque)', _r.status_code == 302, _r.status_code)
 
 print('Tela')
 r = csa.get(U)

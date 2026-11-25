@@ -266,14 +266,21 @@ t('reaberto volta para "em andamento"', '2050000001' in h)
 h = cb.get('/sap/renova/?situacao=todas&q=2751400').content.decode()
 t('busca pela venda do Vivo Go', '2050000004' in h and '2050000002' not in h)
 cg = Client(); cg.force_login(ger_g)
+# 26/11/2026: gerente não entra mais sozinho — só o Estoque; a Renova é pela liberação do SUPERADMIN.
+r = cg.get('/sap/renova/?situacao=todas')
+t('gerente sem a liberação não entra na Renova (cai no Estoque)', r.status_code == 302
+  and r['Location'] == '/sap/estoque/', r.get('Location'))
+from users.models import UserModuleAccess as _UMA  # noqa: E402
+_lib = _UMA.objects.create(user=ger_g, module_key='sap')
 h = cg.get('/sap/renova/?situacao=todas').content.decode()
-t('gerente vê só a loja dele, sem configuração', '2050000006' in h and '2050000004' not in h
-  and 'Cobrar sozinho' not in h, h[:300])
+t('liberado em Acessos e gestores, vê a rede inteira (sem configurar a cobrança)', '2050000006' in h
+  and '2050000004' in h and 'Cobrar sozinho' not in h, h[:300])
+_lib.delete()
 cc = Client(); cc.force_login(comum)
 t('quem não é da Visão SAP não entra', cc.get('/sap/renova/').status_code == 302)
 d = VendaRenova.objects.get(ordem='2050000004')
 cg.post(f'/sap/renova/{d.id}/marcar/', {'acao': 'dispensar', 'observacao': 'x'})
-t('gerente não mexe em venda de outra loja', not VendaRenova.objects.get(pk=d.pk).dispensada)
+t('gerente sem a liberação não mexe em venda', not VendaRenova.objects.get(pk=d.pk).dispensada)
 cb.post(f'/sap/renova/{d.id}/marcar/', {'acao': 'dispensar', 'observacao': ''})
 t('"não precisa" exige o motivo', not VendaRenova.objects.get(pk=d.pk).dispensada)
 cb.post(f'/sap/renova/{d.id}/marcar/', {'acao': 'dispensar', 'observacao': 'Renova cancelado pelo cliente'})

@@ -180,6 +180,10 @@ f = servicos.pendencias_fiscais(gloria)
 t('"Loja Glória" casa com o PDV "GLÓRIA" do SAP', f['pdvs'] == ['GLÓRIA'], f)
 t('conta só Sem NF aberta e ainda no SAP (2, 1 deste mês)', f['total'] == 2 and f['mes'] == 1, f)
 h = ca.get('/rotina-adm/').content.decode()
+t('sem a liberação da Visão SAP, o link para a auditoria não aparece (26/11/2026)', '/sap/?grupo=sem_nf' not in h)
+from users.models import UserModuleAccess as _UMA  # noqa: E402
+_UMA.objects.get_or_create(user=adm, module_key='sap')
+h = ca.get('/rotina-adm/').content.decode()
 t('o link abre a Visão SAP na aba Sem NF da loja', '/sap/?grupo=sem_nf&mes=todos&loja=GL%C3%93RIA' in h, h[h.find('/sap/'):h.find('/sap/') + 80])
 
 print('Renova da loja (/renova/ e /sap/renova/)')

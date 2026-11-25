@@ -20,7 +20,7 @@ não recarrega a página: o miolo (_estoque_conteudo.html) vem sozinho e entra n
 A matriz pinta a quantidade em escala (1, 2, 3+, 6+, 11+) e acende a loja no cabeçalho.
 {% endcomment %}
 
-{% block sap_titulo %}Estoque · Visão SAP{% endblock %}
+{% block sap_titulo %}{% if lp %}Estoque LP{% else %}Estoque{% endif %} · Visão SAP{% endblock %}
 {% block sap_cabecalho %}Estoque{% endblock %}
 {% block sap_subtitulo %}Onde está cada produto, o que está chegando e o que pedir{% endblock %}
 
@@ -30,7 +30,11 @@ A matriz pinta a quantidade em escala (1, 2, 3+, 6+, 11+) e acende a loja no cab
     <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-50 border border-sky-100 text-sky-800">
         <i class="fas fa-warehouse"></i>Estoque SAP <strong>{{ foto.quando_mb52|date:"d/m H\hi" }}</strong>
     </span>
-    {% if sem_vendas %}
+    {% if lp %}
+    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-800">
+        <i class="fas fa-lock"></i>Estoque LP · só o SUPERADMIN vê
+    </span>
+    {% elif sem_vendas %}
     <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800">
         <i class="fas fa-triangle-exclamation"></i>Vendas do Vivo GO indisponíveis agora
     </span>
@@ -312,7 +316,7 @@ A matriz pinta a quantidade em escala (1, 2, 3+, 6+, 11+) e acende a loja no cab
     <i class="fas fa-plug-circle-xmark text-3xl text-amber-500"></i>
     <p class="mt-3 font-semibold text-gray-800">Não deu para ler o estoque do SAP agora.</p>
     <p class="mt-1 text-sm text-gray-500">{{ erro }}</p>
-    <a href="{% url 'auditoria_sap:estoque' %}" class="inline-flex mt-4 px-4 py-2 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700"><i class="fas fa-rotate mr-1.5"></i>Tentar de novo</a>
+    <a href="{% if lp %}{% url 'auditoria_sap:estoque_lp' %}{% else %}{% url 'auditoria_sap:estoque' %}{% endif %}" class="inline-flex mt-4 px-4 py-2 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700"><i class="fas fa-rotate mr-1.5"></i>Tentar de novo</a>
 </div>
 {% else %}
 
@@ -337,9 +341,15 @@ A matriz pinta a quantidade em escala (1, 2, 3+, 6+, 11+) e acende a loja no cab
 <div id="estProgresso" class="est-progresso" aria-hidden="true"></div>
 <script>
 (function () {
+    {% if lp %}
+    var URL_UNIDADES = '{% url "auditoria_sap:estoque_lp_unidades" %}';
+    var URL_PRODUTO = '{% url "auditoria_sap:estoque_lp_produto" %}';
+    var URL_SUG = '{% url "auditoria_sap:estoque_lp_sugestoes" %}';
+    {% else %}
     var URL_UNIDADES = '{% url "auditoria_sap:estoque_unidades" %}';
     var URL_PRODUTO = '{% url "auditoria_sap:estoque_produto" %}';
     var URL_SUG = '{% url "auditoria_sap:estoque_sugestoes" %}';
+    {% endif %}
     var CAMINHO = location.pathname;
     var app = document.getElementById('estApp');
     var gaveta = document.getElementById('estGaveta'), fundo = document.getElementById('estFundo');

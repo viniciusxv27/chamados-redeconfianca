@@ -1,4 +1,5 @@
 {% extends 'rotina_adm/_base.html' %}
+{% load acessos %}
 {% block ra_conteudo %}
 <header class="ra-topo">
     <div class="ra-titulo">
@@ -52,7 +53,7 @@
         <span class="ra-kpi-icone"><i class="fas fa-file-invoice"></i></span>
         <div class="ra-kpi-corpo">
             <div class="ra-kpi-cabeca"><h3>Pendências fiscais</h3>
-                {% if fiscal.pdv %}<a class="ra-link" href="{% url 'auditoria_sap:lista' %}?grupo=sem_nf&mes=todos&loja={{ fiscal.pdv|urlencode }}">Ver na Visão SAP <i class="fas fa-chevron-right text-[10px]"></i></a>{% endif %}</div>
+                {% if fiscal.pdv and user|tem_acesso:'sap' %}<a class="ra-link" href="{% url 'auditoria_sap:lista' %}?grupo=sem_nf&mes=todos&loja={{ fiscal.pdv|urlencode }}">Ver na Visão SAP <i class="fas fa-chevron-right text-[10px]"></i></a>{% endif %}</div>
             <p class="ra-numero">{% if fiscal.disponivel %}{{ fiscal.total }}{% else %}—{% endif %}</p>
             <p class="ra-sub">{% if not fiscal.disponivel %}Visão SAP indisponível agora{% elif not fiscal.pdvs %}loja sem linhas na Visão SAP{% else %}venda{{ fiscal.total|pluralize }} sem NF em aberto · <b>{{ fiscal.mes }}</b> neste mês{% endif %}</p>
             {% if fiscal.total %}<p class="ra-ganha"><i class="fas fa-star"></i>+10 pts por venda que você resolver</p>{% endif %}
@@ -96,7 +97,7 @@ Compacto desde 12/11/2026: só os números; as listas recentes abrem no "Ver det
         <div class="ra-renova-cabeca">
             <span class="ic azul"><i class="fas fa-file-invoice-dollar"></i></span>
             <h2>Renova no SAP</h2>
-            <a class="ra-link" href="{% url 'auditoria_sap:renova' %}?loja={{ loja.id }}">Abrir na Visão Renova <i class="fas fa-chevron-right text-[10px]"></i></a>
+            {% if user|tem_acesso:'sap' %}<a class="ra-link" href="{% url 'auditoria_sap:renova' %}?loja={{ loja.id }}">Abrir na Visão Renova <i class="fas fa-chevron-right text-[10px]"></i></a>{% endif %}
         </div>
         {% if not sap_renova.disponivel %}
         <p class="ra-renova-fora"><i class="fas fa-plug"></i>Visão Renova indisponível agora.</p>
@@ -296,7 +297,7 @@ contada na semana vale pontos no ranking (uma vez por categoria e semana).{% end
     <div class="ra-modal-cabeca"><h3>Renova no SAP · sem chamado · {{ loja.name }}</h3><button type="button" data-fechar aria-label="Fechar"><i class="fas fa-xmark"></i></button></div>
     <div class="ra-modal-corpo">
         {% for v in sap_renova.recentes %}
-        <a class="ra-item" href="{% url 'auditoria_sap:renova' %}?loja={{ loja.id }}&q={{ v.ordem|urlencode }}">
+        <a class="ra-item" {% if user|tem_acesso:'sap' %}href="{% url 'auditoria_sap:renova' %}?loja={{ loja.id }}&q={{ v.ordem|urlencode }}"{% endif %}>
             <span class="meio"><strong>Ordem {{ v.ordem }}{% if v.cliente_nome %} · {{ v.cliente_nome }}{% endif %}</strong>
                 <small>{{ v.data_fatura|date:"d/m/Y"|default:"sem data" }}{% if v.material %} · {{ v.material }}{% endif %}{% if v.valor_faturado is not None %} · R$ {{ v.valor_faturado|floatformat:"2g" }}{% endif %}</small></span>
             <span class="ra-selo vermelho">Sem chamado</span>
@@ -305,7 +306,7 @@ contada na semana vale pontos no ranking (uma vez por categoria e semana).{% end
         <div class="ra-vazio"><i class="fas fa-check-circle"></i>Nenhuma venda com Renova sem chamado na loja.</div>
         {% endfor %}
     </div>
-    <p class="ra-modal-rodape"><a class="ra-link" href="{% url 'auditoria_sap:renova' %}?loja={{ loja.id }}">Ver todas na Visão Renova <i class="fas fa-chevron-right text-[10px]"></i></a></p>
+    {% if user|tem_acesso:'sap' %}<p class="ra-modal-rodape"><a class="ra-link" href="{% url 'auditoria_sap:renova' %}?loja={{ loja.id }}">Ver todas na Visão Renova <i class="fas fa-chevron-right text-[10px]"></i></a></p>{% endif %}
 </dialog>
 {% endif %}
 {% endif %}

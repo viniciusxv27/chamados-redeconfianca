@@ -134,6 +134,10 @@ MB52 = [
     mb('057E', 'LVUT', CARREGADOR, livre=1), mb('057E', 'RPAR', CARREGADOR, livre=1),
     mb('045E', 'LVUT', CARREGADOR, livre=3), mb('220L', 'LVUT', CARREGADOR, livre=10),
     mb('045E', 'EXPO', TV, livre=1),
+    # 26/11/2026: os centros de LP chegam na mesma MB52 e não podem aparecer no estoque de todos.
+    dict(mb('018E', 'LVUT', GALAXY, livre=40), nome_1='LOJA SHOPPING VILA VELHA ES'),
+    dict(mb('113E', 'LVUT', PELICULA, livre=7), nome_1='LOJA SHOPPING VITÓRIA'),
+    dict(mb('101E', None, CARREGADOR, transito=2), nome_1='LOJA GUARAPARI'),
 ]
 IQ09 = [
     iq(GALAXY, '350000000000001', '064E', 'LVUT', quando=EXCEL_HA_120_DIAS),
@@ -559,6 +563,60 @@ t('produto() usa a categoria automática', est.produto(f2, 'TGSA609C2000')['cate
 f3 = {**foto, 'categoria_auto': {'NOVO1': ('Games', '')}}
 t('a categoria automática entra no filtro', 'Games' in est.categorias(f3) and est.categorias(f3)[-1] == 'Sem categoria')
 t('produto sem pista continua em "Sem categoria"', est.produto(foto, TV)['categoria'] == 'Sem categoria')
+
+print('\n== 13) ESTOQUE LP (26/11/2026) ==')
+from auditoria_sap import permissions as perm_sap  # noqa: E402
+est._MEMORIA.clear(); cache.clear()
+foto = est.fotografia()
+lp = est.fotografia(lp=True)
+t('o LP fica fora do estoque de todos', not any(perm_sap.e_centro_lp(c) for c in est.centros_da_foto(foto))
+  and not any(perm_sap.e_centro_lp(u[2]) for u in foto['unidades']), est.centros_da_foto(foto))
+t('a fotografia LP tem só o LP (saldo e trânsito)', set(est.centros_da_foto(lp)) == {'018E', '101E', '113E'}
+  and est.em_transito(lp, '101E', CARREGADOR) == 2, est.centros_da_foto(lp))
+t('"E018" da imagem do pedido e "018E" da MB52 são o mesmo centro de LP',
+  perm_sap.e_centro_lp('E018') and perm_sap.e_centro_lp('018E') and perm_sap.e_centro_lp('e114 ')
+  and not perm_sap.e_centro_lp('038E') and len(perm_sap.CENTROS_LP) == 17)
+t('nome da loja de LP sem "LOJA" e sem o estado', est.nome_do_centro(lp, '018E') == 'Shopping Vila Velha'
+  and est.nome_do_centro(lp, '113E') == 'Shopping Vitória', (est.nome_do_centro(lp, '018E'), est.nome_do_centro(lp, '113E')))
+t('LP fica em ES no seletor', est.uf_do_centro('018E') == 'ES')
+t('número romano do nome fica em maiúsculas', est.nome_do_centro({'nomes_sap': {'021E': 'LOJA LARANJEIRAS II ES'}}, '021E')
+  == 'Laranjeiras II')
+t('LP sem vendas do Vivo GO (sem reposição); o estoque de todos segue com elas', lp['vendas'] is None and foto['vendas'] is not None)
+n = len(leituras)
+est.fotografia(lp=True); est.fotografia()
+t('uma leitura do SAP serve as duas fotografias', len(leituras) == n, leituras[n:])
+
+r = csa.get('/sap/estoque-lp/')
+html = r.content.decode()
+t('o SUPERADMIN abre a aba Estoque LP', r.status_code == 200 and 'Shopping Vila Velha' in html
+  and 'Estoque LP · só o SUPERADMIN vê' in html, r.status_code)
+t('a aba aparece marcada no topo', 'href="/sap/estoque-lp/"' in html)
+t('sem Reposição e Detalhado (o LP não tem vendas nem seriais)', 'aba=reposicao' not in html and 'aba=detalhado' not in html)
+t('as gavetas do LP vão para as rotas do LP', '/sap/estoque-lp/unidades/' in html and '/sap/estoque-lp/produto/' in html
+  and "'/sap/estoque/unidades/'" not in html)
+html = csa.get('/sap/estoque-lp/?aba=disponivel&loja=todas').content.decode()
+t('o Disponível do LP mostra as lojas de LP', 'Shopping Vila Velha' in html and 'Shopping Vitória' in html)
+html = csa.get('/sap/estoque/?aba=disponivel&loja=todas').content.decode()
+t('e o Disponível de todos não', 'Shopping Vila Velha' not in html and 'Vila Velha Es' not in html)
+t('o SUPERADMIN tem a aba Estoque LP também no estoque normal', 'href="/sap/estoque-lp/"' in html)
+j = csa.get('/sap/estoque-lp/unidades/', {'centro': '018E', 'material': GALAXY}, HTTP_X_REQUESTED_WITH='XMLHttpRequest').json()
+t('a gaveta do LP mostra o saldo (sem serial: a IQ09 não traz o LP)', j['ok'] and j['quantidade'] == 40
+  and j['sem_serial'] == 40 and j['loja'] == 'Shopping Vila Velha', j)
+r = csa.get('/sap/estoque/unidades/', {'centro': '018E', 'material': GALAXY}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+t('a gaveta do estoque de todos não abre centro de LP', r.status_code == 400, r.status_code)
+j = csa.get('/sap/estoque-lp/produto/', {'material': GALAXY}, HTTP_X_REQUESTED_WITH='XMLHttpRequest').json()
+t('onde tem, no LP, só as lojas de LP', [l['centro'] for l in j['lojas']] == ['018E'], j.get('lojas'))
+j = csa.get('/sap/estoque/produto/', {'material': GALAXY}, HTTP_X_REQUESTED_WITH='XMLHttpRequest').json()
+t('onde tem, no de todos, sem o LP', '018E' not in [l['centro'] for l in j['lojas']], j.get('lojas'))
+
+r = cg.get('/sap/estoque-lp/')
+t('quem não é SUPERADMIN volta para o Estoque', r.status_code == 302 and r['Location'] == '/sap/estoque/', r.get('Location'))
+t('nem pelo miolo, nem pela gaveta, nem pela sugestão',
+  cv.get('/sap/estoque-lp/?aba=disponivel', HTTP_X_ESTOQUE_PARCIAL='1').status_code == 403
+  and cv.get('/sap/estoque-lp/unidades/', {'centro': '018E', 'material': GALAXY}, HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code == 403
+  and cv.get('/sap/estoque-lp/sugestoes/', {'q': 'galaxy'}, HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code == 403)
+t('e não vê a aba', 'estoque-lp' not in cg.get('/sap/estoque/').content.decode())
+t('anônimo não entra', Client().get('/sap/estoque-lp/').status_code == 302)
 
 print(f'\n{ok} OK / {fail} falhas')
 sys.exit(1 if fail else 0)

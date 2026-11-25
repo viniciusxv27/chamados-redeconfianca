@@ -1017,10 +1017,9 @@
                             </a>
                         </li>
                         {% endif %}
-                        {% if user|sap_na_gestao %}
-                        {% comment %}Gerente de loja: a Visão SAP da loja dele. A administração segue com ela no ADMINISTRATIVO.{% endcomment %}
+                        {% comment %}Visão SAP (26/11/2026): todo mundo entra; sem a liberação do SUPERADMIN, cai direto no Estoque.{% endcomment %}
                         <li>
-                            <a href="{% url 'auditoria_sap:lista' %}" data-rota="{% url 'auditoria_sap:lista' %}"
+                            <a href="{% if user|tem_acesso:'sap' %}{% url 'auditoria_sap:lista' %}{% else %}{% url 'auditoria_sap:estoque' %}{% endif %}" data-rota="{% url 'auditoria_sap:lista' %}"
                                class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Visão SAP">
                                 <i class="fas fa-magnifying-glass-dollar text-sky-400 flex-shrink-0 w-5 text-center"></i>
                                 <span class="text-sm">Visão SAP</span>
@@ -1028,18 +1027,6 @@
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-sky-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
-                        {% elif user|sap_so_estoque %}
-                        {% comment %}Liberado só para o estoque SAP: entra direto no estoque.{% endcomment %}
-                        <li>
-                            <a href="{% url 'auditoria_sap:estoque' %}" data-rota="{% url 'auditoria_sap:estoque' %}"
-                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Estoque SAP">
-                                <i class="fas fa-warehouse text-sky-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm">Estoque SAP</span>
-                                <div class="tooltip-collapsed">Estoque SAP</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-sky-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        {% endif %}
                             </ul>
                         </li>
 
@@ -1239,16 +1226,7 @@
                                     </a>
                                 </li>
                                 {% endif %}
-                                {% if user|tem_acesso:'sap' and not user|sap_na_gestao %}
-                                <li>
-                                    <a href="{% url 'auditoria_sap:lista' %}" data-rota="{% url 'auditoria_sap:lista' %}" class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Visão SAP">
-                                        <i class="fas fa-magnifying-glass-dollar text-sky-400 flex-shrink-0 w-5 text-center"></i>
-                                        <span>Visão SAP</span>
-                                        <div class="tooltip-collapsed">Visão SAP</div>
-                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-sky-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                                    </a>
-                                </li>
-                                {% endif %}
+                                {% comment %}Visão SAP: uma entrada só, em Gestão Operacional (26/11/2026).{% endcomment %}
                             </ul>
                         </li>
                         {% endif %}

@@ -144,6 +144,9 @@ rv = Renova.objects.create(criado_por=ana, marca='APPLE', modelo='iPhone 13', ar
                            aprovacao=Renova.AGUARDANDO_GERENTE)
 VendaRenova.objects.create(ordem='9100001', cliente_nome='ZZ Cliente Sem', data_fatura=hoje, material='IPHONE 15',
                            setor=gloria, ativa=True)
+# Os links para a Visão SAP/Renova só aparecem para quem pode abrir (liberação, 26/11/2026).
+from users.models import UserModuleAccess as _UMA  # noqa: E402
+_UMA.objects.get_or_create(user=ana, module_key='sap')
 r = ca.get('/rotina-adm/')
 h = r.content.decode()
 t('central abre', r.status_code == 200, r.status_code)
