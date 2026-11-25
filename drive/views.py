@@ -74,11 +74,23 @@ def _texto_simples(conteudo, status):
     return HttpResponse(conteudo, status=status, content_type='text/plain; charset=utf-8')
 
 
+# A prévia de texto mostra até 5 MB (um log de 1 GB não vai inteiro para a memória nem para a tela).
+LIMITE_TEXTO_NA_TELA = 5 * 1024 * 1024
+
+
 def _como_texto(dados):
     try:
         return dados.decode('utf-8')
     except UnicodeDecodeError:
-        return dados.decode('latin-1')
+        pass
+    if len(dados) >= LIMITE_TEXTO_NA_TELA:
+        # Cortado no limite: o último caractere pode ter ficado pela metade.
+        for corte in (1, 2, 3):
+            try:
+                return dados[:-corte].decode('utf-8')
+            except UnicodeDecodeError:
+                continue
+    return dados.decode('latin-1')
 
 
 def _nome_pdf(nome):
@@ -200,8 +212,9 @@ def _servir_conteudo(request, file_id, anexo, url_voltar, pode_baixar=True, **au
             dados = vis.pdf_da_previa(meta) if codigo == 'pdf' else gdrive.exportar(file_id, mime_saida)
             nome_saida = nome + ext
         elif anexo and formato in ('', 'original'):
-            buf, nome_saida, mime_saida = gdrive.baixar(file_id)
-            dados = buf.read()
+            # Arquivo do jeito que está: sai do disco em pedaços (FileResponse), sem ir inteiro
+            # para a memória do worker.
+            dados, nome_saida, mime_saida = gdrive.baixar(file_id)
         elif anexo and formato == 'pdf' and tipo == 'office':
             dados, mime_saida, nome_saida = vis.pdf_da_previa(meta), vis.PDF, _nome_pdf(nome)
         elif anexo:
@@ -211,11 +224,11 @@ def _servir_conteudo(request, file_id, anexo, url_voltar, pode_baixar=True, **au
             nome_saida = _nome_pdf(nome) if tipo == 'office' else nome + '.pdf'
             dados, mime_saida = vis.pdf_da_previa(meta), vis.PDF
         elif tipo:
-            buf, nome_saida, mime_saida = gdrive.baixar(file_id)
-            dados = buf.read()
+            dados, nome_saida, mime_saida = gdrive.baixar(file_id)
             if tipo == 'texto':
                 # text/plain sempre: um .html enviado ao Drive não roda script no portal.
-                dados, mime_saida = _como_texto(dados), 'text/plain; charset=utf-8'
+                with dados:
+                    dados, mime_saida = _como_texto(dados.read(LIMITE_TEXTO_NA_TELA)), 'text/plain; charset=utf-8'
         else:
             return _texto_simples('Pré-visualização indisponível para este tipo de arquivo.', 415)
     except gdrive.DriveNaoConfigurado as e:
@@ -234,7 +247,11 @@ def _servir_conteudo(request, file_id, anexo, url_voltar, pode_baixar=True, **au
 
     audit.registrar(request.user, 'DOWNLOAD' if anexo else 'VIEW', request=request,
                     file_id=file_id, file_name=nome_saida, **auditoria)
-    return _cabecalhos(HttpResponse(dados, content_type=mime_saida), nome_saida, anexo, marca)
+    if hasattr(dados, 'read'):
+        resposta = FileResponse(dados, content_type=mime_saida)
+    else:
+        resposta = HttpResponse(dados, content_type=mime_saida)
+    return _cabecalhos(resposta, nome_saida, anexo, marca)
 
 
 def _deny(request, **kw):
@@ -551,16 +568,11 @@ def version_restore(request, file_id):
         _deny(request, file_id=file_id, detalhe='restore version')
     rev_id = (request.POST.get('rev') or '').strip()
     try:
-        from googleapiclient.http import MediaIoBaseDownload
         svc = gdrive.service()
-        buf = io.BytesIO()
-        dl = MediaIoBaseDownload(buf, svc.revisions().get_media(fileId=file_id, revisionId=rev_id))
-        done = False
-        while not done:
-            _, done = dl.next_chunk()
-        buf.seek(0)
-        meta = gdrive.obter(file_id, fields='id,name,mimeType')
-        gdrive.nova_versao(file_id, buf, mimetype=meta.get('mimeType'))
+        # Em pedaços, pelo disco: restaurar a versão de um vídeo não leva o arquivo para a memória.
+        with gdrive._baixar_em_pedacos(svc.revisions().get_media(fileId=file_id, revisionId=rev_id)) as buf:
+            meta = gdrive.obter(file_id, fields='id,name,mimeType')
+            gdrive.nova_versao(file_id, buf, mimetype=meta.get('mimeType'))
     except Exception as e:  # noqa: BLE001
         messages.error(request, f'Não foi possível restaurar esta versão: {e}')
         return redirect('drive:file_versions', file_id=file_id)

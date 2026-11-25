@@ -14,10 +14,18 @@ menor que o do "usar localmente" de propósito: aqui o servidor é quem baixa
 tudo do Google e comprime, e são só três workers — uma pasta de 2 GB seguraria
 um deles por vários minutos, e o portal inteiro sentiria. Passou do limite, a
 tela manda abrir uma subpasta.
+
+Os arquivos descem do Google ``EM_PARALELO`` de cada vez (cada thread com o seu cliente
+da API, ver ``gdrive.service``) e entram no zip na ordem do manifesto.
 """
 import logging
 import tempfile
+import threading
 import zipfile
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
+
+from django.db import connections
 
 from django.contrib.auth.decorators import login_required
 from django.http import FileResponse, JsonResponse
@@ -32,10 +40,23 @@ logger = logging.getLogger('drive.zip')
 # Cabe uma pasta de trabalho inteira, não o setor inteiro.
 LIMITE_ARQUIVOS = 300
 LIMITE_BYTES = 500 * 1024 ** 2
+# Memória sob controle (25/11/2026): cada arquivo desce do Google em pedaços para um
+# temporário (até 8 MB na memória, o resto no disco — ``gdrive._baixar_em_pedacos``) e entra
+# no zip aos poucos; o zip também é montado no disco. Dois arquivos descem ao mesmo tempo e
+# cada processo monta UM zip por vez — o próximo espera a vez (até ``ESPERA_PELA_VEZ``).
+# Demora mais numa pasta grande, mas o portal não cai.
+EM_PARALELO = 2
+ZIPS_AO_MESMO_TEMPO = 1
+ESPERA_PELA_VEZ = 120          # segundos
+_vez = threading.BoundedSemaphore(ZIPS_AO_MESMO_TEMPO)
 
 
 class ZipGrandeDemais(Exception):
     """A pasta passa do que dá para zipar numa requisição."""
+
+
+class ZipOcupado(ZipGrandeDemais):
+    """Outro zip está sendo montado neste processo e a vez não chegou a tempo."""
 
 
 def _nome_do_arquivo(nome):
@@ -94,16 +115,42 @@ def montar_zip_de(ids, nome='', incluir_google=False):
                  'bytes para zipar.' if manifesto['ignorados'] else 'Não há arquivos para zipar aqui.')
         raise ZipGrandeDemais(vazio)
 
+    if not _vez.acquire(timeout=ESPERA_PELA_VEZ):
+        raise ZipOcupado('Outro ZIP está sendo montado agora. Tente de novo em um ou dois minutos.')
+    try:
+        return _montar(arquivos, manifesto, nome)
+    finally:
+        _vez.release()
+
+
+def _montar(arquivos, manifesto, nome):
     temporario = tempfile.NamedTemporaryFile(suffix='.zip')
     dentro = set()
     com_erro = []
+    def _baixar(arquivo):
+        try:
+            return gdrive.baixar(arquivo['id'])
+        finally:
+            connections.close_all()          # a conexão desta thread do pool não fica aberta
+
     # compresslevel=1: foto e PDF quase não comprimem; o que interessa aqui é
     # juntar tudo num arquivo só, sem fazer o servidor suar.
     with zipfile.ZipFile(temporario, 'w', zipfile.ZIP_DEFLATED, allowZip64=True,
-                         compresslevel=1) as pacote:
-        for arquivo in arquivos:
+                         compresslevel=1) as pacote, ThreadPoolExecutor(EM_PARALELO, 'drive-zip') as pool:
+        # Baixa em paralelo, grava em ordem: a janela anda um arquivo por vez.
+        pendentes = deque()
+        fila = iter(arquivos)
+        for arquivo in fila:
+            pendentes.append((arquivo, pool.submit(_baixar, arquivo)))
+            if len(pendentes) >= EM_PARALELO:
+                break
+        while pendentes:
+            arquivo, futuro = pendentes.popleft()
+            proximo = next(fila, None)
+            if proximo is not None:
+                pendentes.append((proximo, pool.submit(_baixar, proximo)))
             try:
-                conteudo, nome_baixado, _mime = gdrive.baixar(arquivo['id'])
+                conteudo, nome_baixado, _mime = futuro.result()
             except gdrive.DriveError as exc:
                 com_erro.append(arquivo['nome'])
                 logger.warning('ZIP: %s não entrou (%s)', arquivo['nome'], exc)
@@ -123,6 +170,7 @@ def montar_zip_de(ids, nome='', incluir_google=False):
             with pacote.open(caminho, 'w') as destino:
                 for pedaco_bytes in iter(lambda: conteudo.read(1024 * 256), b''):
                     destino.write(pedaco_bytes)
+            conteudo.close()
         if com_erro:
             pacote.writestr(
                 'ARQUIVOS-QUE-NAO-ENTRARAM.txt',

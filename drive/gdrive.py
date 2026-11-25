@@ -53,8 +53,7 @@ FIELDS = ('id,name,mimeType,size,modifiedTime,createdTime,iconLink,thumbnailLink
 SHORTCUT_MIME = 'application/vnd.google-apps.shortcut'
 
 _lock = threading.Lock()
-_service = None
-_fingerprint = None
+_geracao = 0          # sobe a cada resetar(): os clientes das outras threads ficam velhos
 
 
 class DriveError(Exception):
@@ -244,27 +243,33 @@ def revogar(refresh_token):
         pass
 
 
+_por_thread = threading.local()
+
+
 def service():
-    """Cliente da API v3, cacheado — refeito se a credencial mudar."""
-    global _service, _fingerprint
+    """Cliente da API v3, um por thread — refeito se a credencial mudar.
+
+    O cliente do Google fala por um httplib2, que não aguenta duas threads ao mesmo tempo
+    (o portal roda com threads no gunicorn desde 25/11/2026, e o ZIP baixa em paralelo).
+    """
     if not configurado():
         raise DriveNaoConfigurado('Credencial do Google Drive não configurada.')
     marca = _marca()
-    if _service is None or _fingerprint != marca:
-        with _lock:
-            if _service is None or _fingerprint != marca:
-                from googleapiclient.discovery import build
-                _service = build('drive', 'v3', credentials=_credenciais(), cache_discovery=False)
-                _fingerprint = marca
-    return _service
+    if getattr(_por_thread, 'service', None) is None or getattr(_por_thread, 'marca', None) != marca \
+            or getattr(_por_thread, 'geracao', None) != _geracao:
+        from googleapiclient.discovery import build
+        _por_thread.service = build('drive', 'v3', credentials=_credenciais(), cache_discovery=False)
+        _por_thread.marca = marca
+        _por_thread.geracao = _geracao
+    return _por_thread.service
 
 
 def resetar():
-    """Esquece o cliente cacheado (chamado após trocar a credencial pela tela)."""
-    global _service, _fingerprint
+    """Esquece os clientes (chamado após trocar a credencial pela tela): cada thread refaz o seu."""
+    global _geracao
     with _lock:
-        _service = None
-        _fingerprint = None
+        _geracao += 1
+    _por_thread.service = None
 
 
 def testar_conexao():
@@ -545,22 +550,37 @@ def baixar(file_id, preview=False):
         req = svc.files().get_media(fileId=file_id, **_params())
         nome, alvo_mime = meta['name'], mime or 'application/octet-stream'
 
-    return _baixar_para_memoria(req), nome, alvo_mime
+    return _baixar_em_pedacos(req), nome, alvo_mime
 
 
-def _baixar_para_memoria(req):
+# Download em pedaços para um arquivo temporário: até EM_MEMORIA_ATE fica na memória, o resto
+# vai para o disco. Antes o arquivo inteiro ia para a memória (e era copiado de novo no
+# `.read()` de quem chamava): um vídeo de 500 MB pelo "Baixar", pelo ZIP ou pelo "Usar
+# localmente" ocupava mais de 1 GB do worker — o bastante para derrubar o portal (25/11/2026).
+EM_MEMORIA_ATE = 8 * 1024 * 1024
+PEDACO_DOWNLOAD = 4 * 1024 * 1024
+
+
+def _baixar_em_pedacos(req):
+    """O conteúdo num arquivo temporário (memória até 8 MB, depois disco), já no começo."""
+    import tempfile
+
     from googleapiclient.http import MediaIoBaseDownload
 
-    buf = io.BytesIO()
-    downloader = MediaIoBaseDownload(buf, req)
+    buf = tempfile.SpooledTemporaryFile(max_size=EM_MEMORIA_ATE)
+    downloader = MediaIoBaseDownload(buf, req, chunksize=PEDACO_DOWNLOAD)
     done = False
-    while not done:
-        try:
+    try:
+        while not done:
             _, done = downloader.next_chunk()
-        except Exception as exc:  # noqa: BLE001
-            raise DriveError(f'Falha no download: {exc}') from exc
+    except Exception as exc:  # noqa: BLE001
+        buf.close()
+        raise DriveError(f'Falha no download: {exc}') from exc
     buf.seek(0)
     return buf
+
+
+_baixar_para_memoria = _baixar_em_pedacos     # nome antigo (testes e chamadas antigas)
 
 
 def exportar(file_id, mime_alvo):
@@ -570,7 +590,11 @@ def exportar(file_id, mime_alvo):
     montar a requisição — o mesmo tipo de erro que já derrubou o Meu Drive.
     """
     req = service().files().export_media(fileId=file_id, mimeType=mime_alvo)
-    return _baixar_para_memoria(req).read()
+    buf = _baixar_em_pedacos(req)
+    try:
+        return buf.read()            # exportação do Google é pequena (limite de 10 MB dele)
+    finally:
+        buf.close()
 
 
 def converter_para_pdf(file_id, mime_google, nome=''):

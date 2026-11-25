@@ -527,8 +527,7 @@ def _dav_get(request, sessao, token, nome, principal):
         cabecalhos['Content-Length'] = str(int(meta.get('size') or 0))
         return _resposta(200, b'', tipo, cabecalhos)
 
-    buf, _nome, _tipo = gdrive.baixar(sessao.file_id)
-    dados = buf.read()
+    buf, _nome, _tipo = gdrive.baixar(sessao.file_id)     # temporário em disco: sai em pedaços
     # O que o programa acabou de baixar é a base para saber, no próximo
     # "Salvar", se outra pessoa mudou o arquivo nesse meio-tempo.
     campos = {'md5_base': meta.get('md5Checksum') or '', 'conflito_file_id': ''}
@@ -537,7 +536,10 @@ def _dav_get(request, sessao, token, nome, principal):
         audit.registrar(sessao.user, 'DOWNLOAD', request=request, file_id=sessao.file_id,
                         file_name=sessao.file_name, sector=sessao.sector, detalhe='aberto no computador')
     EdicaoLocal.objects.filter(pk=sessao.pk).update(**campos)
-    return _resposta(200, dados, tipo, cabecalhos)
+    resposta = FileResponse(buf, content_type=tipo)
+    for chave, valor in cabecalhos.items():
+        resposta[chave] = valor
+    return resposta
 
 
 def _dav_propfind(request, sessao, token, nome, principal):

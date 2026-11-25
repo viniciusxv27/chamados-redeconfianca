@@ -24,6 +24,18 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'redeconfianca.settings')
 django.setup()
 
+# Download do Drive sai em pedaços (FileResponse, 25/11/2026): para conferir o corpo, junta tudo uma vez.
+from django.http import FileResponse as _FileResponse
+
+
+def _corpo_do_download(self):
+    if not hasattr(self, '_zz_corpo'):
+        self._zz_corpo = b''.join(self.streaming_content)
+    return self._zz_corpo
+
+
+_FileResponse.content = property(_corpo_do_download)
+
 from django.conf import settings
 
 if 'testserver' not in settings.ALLOWED_HOSTS:
