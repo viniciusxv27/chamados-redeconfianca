@@ -66,8 +66,8 @@ RUN touch staticfiles/.keep
 EXPOSE 8000
 
 # Script de saúde
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/ || exit 1
+HEALTHCHECK --interval=30s --timeout=15s --start-period=180s --retries=3 \
+    CMD curl -fsS --max-time 10 http://localhost:8000/saude/ || exit 1
 
 # Comando padrão
 CMD ["./deploy_new.sh"]

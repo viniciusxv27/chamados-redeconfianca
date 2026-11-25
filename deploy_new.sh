@@ -91,22 +91,28 @@ echo "✅ Deploy configurado com sucesso!"
 echo "🌐 Iniciando servidor Gunicorn..."
 echo "📊 Configurações:"
 echo "   - Porta: ${PORT:-8000}"
-echo "   - Workers: ${WEB_CONCURRENCY:-3}"
-echo "   - Timeout: 1800s (uploads grandes)"
+echo "   - Workers: ${WEB_CONCURRENCY:-3} x ${WEB_THREADS:-8} threads"
+echo "   - Timeout: ${WEB_TIMEOUT:-300}s"
 echo "   - Database: ${DATABASE_URL:0:20}..."
 
 # Iniciar servidor com logs detalhados
-# --timeout 1800: enviar um vídeo de entrevista de 4 GB ocupa o worker enquanto
-# o corpo da requisição sobe. Em 600s o arbiter matava o worker no meio do
-# upload. O custo é que um worker de fato travado só é reciclado em 30min.
+# gthread (25/11/2026): com 3 workers "sync", cada requisição lenta (ZIP do Drive de
+# 30–50 s, envio de e-mail, API do ponto, planilha da comissão, leitura do SAP) prendia
+# um worker inteiro; três delas ao mesmo tempo e o portal parava para todo mundo.
+# Com threads, cada worker atende WEB_THREADS requisições ao mesmo tempo — a lenta
+# segura só uma thread. O timeout no gthread vale para o worker travado, não para a
+# requisição: upload grande (vídeo de entrevista) continua subindo enquanto o worker
+# responde ao arbiter.
 exec gunicorn redeconfianca.wsgi:application \
     --bind 0.0.0.0:${PORT:-8000} \
     --workers ${WEB_CONCURRENCY:-3} \
-    --worker-class sync \
-    --timeout 1800 \
-    --keep-alive 2 \
-    --max-requests 1000 \
-    --max-requests-jitter 100 \
+    --worker-class gthread \
+    --threads ${WEB_THREADS:-8} \
+    --timeout ${WEB_TIMEOUT:-300} \
+    --graceful-timeout 60 \
+    --keep-alive 5 \
+    --max-requests 2000 \
+    --max-requests-jitter 200 \
     --access-logfile - \
     --error-logfile - \
     --log-level info \

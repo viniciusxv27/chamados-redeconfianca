@@ -11,6 +11,7 @@ registra no log. Só as ações de escrita (bater ponto) propagam o erro, porque
 aí o usuário precisa saber que não foi registrado.
 """
 import logging
+import threading
 import time as relogio
 from datetime import datetime, time, timedelta
 from datetime import timezone as dt_timezone
@@ -28,6 +29,11 @@ EMPLOYER_BASE = getattr(settings, 'TANGERINO_EMPLOYER_BASE', '') or 'https://emp
 PUNCH_BASE = getattr(settings, 'TANGERINO_PUNCH_BASE', '') or 'https://apis.tangerino.com.br/punch'
 
 TIMEOUT = (5, 25)          # (conexão, leitura) em segundos
+# Com alguém esperando a tela (widget do ponto na home, /ponto/): uma tentativa e limite curto.
+# Com o Tangerino lento, cada abertura da home segurava o portal por até ~80 s (3 tentativas
+# de 25 s + pausas) — 25/11/2026. A sincronização e o relatório continuam com o paciente.
+TIMEOUT_INTERATIVO = (4, 10)
+PAUSA_SE_FORA = 60         # o Tangerino não respondeu: as telas não tentam de novo por 1 minuto
 MOTIVO_FERIAS_ID = 1       # "FÉRIAS" em /adjustment-reason/find-all
 
 
@@ -40,6 +46,31 @@ class TangerinoDesligado(TangerinoError):
 
 
 # ─── Infraestrutura ──────────────────────────────────────────────────────────
+
+_modo = threading.local()
+_fora_desde = {'quando': 0.0}
+
+
+class interativo:
+    """``with client.interativo():`` — chamadas feitas com alguém esperando a tela.
+
+    Uma tentativa só, limite de 10 s, e se o Tangerino falhou por rede no último minuto
+    a chamada nem sai (TangerinoError na hora): a tela mostra "indisponível" e o worker
+    do portal fica livre. Vale só para a thread atual.
+    """
+
+    def __enter__(self):
+        self._antes = getattr(_modo, 'interativo', False)
+        _modo.interativo = True
+        return self
+
+    def __exit__(self, *exc):
+        _modo.interativo = self._antes
+        return False
+
+
+def em_modo_interativo():
+    return getattr(_modo, 'interativo', False)
 
 def integracao_ativa():
     return bool(getattr(settings, 'TANGERINO_ENABLED', False)
@@ -57,8 +88,15 @@ def _request(metodo, base, caminho, **kwargs):
     if not integracao_ativa():
         raise TangerinoDesligado('Integração com o Tangerino está desligada.')
     url = f"{base}{caminho}"
+    interativo_ = em_modo_interativo()
+    if interativo_ and relogio.monotonic() - _fora_desde['quando'] < PAUSA_SE_FORA:
+        raise TangerinoError('O Tangerino não respondeu há pouco; tente de novo em um minuto.')
     try:
-        resp = requests.request(metodo, url, headers=_headers(), timeout=TIMEOUT, **kwargs)
+        resp = requests.request(metodo, url, headers=_headers(),
+                                timeout=TIMEOUT_INTERATIVO if interativo_ else TIMEOUT, **kwargs)
+    except (requests.ConnectionError, requests.Timeout) as exc:
+        _fora_desde["quando"] = relogio.monotonic()
+        raise TangerinoError(f'Não foi possível falar com o Tangerino: {exc}') from exc
     except requests.RequestException as exc:
         raise TangerinoError(f'Não foi possível falar com o Tangerino: {exc}') from exc
 
@@ -273,7 +311,8 @@ def _marcacoes_de_um(inicio, fim, employee_id):
     while dia <= fim:
         ate = min(dia + timedelta(days=DIAS_POR_PEDIDO - 1), fim)
         ultimo_erro = None
-        for tentativa in range(TENTATIVAS_POR_PEDIDO):
+        tentativas = 1 if em_modo_interativo() else TENTATIVAS_POR_PEDIDO
+        for tentativa in range(tentativas):
             try:
                 pares.extend(_pedaco_de_marcacoes(dia, ate, employee_id))
                 ultimo_erro = None
@@ -281,8 +320,9 @@ def _marcacoes_de_um(inicio, fim, employee_id):
             except TangerinoError as exc:
                 ultimo_erro = exc
                 logger.warning('Marcações de %s entre %s e %s falharam (tentativa %d/%d): %s',
-                               employee_id, dia, ate, tentativa + 1, TENTATIVAS_POR_PEDIDO, exc)
-                relogio.sleep(ESPERA_ENTRE_TENTATIVAS * (tentativa + 1))
+                               employee_id, dia, ate, tentativa + 1, tentativas, exc)
+                if tentativa + 1 < tentativas:
+                    relogio.sleep(ESPERA_ENTRE_TENTATIVAS * (tentativa + 1))
         if ultimo_erro is not None:
             raise ultimo_erro
         dia = ate + timedelta(days=1)

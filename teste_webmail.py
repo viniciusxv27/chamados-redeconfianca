@@ -41,6 +41,7 @@ if 'testserver' not in settings.ALLOWED_HOSTS:
 
 import imaplib
 import smtplib
+import time
 import ssl
 
 from django.contrib.auth import get_user_model
@@ -739,9 +740,32 @@ try:
         con = wc._conectar_smtp('a@redeconfianca.com')
         t('465 fechada → 587 com STARTTLS', isinstance(con, SmtpPlano) and ('plano', 'mail.redeconfianca.com', 587) in chamadas
           and 'starttls' in chamadas, chamadas)
+        chamadas.clear()
+        wc._conectar_smtp('a@redeconfianca.com')
+        t('465 que não respondeu fica em pausa (não espera de novo)', not any(c[0] == 'ssl' for c in chamadas if isinstance(c, tuple)), chamadas)
+
+        def plano_fora(*a, **k):
+            chamadas.append(('plano-fora',)); raise TimeoutError('sem resposta')
+        smtplib.SMTP = plano_fora
+        wc._FORA.pop(('mail.redeconfianca.com', 587), None)
+        try:
+            wc._conectar_smtp('a@redeconfianca.com'); t('as duas portas fora: ServidorFora', False)
+        except wc.ServidorFora:
+            pass
+        chamadas.clear(); t0 = time.time()
+        try:
+            wc._conectar_smtp('a@redeconfianca.com'); t('na pausa, falha na hora', False)
+        except wc.ServidorFora as exc:
+            t('na pausa, falha na hora sem tentar a rede', not chamadas and time.time() - t0 < 0.5 and 'fora do ar' in str(exc), chamadas)
+        wc._FORA[('mail.redeconfianca.com', 587)] = (time.time() - wc.FORA_PAUSA - 1, 'x')
+        wc._FORA[('mail.redeconfianca.com', 465)] = (time.time() - wc.FORA_PAUSA - 1, 'x')
+        smtplib.SMTP = SmtpPlano; chamadas.clear()
+        wc._conectar_smtp('a@redeconfianca.com')
+        t('passada a pausa, tenta de novo', ('ssl', 'mail.redeconfianca.com', 465) in chamadas, chamadas)
     finally:
         smtplib.SMTP_SSL, smtplib.SMTP = orig_ssl, orig_plano
         wc._USA_PINO.clear(); wc._USA_PINO.update(orig_pino)
+        wc._FORA.clear()
 
     class SmtpPequeno:
         esmtp_features = {'size': '1000'}

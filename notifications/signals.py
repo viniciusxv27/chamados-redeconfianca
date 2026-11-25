@@ -38,9 +38,26 @@ def notify_ticket_events(sender, instance, created, **kwargs):
     - Criação de novo chamado
     - Mudança de status
     - Atribuição de responsável
+
+    O envio (push, OneSignal, e-mail) vai para segundo plano depois do commit: dentro do
+    clique, assumir/mudar status levava ~21 s e segurava um worker do portal.
     """
+    from core.utils import em_segundo_plano
+
+    old_status = None if created else _ticket_previous_status.pop(instance.pk, None)
+    old_assigned = None if created else _ticket_previous_assigned.pop(instance.pk, None)
+    if not created:
+        mudou_status = bool(old_status) and old_status != instance.status
+        mudou_responsavel = bool(instance.assigned_to_id) and getattr(old_assigned, 'pk', None) != instance.assigned_to_id
+        if not (mudou_status or mudou_responsavel):
+            return                                 # salvou sem mudar nada que avise alguém
+    em_segundo_plano(_notificar_eventos_do_chamado, instance, created, old_status, old_assigned,
+                     nome=f'aviso-chamado-{instance.pk}')
+
+
+def _notificar_eventos_do_chamado(instance, created, old_status, old_assigned):
     from .services import notification_service
-    
+
     # 1. Novo ticket criado
     if created:
         if instance.sector:
@@ -59,10 +76,7 @@ def notify_ticket_events(sender, instance, created, **kwargs):
                 logger.error(f"Error sending ticket creation notification for #{instance.id}: {e}")
         return
     
-    # 2. Ticket atualizado - verificar mudanças
-    old_status = _ticket_previous_status.pop(instance.pk, None)
-    old_assigned = _ticket_previous_assigned.pop(instance.pk, None)
-    
+    # 2. Ticket atualizado - verificar mudanças (estado anterior guardado no pre_save)
     # 2a. Notificar mudança de status
     if old_status and old_status != instance.status:
         try:
@@ -127,8 +141,13 @@ def notify_ticket_comment(sender, instance, created, **kwargs):
     if instance.comment_type in ['STATUS_CHANGE', 'ASSUMPTION', 'PRIORITY_CHANGE']:
         return
     
+    from core.utils import em_segundo_plano
+    em_segundo_plano(_notificar_comentario, instance, nome=f'aviso-comentario-{instance.pk}')
+
+
+def _notificar_comentario(instance):
     from .services import notification_service
-    
+
     try:
         logger.info(f"New comment on ticket #{instance.ticket.id}, sending notifications...")
         
@@ -153,8 +172,13 @@ def notify_ticket_assignment(sender, instance, created, **kwargs):
     if not created:
         return
     
+    from core.utils import em_segundo_plano
+    em_segundo_plano(_notificar_atribuicao, instance, nome=f'aviso-atribuicao-{instance.pk}')
+
+
+def _notificar_atribuicao(instance):
     from .services import notification_service
-    
+
     try:
         logger.info(f"User {instance.user.id} assigned to ticket #{instance.ticket.id}")
         

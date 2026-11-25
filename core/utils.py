@@ -108,3 +108,34 @@ def processo_de_teste():
     import sys
     nome = os.path.basename(sys.argv[0]) if sys.argv else ''
     return nome.startswith('teste_') and nome.endswith('.py')
+
+
+def em_segundo_plano(funcao, *args, nome='segundo-plano', **kwargs):
+    """Roda ``funcao`` numa thread depois do commit — quem clicou não espera o envio.
+
+    Feito para avisos (push, OneSignal, e-mail, WhatsApp): com o envio dentro do clique,
+    assumir ou mudar o status de um chamado levava ~21 s (limite de 30 s do OneSignal) e
+    segurava um worker do portal (25/11/2026). A thread abre a própria conexão com o
+    banco e a fecha no fim; erro vai para o log, nunca para a tela.
+
+    Em script de teste (``teste_*.py``) roda na hora: os testes rodam numa transação
+    desfeita, onde o on_commit nunca dispara, e conferem o efeito logo em seguida.
+    """
+    import logging
+    import threading
+
+    from django.db import close_old_connections, transaction
+
+    if processo_de_teste():
+        return funcao(*args, **kwargs)
+
+    def _rodar():
+        try:
+            close_old_connections()
+            funcao(*args, **kwargs)
+        except Exception:  # noqa: BLE001
+            logging.getLogger('core.segundo_plano').exception('%s falhou', nome)
+        finally:
+            close_old_connections()
+
+    transaction.on_commit(lambda: threading.Thread(target=_rodar, name=nome, daemon=True).start())

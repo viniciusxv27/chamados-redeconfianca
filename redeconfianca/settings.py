@@ -138,6 +138,7 @@ TANGERINO_EMPLOYER_BASE = config('TANGERINO_EMPLOYER_BASE', default='')
 TANGERINO_PUNCH_BASE = config('TANGERINO_PUNCH_BASE', default='')
 
 MIDDLEWARE = [
+    'core.saude.SaudeMiddleware',  # /saude/ do HEALTHCHECK: responde antes de tudo (sem banco/sessão)
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',

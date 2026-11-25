@@ -134,8 +134,30 @@ def _host_smtp(email=''):
 _USA_PINO = {}      # host → instante em que a verificação normal falhou
 
 
-def _abrir_tls(abrir_verificado, abrir_pinado, sock_de, host):
+# Servidor que não respondeu fica "em pausa" por FORA_PAUSA segundos: cada caixa aberta confere
+# novidades a cada 20 s, e com o servidor fora cada conferência prendia o portal por 20 s
+# (TIMEOUT). Na pausa a resposta é imediata; passado o tempo, uma conexão tenta de novo.
+FORA_PAUSA = 60
+_FORA = {}          # (host, porta) → (instante da falha, mensagem)
+
+
+def _servidor_em_pausa(chave):
+    falha = _FORA.get(chave)
+    if falha and time.time() - falha[0] < FORA_PAUSA:
+        raise ServidorFora(falha[1])
+    _FORA.pop(chave, None)
+
+
+def _marcar_fora(chave, exc):
+    mensagem = f'Servidor de e-mail fora do ar ({chave[0]}: {exc.__class__.__name__}).'
+    _FORA[chave] = (time.time(), mensagem)
+    return ServidorFora(mensagem)
+
+
+def _abrir_tls(abrir_verificado, abrir_pinado, sock_de, host, porta=None):
     """Tenta o certificado válido; se não houver, só aceita o pinado."""
+    chave = (host, porta)
+    _servidor_em_pausa(chave)
     pinado_desde = _USA_PINO.get(host)
     if not pinado_desde or time.time() - pinado_desde > 3600:
         try:
@@ -145,7 +167,7 @@ def _abrir_tls(abrir_verificado, abrir_pinado, sock_de, host):
         except ssl.SSLCertVerificationError:
             _USA_PINO[host] = time.time()
         except (OSError, socket.timeout) as exc:
-            raise ServidorFora(f'Servidor de e-mail fora do ar ({host}: {exc.__class__.__name__}).') from exc
+            raise _marcar_fora(chave, exc) from exc
     ctx = contexto_pinado()
     if ctx is None:
         raise ServidorFora(f'O certificado do servidor de e-mail ({host}) não é válido e o portal não tem '
@@ -153,7 +175,7 @@ def _abrir_tls(abrir_verificado, abrir_pinado, sock_de, host):
     try:
         con = abrir_pinado(ctx)
     except (OSError, socket.timeout) as exc:
-        raise ServidorFora(f'Servidor de e-mail fora do ar ({host}: {exc.__class__.__name__}).') from exc
+        raise _marcar_fora(chave, exc) from exc
     try:
         conferir_pino(sock_de(con))
     except CertificadoNaoConfere as exc:
@@ -171,7 +193,7 @@ def _conectar_imap(email=''):
     return _abrir_tls(
         lambda ctx: imaplib.IMAP4_SSL(host, porta, ssl_context=ctx, timeout=TIMEOUT),
         lambda ctx: imaplib.IMAP4_SSL(host, porta, ssl_context=ctx, timeout=TIMEOUT),
-        lambda con: con.sock, host)
+        lambda con: con.sock, host, porta)
 
 
 def _smtp_starttls(host, porta, ctx):
@@ -195,13 +217,13 @@ def _conectar_smtp(email=''):
         return _abrir_tls(
             lambda ctx: smtplib.SMTP_SSL(host, porta, context=ctx, timeout=TIMEOUT),
             lambda ctx: smtplib.SMTP_SSL(host, porta, context=ctx, timeout=TIMEOUT),
-            lambda con: con.sock, host)
+            lambda con: con.sock, host, porta)
     except ServidorFora as exc:
         if porta != 465 or 'fora do ar' not in str(exc):
             raise
         logger.warning('E-mail: SMTP %s:465 não abriu (%s); tentando a 587', host, exc)
         return _abrir_tls(lambda ctx: _smtp_starttls(host, 587, ctx), lambda ctx: _smtp_starttls(host, 587, ctx),
-                          lambda con: con.sock, host)
+                          lambda con: con.sock, host, 587)
 
 
 def _entrar_imap(con, email, senha):
@@ -735,7 +757,7 @@ def buscar_no_texto(conta, pasta, busca, filtro='', ao_achar=None):
     con = _abrir_tls(
         lambda ctx: imaplib.IMAP4_SSL(host, porta, ssl_context=ctx, timeout=TIMEOUT_TEXTO),
         lambda ctx: imaplib.IMAP4_SSL(host, porta, ssl_context=ctx, timeout=TIMEOUT_TEXTO),
-        lambda c: c.sock, host)
+        lambda c: c.sock, host, porta)
 
     def procurar(*periodo):
         con.literal = busca.encode('utf-8')

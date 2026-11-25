@@ -169,9 +169,11 @@ def resumo_para_usuario(usuario, dia=None):
     devolve ``disponivel=False`` e a home segue normalmente."""
     if not getattr(usuario, 'tangerino_employee_id', None):
         return {'disponivel': False, 'motivo': 'sem_vinculo'}
+    from .client import interativo
     try:
-        status = status_do_dia(usuario.tangerino_employee_id, dia=dia)
-        status['pendencias'] = pendencias(usuario.tangerino_employee_id)
+        with interativo():      # a home espera: uma tentativa, limite curto, pausa se o Tangerino caiu
+            status = status_do_dia(usuario.tangerino_employee_id, dia=dia)
+            status['pendencias'] = pendencias(usuario.tangerino_employee_id)
         status['disponivel'] = True
         return status
     except TangerinoError as exc:
