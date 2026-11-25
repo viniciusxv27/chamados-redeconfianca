@@ -239,3 +239,59 @@ def disparar_analise_se_esta_na_hora():
     except Exception as exc:                          # jamais quebra a página
         logger.warning('Agendador da análise de ponto ignorado por erro: %s', exc)
         return False
+
+
+# ---------------------------------------------------------------------------
+# Alerta semanal de faltas (DP + gestor de cada loja)
+# ---------------------------------------------------------------------------
+_ultima_checagem_faltas = None
+
+
+def _faltas_em_segundo_plano():
+    try:
+        from tangerino.alerta_faltas import enviar
+        logger.info('Alerta semanal de faltas: %s', enviar())
+    except Exception as exc:                          # nunca derruba a thread
+        logger.exception('Alerta semanal de faltas quebrou: %s', exc)
+    finally:
+        close_old_connections()
+
+
+def disparar_alerta_faltas_se_esta_na_hora():
+    """Chamado pelo middleware. Mesmo arranjo da análise: throttle por processo, corrida
+    resolvida no banco (UPDATE condicional) e o trabalho numa thread."""
+    global _ultima_checagem_faltas
+
+    agora = timezone.now()
+    with _trava_local:
+        if (_ultima_checagem_faltas is not None
+                and (agora - _ultima_checagem_faltas).total_seconds() < _intervalo_checagem):
+            return False
+        _ultima_checagem_faltas = agora
+
+    try:
+        from django.db.models import Q
+
+        from tangerino import alerta_faltas
+        from tangerino.analise import sincronizacao_de_hoje
+        from tangerino.models import AlertaFaltasConfig
+
+        from django.db import transaction
+        with transaction.atomic():      # savepoint: banco sem a tabela (migrate pendente) não estraga a requisição
+            config = AlertaFaltasConfig.get()
+        if not alerta_faltas.esta_na_hora(config, agora):
+            return False
+        if not sincronizacao_de_hoje():
+            return False              # a semana só fecha no banco depois da sincronização do dia
+        alvo = alerta_faltas._alvo_de_hoje(config, agora)
+        ganhou = (AlertaFaltasConfig.objects.filter(pk=config.pk)
+                  .filter(Q(ultimo_envio__lt=alvo) | Q(ultimo_envio__isnull=True))
+                  .update(ultimo_envio=agora))
+        if not ganhou:
+            return False
+        threading.Thread(target=_faltas_em_segundo_plano, name='tangerino-alerta-faltas', daemon=True).start()
+        logger.info('Alerta semanal de faltas disparado.')
+        return True
+    except Exception as exc:                          # jamais quebra a página
+        logger.warning('Agendador do alerta de faltas ignorado por erro: %s', exc)
+        return False

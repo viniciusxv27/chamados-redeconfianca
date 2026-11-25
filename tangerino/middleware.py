@@ -10,7 +10,8 @@ from django.shortcuts import redirect
 from django.urls import reverse
 
 from .ferias import esta_de_ferias
-from tangerino.agendador import disparar_analise_se_esta_na_hora, disparar_se_esta_na_hora
+from tangerino.agendador import (disparar_alerta_faltas_se_esta_na_hora, disparar_analise_se_esta_na_hora,
+                                 disparar_se_esta_na_hora)
 
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,8 @@ class BloqueioFeriasMiddleware:
         # A análise de ponto no WhatsApp tem horário próprio (depois da sincronização)
         # e o mesmo cuidado: throttle por processo e o trabalho numa thread.
         disparar_analise_se_esta_na_hora()
+        # O alerta semanal de faltas (DP + gestor de cada loja), no dia e hora escolhidos.
+        disparar_alerta_faltas_se_esta_na_hora()
 
         caminho = request.path
         if any(caminho.startswith(p) for p in LIBERADOS):

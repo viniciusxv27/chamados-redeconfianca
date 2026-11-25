@@ -941,3 +941,88 @@ class SolicitacaoAjustePonto(models.Model):
         if self.tipo == self.INCLUIR:
             return f'incluir {novo}'
         return f'remover o par que começa às {antigo}'
+
+
+# ─── Alerta semanal de faltas (DP + gestor de cada loja) ─────────────────────
+
+class AlertaFaltasConfig(models.Model):
+    """O alerta semanal de faltas: o DP recebe o geral, o gestor de cada loja recebe a equipe dele.
+
+    Registro único (id=1). **Nasce desligado**: manda WhatsApp para gente de verdade.
+    Falta é o dia previsto sem batida nenhuma (a mesma regra do relatório,
+    ``tangerino/pendencias.py``): folga, feriado, férias e atestado não entram.
+    O período é sempre a última semana fechada, de segunda a domingo.
+    """
+
+    DIAS = [(0, 'Segunda-feira'), (4, 'Sexta-feira'), (6, 'Domingo')]
+    ORIENTACAO_PADRAO = ('Por favor, entre em contato com o DP para verificarmos cada situação '
+                         'e alinharmos os próximos passos.')
+
+    ativo = models.BooleanField('Alerta ligado', default=False, db_default=False,
+                                help_text='Desligado, nada sai sozinho (a prévia e o envio manual continuam).')
+    dia_semana = models.PositiveSmallIntegerField('Dia do envio', choices=DIAS, default=0, db_default=0)
+    hora_envio = models.TimeField('Horário', default=time(9, 0), db_default=time(9, 0))
+    gerentes = models.BooleanField('Avisar o gestor de cada loja (WhatsApp do cadastro)', default=True,
+                                   db_default=True)
+    grupo_da_loja = models.BooleanField('Mandar também no grupo de gestão da loja', default=False,
+                                        db_default=False,
+                                        help_text='O mesmo grupo da cobrança dos cursos (Cursos → grupos por loja).')
+    orientacao = models.TextField('Orientação no fim da mensagem do gestor', blank=True,
+                                  default=ORIENTACAO_PADRAO, db_default=ORIENTACAO_PADRAO)
+    dp = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name='alertas_faltas_dp',
+                                verbose_name='Quem recebe o geral (DP)',
+                                help_text='Recebem todas as lojas numa mensagem só, no WhatsApp do cadastro.')
+    ultimo_envio = models.DateTimeField(null=True, blank=True, verbose_name='Última rodada automática')
+    atualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                       blank=True, related_name='+')
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Alerta semanal de faltas'
+        verbose_name_plural = 'Alerta semanal de faltas'
+
+    def __str__(self):
+        return 'Alerta semanal de faltas'
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+class EnvioAlertaFaltas(models.Model):
+    """Um alerta mandado (ou tentado): para o DP, para um gestor ou para o grupo de uma loja.
+
+    ``chave`` é única por destino e semana e é gravada ANTES do envio: workers e rodadas
+    repetidas não mandam a mesma semana duas vezes.
+    """
+
+    DP, GERENTE, GRUPO = 'DP', 'GERENTE', 'GRUPO'
+    DESTINOS = [(DP, 'DP (geral)'), (GERENTE, 'Gestor da loja'), (GRUPO, 'Grupo da loja')]
+
+    chave = models.CharField(max_length=120, unique=True)
+    destino = models.CharField(max_length=10, choices=DESTINOS)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                             related_name='+', verbose_name='Pessoa')
+    loja = models.ForeignKey('users.Sector', on_delete=models.SET_NULL, null=True, blank=True,
+                             related_name='+', verbose_name='Loja')
+    periodo_inicio = models.DateField()
+    periodo_fim = models.DateField(db_index=True)
+    faltas = models.PositiveIntegerField(default=0)
+    pessoas = models.PositiveIntegerField(default=0)
+    enviado = models.BooleanField(default=False)
+    manual = models.BooleanField(default=False)
+    detalhe = models.CharField(max_length=255, blank=True, default='')
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-criado_em']
+        verbose_name = 'Envio do alerta de faltas'
+        verbose_name_plural = 'Envios do alerta de faltas'
+
+    def __str__(self):
+        return f'{self.get_destino_display()} · {self.loja or self.user} · {self.periodo_fim:%d/%m/%Y}'

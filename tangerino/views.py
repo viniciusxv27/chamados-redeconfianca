@@ -174,6 +174,12 @@ def _registro_pelo_portal(config):
 @login_required
 def meu_ponto(request):
     """Painel de ponto do próprio colaborador."""
+    from .client import interativo
+    with interativo():          # a pessoa espera a tela: uma tentativa e limite curto no Tangerino
+        return _meu_ponto(request)
+
+
+def _meu_ponto(request):
     hoje = timezone.localdate()
     inicio = hoje - timedelta(days=hoje.weekday())      # segunda desta semana
     config = ConfiguracaoTangerino.get()
@@ -1618,3 +1624,131 @@ def ajuste_decidir(request, pk):
         if acao == 'cancelar':
             return redirect('tangerino:meu_ponto')
     return redirect('tangerino:ajustes')
+
+
+# ─── Alerta semanal de faltas (DP + gestor de cada loja) ─────────────────────
+
+def _semana_pedida(valor):
+    from . import alerta_faltas
+    dia = parse_date(valor or '')
+    hoje = timezone.localdate()
+    if dia and dia <= hoje:
+        return alerta_faltas.semana_do_dia(dia)
+    return alerta_faltas.semana_fechada(hoje)
+
+
+@modulo_liberado
+@login_required
+def faltas_semana(request):
+    """Faltas da semana por loja, quem será avisado, a configuração do envio e o histórico."""
+    from core.evolution import normalizar_numero
+
+    from . import alerta_faltas
+    from .analise import faltando_no_canal
+    from .models import AlertaFaltasConfig, EnvioAlertaFaltas
+
+    if not pode_ver_relatorio(request.user):
+        return _recusa_relatorio(request)
+    config = AlertaFaltasConfig.get()
+    pode_configurar = pode_configurar_analise(request.user)
+
+    if request.method == 'POST':
+        if not pode_configurar:
+            messages.error(request, 'Só o SUPERADMIN configura e dispara o alerta de faltas.')
+            return redirect('tangerino:faltas_semana')
+        if request.POST.get('secao') == 'config':
+            for campo in ('ativo', 'gerentes', 'grupo_da_loja'):
+                setattr(config, campo, request.POST.get(campo) == 'on')
+            dia = request.POST.get('dia_semana', '')
+            if dia.isdigit() and int(dia) in dict(AlertaFaltasConfig.DIAS):
+                config.dia_semana = int(dia)
+            hora = parse_time(request.POST.get('hora_envio') or '')
+            if hora:
+                config.hora_envio = hora
+            config.orientacao = (request.POST.get('orientacao') or '').strip()[:1000]
+            config.atualizado_por = request.user
+            config.save()
+            ids = [int(i) for i in request.POST.getlist('dp') if str(i).isdigit()]
+            config.dp.set(User.objects.filter(pk__in=ids, is_active=True))
+            if config.ativo:
+                messages.success(request, f'Alerta ligado: toda {config.get_dia_semana_display().lower()}, '
+                                          f'às {config.hora_envio:%H:%M}, sobre a semana anterior.')
+            else:
+                messages.success(request, 'Configuração salva. O alerta automático está desligado.')
+            return redirect('tangerino:faltas_semana')
+        if request.POST.get('secao') == 'enviar':
+            inicio, fim = _semana_pedida(request.POST.get('semana'))
+            so_para = None
+            if request.POST.get('para') == 'eu':
+                numero = normalizar_numero(getattr(request.user, 'phone', '') or '')
+                if not numero:
+                    messages.error(request, 'Seu cadastro está sem telefone: não dá para mandar o teste para você.')
+                    return redirect(f"{reverse('tangerino:faltas_semana')}?semana={inicio:%Y-%m-%d}")
+                so_para = [(request.user, numero)]
+            resumo = alerta_faltas.enviar(inicio, fim, config=config, manual=True,
+                                          reenviar=request.POST.get('reenviar') == 'on', so_para=so_para)
+            if resumo.get('sem_canal'):
+                messages.error(request, 'O WhatsApp (Evolution) não está configurado neste servidor: nada foi enviado.')
+            else:
+                partes = [f"{resumo['enviados']} mensagem(ns) enviada(s)"]
+                if resumo['falhas']:
+                    partes.append(f"{resumo['falhas']} falha(s)")
+                if resumo['ja_enviados']:
+                    partes.append(f"{resumo['ja_enviados']} já tinha(m) recebido esta semana (marque \"reenviar\")")
+                if resumo['sem_telefone']:
+                    partes.append(f"{resumo['sem_telefone']} sem telefone no cadastro")
+                nivel = messages.success if resumo['enviados'] and not resumo['falhas'] else messages.warning
+                nivel(request, f'Faltas de {inicio:%d/%m} a {fim:%d/%m/%Y}: ' + '; '.join(partes) + '.')
+            return redirect(f"{reverse('tangerino:faltas_semana')}?semana={inicio:%Y-%m-%d}")
+
+    inicio, fim = _semana_pedida(request.GET.get('semana'))
+    previa = alerta_faltas.previa(inicio, fim, config=config)
+    escolhidos = set(config.dp.values_list('id', flat=True))
+    pessoas = []
+    if pode_configurar:
+        pessoas = list(User.objects.filter(is_active=True).order_by('first_name', 'last_name'))
+        for p in pessoas:
+            p.tem_telefone = bool(normalizar_numero(getattr(p, 'phone', '') or ''))
+    semanas = []
+    segunda = alerta_faltas.semana_fechada(timezone.localdate())[0]
+    for i in range(8):
+        s = segunda - timedelta(weeks=i)
+        semanas.append({'inicio': s, 'fim': s + timedelta(days=6)})
+    return render(request, 'tangerino/faltas_semana.html', {
+        'aba': 'faltas_semana',
+        'e_gestor': e_gestor(request.user),
+        'config': config,
+        'dias': AlertaFaltasConfig.DIAS,
+        'previa': previa,
+        'inicio': inicio, 'fim': fim,
+        'semanas': semanas,
+        'pode_configurar': pode_configurar,
+        'pessoas': pessoas,
+        'escolhidos': escolhidos,
+        'dp_com_telefone': [u for u, _n in alerta_faltas.destinatarios_dp(config)],
+        'sem_canal': faltando_no_canal(),
+        'envios': EnvioAlertaFaltas.objects.select_related('user', 'loja')[:30],
+    })
+
+
+@modulo_liberado
+@login_required
+def assiduidade(request):
+    """Assiduidade e marcação correta do ponto na rede — mês a mês, por loja e por pessoa."""
+    from . import assiduidade as assiduidade_svc
+
+    if not pode_ver_relatorio(request.user):
+        return _recusa_relatorio(request)
+    meses = request.GET.get('meses', '3')
+    setor = request.GET.get('setor', '')
+    visao = assiduidade_svc.visao(meses=int(meses) if meses.isdigit() else 3,
+                                  setor_id=int(setor) if setor.isdigit() else None)
+    return render(request, 'tangerino/assiduidade.html', {
+        'aba': 'assiduidade',
+        'e_gestor': e_gestor(request.user),
+        'v': visao,
+        'meses': int(meses) if meses.isdigit() else 3,
+        'setor': int(setor) if setor.isdigit() else None,
+        'faixas': [('Excelente', '0%', 'excelente'), ('Boa', 'até 2%', 'boa'),
+                   ('Regular', 'até 5%', 'regular'), ('Atenção', 'acima de 5%', 'atencao')],
+    })

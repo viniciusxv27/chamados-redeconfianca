@@ -1,0 +1,139 @@
+{% extends 'tangerino/base_tangerino.html' %}
+
+{% block tg_titulo %}Assiduidade da rede{% endblock %}
+{% block tg_cabecalho %}Assiduidade e marcação do ponto{% endblock %}
+{% block tg_subtitulo %}As métricas de assiduidade do portal para a rede inteira · referência: {{ v.ref_rotulo }} (último mês fechado){% endblock %}
+
+{% block tg_conteudo %}
+<style>
+    .as-kpi { border:1px solid #e5e7eb; border-radius:.75rem; padding:.8rem 1rem; background:#fff; }
+    .as-kpi b { display:block; font-size:1.45rem; line-height:1.15; color:#111827; }
+    .as-kpi span { font-size:.72rem; color:#6b7280; }
+    .as-faixa { font-size:.7rem; padding:.1rem .5rem; border-radius:999px; white-space:nowrap; font-weight:600; }
+    .as-faixa.excelente { background:#d1fae5; color:#065f46; }
+    .as-faixa.boa { background:#e0f2fe; color:#075985; }
+    .as-faixa.regular { background:#fef3c7; color:#92400e; }
+    .as-faixa.atencao { background:#fee2e2; color:#991b1b; }
+    .as-faixa.sem { background:#f3f4f6; color:#6b7280; }
+    .as-tab { width:100%; border-collapse:collapse; font-size:.8rem; }
+    .as-tab th { text-align:left; font-weight:600; color:#6b7280; font-size:.7rem; text-transform:uppercase; padding:.5rem; border-bottom:1px solid #e5e7eb; white-space:nowrap; }
+    .as-tab td { padding:.5rem; border-bottom:1px solid #f3f4f6; vertical-align:top; }
+    .as-tab td.n { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+    .as-sub { display:block; font-size:.68rem; color:#9ca3af; }
+    .as-up { color:#047857; } .as-down { color:#b91c1c; }
+</style>
+
+<form method="get" class="tg-card p-4 mb-4 flex flex-wrap gap-3 items-end">
+    <label class="text-xs text-gray-500">Meses
+        <select name="meses" class="block border border-gray-300 rounded-lg px-3 py-1.5 text-sm mt-1" onchange="this.form.submit()">
+            {% for n in "3456" %}<option value="{{ n }}" {% if meses|stringformat:"s" == n %}selected{% endif %}>{{ n }} meses</option>{% endfor %}
+        </select>
+    </label>
+    <label class="text-xs text-gray-500">Loja / setor
+        <select name="setor" class="block border border-gray-300 rounded-lg px-3 py-1.5 text-sm mt-1" onchange="this.form.submit()">
+            <option value="">Rede inteira</option>
+            {% for id, nome in v.setores %}<option value="{{ id }}" {% if setor == id %}selected{% endif %}>{{ nome }}</option>{% endfor %}
+        </select>
+    </label>
+    <noscript><button class="px-4 py-1.5 bg-cyan-600 text-white rounded-lg text-sm">Ver</button></noscript>
+    <p class="text-xs text-gray-500 flex-1 min-w-[16rem]">
+        <strong>Absenteísmo</strong>: horas que faltaram ÷ previstas (falta inteira + atraso acima de 10 min; folga, feriado, férias e atestado fora) — a régua do Plano de Carreira (até 2%) e da Rotina ADM.
+        <strong>Marcação correta</strong>: dias trabalhados sem batida esquecida. <strong>Ajustes</strong>: pedidos de ajuste pelo portal.
+    </p>
+</form>
+
+<h2 class="text-sm font-semibold text-gray-700 mb-2">Rede, mês a mês</h2>
+<div class="grid grid-cols-2 md:grid-cols-{{ v.rede|length }} gap-3 mb-5">
+    {% for r in v.rede %}
+    <div class="as-kpi {% if forloop.counter0 == v.ref %}ring-2 ring-cyan-500{% endif %}">
+        <span class="font-semibold text-gray-700">{{ r.rotulo }}{% if forloop.last %} (até ontem){% endif %}</span>
+        <b>{{ r.absenteismo|default_if_none:"—" }}%</b>
+        <span>absenteísmo · <span class="as-faixa {{ r.faixa_classe }}">{{ r.faixa }}</span></span>
+        <span class="block mt-1">{{ r.marcacao_correta|default_if_none:"—" }}% marcação correta · {{ r.faltas }} falta(s) · {{ r.esquecimentos }} esquecimento(s) · {{ r.ajustes }} ajuste(s)</span>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="grid md:grid-cols-3 gap-4 mb-5">
+    <div class="tg-card p-4">
+        <h3 class="text-sm font-semibold text-gray-800 mb-2"><i class="fas fa-arrow-trend-up text-emerald-600 mr-1"></i>Lojas que mais evoluíram</h3>
+        <p class="text-xs text-gray-500 mb-2">Marcação correta em {{ v.ref_rotulo }} contra o mês anterior.</p>
+        <ol class="text-sm space-y-1 list-decimal list-inside">
+            {% for l in v.evolucao %}<li>{{ l.nome }} <span class="as-up font-semibold">{% if l.evolucao_correta > 0 %}+{% endif %}{{ l.evolucao_correta }} p.p.</span></li>{% empty %}<li class="list-none text-gray-500">Sem comparação ainda.</li>{% endfor %}
+        </ol>
+    </div>
+    <div class="tg-card p-4">
+        <h3 class="text-sm font-semibold text-gray-800 mb-2"><i class="fas fa-arrow-trend-down text-red-600 mr-1"></i>Lojas que pioraram</h3>
+        <p class="text-xs text-gray-500 mb-2">Para acompanhar de perto.</p>
+        <ol class="text-sm space-y-1 list-decimal list-inside">
+            {% for l in v.piora %}<li>{{ l.nome }} <span class="as-down font-semibold">{{ l.evolucao_correta }} p.p.</span></li>{% empty %}<li class="list-none text-gray-500">Nenhuma loja piorou.</li>{% endfor %}
+        </ol>
+    </div>
+    <div class="tg-card p-4">
+        <h3 class="text-sm font-semibold text-gray-800 mb-2"><i class="fas fa-award text-amber-500 mr-1"></i>Regularidade exemplar em {{ v.ref_rotulo }}</h3>
+        <p class="text-xs text-gray-500 mb-2">Sem falta, sem esquecimento, sem ajuste e 0% de absenteísmo (10+ dias previstos): candidatos a reconhecimento.</p>
+        <ul class="text-sm space-y-0.5 max-h-48 overflow-y-auto">
+            {% for p in v.destaques %}<li>{{ p.nome }} <span class="text-xs text-gray-500">· {{ p.loja }}</span></li>{% empty %}<li class="text-gray-500">Ninguém no critério.</li>{% endfor %}
+        </ul>
+        <p class="text-xs text-gray-400 mt-2">{{ v.destaques|length }} pessoa(s).</p>
+    </div>
+</div>
+
+<div class="tg-card p-0 mb-5 overflow-x-auto">
+    <h2 class="text-sm font-semibold text-gray-700 px-4 pt-4">Por loja</h2>
+    <table class="as-tab">
+        <thead><tr>
+            <th>Loja / setor</th><th class="text-right">Pessoas</th>
+            {% for rot in v.rotulos %}<th class="text-right">{{ rot }}</th>{% endfor %}
+            <th class="text-right">Evolução</th>
+        </tr></thead>
+        <tbody>
+        {% for l in v.lojas %}
+        <tr>
+            <td><a class="text-cyan-700 hover:underline" href="?meses={{ meses }}&setor={{ l.id }}">{{ l.nome }}</a></td>
+            <td class="n">{{ l.pessoas }}</td>
+            {% for m in l.meses %}
+            <td class="n">{% if m.dias_previstos or m.trabalhados %}<span class="as-faixa {{ m.faixa_classe }}">{{ m.absenteismo|default_if_none:"—" }}%</span>
+                <span class="as-sub">{{ m.marcacao_correta|default_if_none:"—" }}% correta · {{ m.faltas }}F · {{ m.esquecimentos }}E{% if m.ajustes %} · {{ m.ajustes }}A{% endif %}</span>{% else %}—{% endif %}</td>
+            {% endfor %}
+            <td class="n">{% if l.evolucao_correta is not None %}<span class="{% if l.evolucao_correta > 0 %}as-up{% elif l.evolucao_correta < 0 %}as-down{% endif %} font-semibold">{% if l.evolucao_correta > 0 %}+{% endif %}{{ l.evolucao_correta }} p.p.</span><span class="as-sub">marcação correta</span>{% else %}—{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9" class="text-center text-gray-500 py-6">Sem dados de ponto no período.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <p class="text-xs text-gray-400 px-4 py-2">F = faltas · E = esquecimentos de batida · A = ajustes pedidos. O mês corrente vai até ontem.</p>
+</div>
+
+<div class="tg-card p-0 overflow-x-auto">
+    <div class="flex flex-wrap items-center gap-2 px-4 pt-4">
+        <h2 class="text-sm font-semibold text-gray-700">Por colaborador</h2>
+        <input type="search" placeholder="Filtrar por nome ou loja…" class="ml-auto border border-gray-300 rounded-lg px-3 py-1 text-sm"
+               oninput="var t=this.value.toLowerCase();document.querySelectorAll('#as-pessoas tbody tr').forEach(function(r){r.style.display=r.textContent.toLowerCase().indexOf(t)>-1?'':'none'})">
+    </div>
+    <table class="as-tab" id="as-pessoas">
+        <thead><tr>
+            <th>Colaborador</th><th>Loja</th>
+            {% for rot in v.rotulos %}<th class="text-right">{{ rot }}</th>{% endfor %}
+        </tr></thead>
+        <tbody>
+        {% for p in v.pessoas %}
+        <tr>
+            <td>{{ p.nome }}</td>
+            <td class="text-gray-500">{{ p.loja }}</td>
+            {% for m in p.meses %}
+            <td class="n">{% if m %}<span class="as-faixa {{ m.faixa_classe }}">{{ m.absenteismo|default_if_none:"—" }}%</span>
+                <span class="as-sub">{{ m.marcacao_correta|default_if_none:"—" }}% · {{ m.faltas }}F · {{ m.esquecimentos }}E{% if m.ajustes %} · {{ m.ajustes }}A{% endif %}</span>{% else %}—{% endif %}</td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<p class="text-xs text-gray-400 mt-3">
+    Faixas (as da Rotina ADM): {% for nome, regra, classe in faixas %}<span class="as-faixa {{ classe }}">{{ nome }}</span> {{ regra }}{% if not forloop.last %} · {% endif %}{% endfor %}.
+    Lê só o que já está sincronizado com o Tangerino · calculado em {{ v.gerado_em|date:"d/m H:i" }} (mês fechado guardado por 6 h, o corrente por 15 min).
+</p>
+{% endblock %}

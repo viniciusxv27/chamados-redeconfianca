@@ -1,0 +1,192 @@
+{% extends 'tangerino/base_tangerino.html' %}
+
+{% block tg_titulo %}Faltas da semana{% endblock %}
+{% block tg_cabecalho %}Faltas da semana{% endblock %}
+{% block tg_subtitulo %}De {{ inicio|date:"d/m" }} a {{ fim|date:"d/m/Y" }} · o DP recebe o geral e o gestor de cada loja recebe a equipe dele{% endblock %}
+
+{% block tg_acoes %}
+<a href="{% url 'tangerino:relatorio' %}?de={{ inicio|date:'Y-m-d' }}&ate={{ fim|date:'Y-m-d' }}&pendencias=1"
+   class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50">
+    <i class="fas fa-file-excel mr-1.5"></i>Relatório da semana
+</a>
+{% endblock %}
+
+{% block tg_conteudo %}
+<style>
+    .fs-kpi { border:1px solid #e5e7eb; border-radius:.75rem; padding:.8rem 1rem; background:#fff; }
+    .fs-kpi b { display:block; font-size:1.5rem; line-height:1.1; color:#111827; }
+    .fs-kpi span { font-size:.75rem; color:#6b7280; }
+    .fs-loja { border:1px solid #e5e7eb; border-radius:.75rem; background:#fff; overflow:hidden; }
+    .fs-loja > summary { list-style:none; cursor:pointer; padding:.75rem 1rem; display:flex; gap:.75rem; align-items:center; flex-wrap:wrap; }
+    .fs-loja > summary::-webkit-details-marker { display:none; }
+    .fs-chip { font-size:.7rem; padding:.1rem .5rem; border-radius:999px; background:#f3f4f6; color:#374151; white-space:nowrap; }
+    .fs-chip.ok { background:#ecfdf5; color:#047857; }
+    .fs-chip.alerta { background:#fef3c7; color:#92400e; }
+    .fs-msg { white-space:pre-wrap; font-size:.8rem; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:.5rem; padding:.75rem; color:#14532d; }
+</style>
+
+<form method="get" class="tg-card p-4 mb-4 flex flex-wrap gap-3 items-end">
+    <div>
+        <label for="fs-semana" class="block text-xs text-gray-500 mb-1">Semana (segunda a domingo)</label>
+        <select id="fs-semana" name="semana" onchange="this.form.submit()"
+                class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+            {% for s in semanas %}
+            <option value="{{ s.inicio|date:'Y-m-d' }}" {% if s.inicio == inicio %}selected{% endif %}>
+                {{ s.inicio|date:"d/m" }} a {{ s.fim|date:"d/m/Y" }}{% if forloop.first %} (última fechada){% endif %}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    <noscript><button class="px-4 py-1.5 bg-cyan-600 text-white rounded-lg text-sm">Ver</button></noscript>
+    <p class="text-xs text-gray-500 flex-1 min-w-[16rem]">
+        Falta = dia previsto <strong>sem nenhuma batida</strong>. Folga, feriado, férias e atestado não entram;
+        batida esquecida também não (fica no relatório).
+    </p>
+</form>
+
+{% if previa.aviso.erro %}
+<div class="tg-card p-3 mb-4 border-amber-200 bg-amber-50 text-sm text-amber-800">
+    <i class="fas fa-triangle-exclamation mr-1"></i>Parte da semana não veio do Tangerino agora ({{ previa.aviso.erro }}): a lista mostra só o que já estava sincronizado.
+</div>
+{% endif %}
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+    <div class="fs-kpi"><b>{{ previa.faltas }}</b><span>falta(s) na semana</span></div>
+    <div class="fs-kpi"><b>{{ previa.pessoas }}</b><span>colaborador(es)</span></div>
+    <div class="fs-kpi"><b>{{ previa.lojas|length }}</b><span>loja(s)/setor(es)</span></div>
+    <div class="fs-kpi">
+        <b class="{% if config.ativo %}text-emerald-600{% else %}text-gray-400{% endif %}">{% if config.ativo %}Ligado{% else %}Desligado{% endif %}</b>
+        <span>{% if config.ativo %}toda {{ config.get_dia_semana_display|lower }} às {{ config.hora_envio|time:"H:i" }}{% else %}envio automático{% endif %}</span>
+    </div>
+</div>
+
+<div class="grid lg:grid-cols-3 gap-4">
+    <div class="lg:col-span-2 space-y-3">
+        <h2 class="text-sm font-semibold text-gray-700">Por loja — o que cada gestor recebe</h2>
+        {% for loja in previa.lojas %}
+        <details class="fs-loja">
+            <summary>
+                <i class="fas fa-store text-gray-400"></i>
+                <strong class="text-gray-900">{{ loja.nome }}</strong>
+                <span class="fs-chip alerta">{{ loja.faltas }} falta{{ loja.faltas|pluralize }} · {{ loja.pessoas|length }} pessoa{{ loja.pessoas|length|pluralize }}</span>
+                <span class="text-xs text-gray-500 ml-auto">{{ loja.destino }}</span>
+            </summary>
+            <div class="px-4 pb-4 grid md:grid-cols-2 gap-3">
+                <div>
+                    <ul class="text-sm space-y-1.5">
+                        {% for p in loja.pessoas %}
+                        <li><strong>{{ p.nome }}</strong><br>
+                            <span class="text-gray-600">{% for d in p.dias %}{{ d|date:"d/m" }} ({{ d|date:"D"|lower }}){% if not forloop.last %}, {% endif %}{% endfor %}</span></li>
+                        {% endfor %}
+                    </ul>
+                    {% if loja.e_loja %}
+                    <div class="mt-3 text-xs text-gray-500">
+                        Gestor(es):
+                        {% for g in loja.gerentes %}<span class="fs-chip {% if g.numero %}ok{% else %}alerta{% endif %}">{{ g.nome }}{% if not g.numero %} · sem telefone{% endif %}</span> {% empty %}<span class="fs-chip alerta">nenhum no Quadro de HC</span>{% endfor %}
+                        {% if config.grupo_da_loja %}<span class="fs-chip {% if loja.grupo %}ok{% else %}alerta{% endif %}">{% if loja.grupo %}grupo da loja{% else %}sem grupo{% endif %}</span>{% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% if loja.texto %}
+                <div>
+                    <p class="text-xs text-gray-500 mb-1"><i class="fab fa-whatsapp text-emerald-600"></i> Mensagem do gestor</p>
+                    <div class="fs-msg">{{ loja.texto }}</div>
+                </div>
+                {% else %}
+                <p class="text-xs text-gray-500">Setor fora das lojas: aparece só no geral do DP.</p>
+                {% endif %}
+            </div>
+        </details>
+        {% empty %}
+        <div class="tg-card p-6 text-center text-sm text-gray-500">
+            <i class="fas fa-circle-check text-emerald-500 text-2xl mb-2"></i><br>
+            Nenhuma falta nesta semana.
+        </div>
+        {% endfor %}
+
+        <details class="fs-loja">
+            <summary><i class="fab fa-whatsapp text-emerald-600"></i><strong>Mensagem geral do DP</strong></summary>
+            <div class="px-4 pb-4"><div class="fs-msg">{{ previa.texto_dp }}</div></div>
+        </details>
+    </div>
+
+    <div class="space-y-4">
+        {% if pode_configurar %}
+        <form method="post" class="tg-card p-4 space-y-3">
+            {% csrf_token %}
+            <input type="hidden" name="secao" value="enviar">
+            <input type="hidden" name="semana" value="{{ inicio|date:'Y-m-d' }}">
+            <h2 class="text-sm font-semibold text-gray-800"><i class="fas fa-paper-plane mr-1 text-cyan-600"></i>Enviar esta semana agora</h2>
+            {% if sem_canal %}<p class="text-xs text-red-600">O WhatsApp (Evolution) não está configurado neste servidor.</p>{% endif %}
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="para" value="eu" checked> Só o geral, para mim (teste)</label>
+            <label class="flex items-center gap-2 text-sm"><input type="radio" name="para" value="todos"> Para o DP e os gestores</label>
+            <label class="flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" name="reenviar"> Reenviar para quem já recebeu esta semana</label>
+            <button class="w-full px-4 py-2 bg-cyan-600 text-white rounded-lg text-sm hover:bg-cyan-700"
+                    onclick="return this.form.para.value === 'eu' || confirm('Mandar o alerta desta semana pelo WhatsApp para o DP e os gestores das lojas?')">
+                Enviar
+            </button>
+        </form>
+
+        <form method="post" class="tg-card p-4 space-y-3">
+            {% csrf_token %}
+            <input type="hidden" name="secao" value="config">
+            <h2 class="text-sm font-semibold text-gray-800"><i class="fas fa-sliders mr-1 text-cyan-600"></i>Envio automático</h2>
+            <label class="flex items-center gap-2 text-sm font-medium"><input type="checkbox" name="ativo" {% if config.ativo %}checked{% endif %}> Ligado</label>
+            <div class="grid grid-cols-2 gap-2">
+                <label class="text-xs text-gray-500">Dia
+                    <select name="dia_semana" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm mt-1">
+                        {% for valor, nome in dias %}<option value="{{ valor }}" {% if config.dia_semana == valor %}selected{% endif %}>{{ nome }}</option>{% endfor %}
+                    </select>
+                </label>
+                <label class="text-xs text-gray-500">Horário
+                    <input type="time" name="hora_envio" value="{{ config.hora_envio|time:'H:i' }}" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm mt-1">
+                </label>
+            </div>
+            <p class="text-xs text-gray-500">Sempre sobre a última semana fechada (segunda a domingo), depois da sincronização do dia.</p>
+            <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="gerentes" {% if config.gerentes %}checked{% endif %}> Avisar o gestor de cada loja</label>
+            <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="grupo_da_loja" {% if config.grupo_da_loja %}checked{% endif %}> Mandar também no grupo de gestão da loja</label>
+            <label class="block text-xs text-gray-500">Orientação no fim da mensagem do gestor
+                <textarea name="orientacao" rows="3" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm mt-1">{{ config.orientacao }}</textarea>
+            </label>
+            <div>
+                <p class="text-xs text-gray-500 mb-1">Quem recebe o geral (DP)</p>
+                <input type="search" placeholder="Filtrar pessoas…" class="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-1"
+                       oninput="var t=this.value.toLowerCase();this.nextElementSibling.querySelectorAll('label').forEach(function(l){l.style.display=l.textContent.toLowerCase().indexOf(t)>-1?'':'none'})">
+                <div class="max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-2 space-y-1">
+                    {% for p in pessoas %}
+                    <label class="flex items-center gap-2 text-sm {% if p.id in escolhidos %}order-first{% endif %}">
+                        <input type="checkbox" name="dp" value="{{ p.id }}" {% if p.id in escolhidos %}checked{% endif %}>
+                        <span>{{ p.full_name|default:p.username }}</span>
+                        {% if not p.tem_telefone %}<span class="text-[10px] text-amber-700">sem telefone</span>{% endif %}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            <button class="w-full px-4 py-2 bg-gray-900 text-white rounded-lg text-sm hover:bg-black">Salvar</button>
+        </form>
+        {% else %}
+        <div class="tg-card p-4 text-sm text-gray-600">
+            <p><strong>Envio automático:</strong> {% if config.ativo %}toda {{ config.get_dia_semana_display|lower }} às {{ config.hora_envio|time:"H:i" }}{% else %}desligado{% endif %}.</p>
+            <p class="mt-1">Recebem o geral: {% for u in dp_com_telefone %}{{ u.full_name|default:u.username }}{% if not forloop.last %}, {% endif %}{% empty %}ninguém ainda{% endfor %}.</p>
+            <p class="mt-1 text-xs text-gray-500">Só o SUPERADMIN muda a configuração.</p>
+        </div>
+        {% endif %}
+
+        <div class="tg-card p-4">
+            <h2 class="text-sm font-semibold text-gray-800 mb-2"><i class="fas fa-clock-rotate-left mr-1 text-gray-400"></i>Últimos envios</h2>
+            <ul class="text-xs space-y-1.5">
+                {% for e in envios %}
+                <li class="flex gap-2">
+                    <i class="fas {% if e.enviado %}fa-check text-emerald-600{% else %}fa-xmark text-red-500{% endif %} mt-0.5"></i>
+                    <span><strong>{{ e.get_destino_display }}</strong> · {{ e.loja.name|default:"" }}{% if e.user %} {{ e.user.full_name|default:e.user.username }}{% endif %}
+                        <span class="text-gray-500">· semana {{ e.periodo_inicio|date:"d/m" }}–{{ e.periodo_fim|date:"d/m" }} · {{ e.faltas }} falta(s){% if e.manual %} · manual{% endif %} · {{ e.criado_em|date:"d/m H:i" }}</span>
+                        {% if not e.enviado and e.detalhe %}<br><span class="text-red-600">{{ e.detalhe }}</span>{% endif %}</span>
+                </li>
+                {% empty %}
+                <li class="text-gray-500">Nada enviado ainda.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

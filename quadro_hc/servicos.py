@@ -730,3 +730,22 @@ def salvar_carteira(dados, autor=None) -> Carteira:
         outra.lojas.remove(*ids)
     carteira.lojas.set(Sector.objects.filter(id__in=ids))
     return carteira
+
+
+def gerentes_por_loja(hoje=None) -> dict:
+    """{setor_id: [User]} — o(s) gerente(s) de cada loja pela regra do quadro.
+
+    Gerente de vendas ou operacional (ordem 1 e 2): cargo, grupo GERENTES lotado na loja ou ajuste
+    manual de função/loja. Usado pelo alerta semanal de faltas do ponto (25/11/2026).
+    """
+    pessoas, _fora, ajustes = pessoas_do_quadro(hoje)
+    gerentes = ids_gerentes_por_grupo()
+    saida = {}
+    for u in pessoas:
+        aj = ajustes.get(u.id)
+        setor_id = aj.setor_id if aj and aj.setor_id else u.sector_id
+        if setor_id and funcao_da_pessoa(u, aj, gerentes)[0] in (1, 2):
+            saida.setdefault(setor_id, []).append(u)
+    for lista in saida.values():
+        lista.sort(key=lambda u: (funcao_da_pessoa(u, ajustes.get(u.id), gerentes)[0], _norm(nome_completo(u))))
+    return saida
