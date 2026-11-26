@@ -2,6 +2,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
+  buscarImpulsoHome,
   buscarInicio,
   chamados,
   comunicados,
@@ -9,8 +10,9 @@ import {
   listarModulos,
   notificacoes,
   reconhecimentos,
+  social,
 } from '@/services/portal';
-import type { Chamado, Comunicado, ComunicadoResumo, FiltroMural, Notificacao, Pagina } from '@/services/tipos';
+import type { Chamado, Comunicado, ComunicadoResumo, FiltroMural, Notificacao, Pagina, PaginaSocial, PostSocial } from '@/services/tipos';
 
 export const chaves = {
   inicio: ['inicio'] as const,
@@ -25,6 +27,10 @@ export const chaves = {
   modulos: ['modulos'] as const,
   destinatarios: (id: number, situacao: string, busca: string) => ['comunicado', id, 'destinatarios', situacao, busca] as const,
   reconhecimentos: (ver: FiltroMural, busca: string) => ['reconhecimentos', ver, busca] as const,
+  impulsoHome: ['impulso', 'home'] as const,
+  social: ['social'] as const,
+  socialLista: (limite: number) => ['social', 'lista', limite] as const,
+  socialPost: (id: number) => ['social', 'post', id] as const,
 };
 
 export function useInicio() {
@@ -209,5 +215,102 @@ export function useReconhecimentos(ver: FiltroMural, busca: string) {
     initialPageParam: 1,
     getNextPageParam: (ultima) => (ultima.tem_mais ? ultima.pagina + 1 : undefined),
     placeholderData: (anterior) => anterior,
+  });
+}
+
+/** Cartão do Impulso da home (null = não é do Impulso: o cartão some, como no portal). */
+export function useImpulsoHome() {
+  return useQuery({ queryKey: chaves.impulsoHome, queryFn: buscarImpulsoHome, staleTime: 2 * 60_000 });
+}
+
+/** Feed da rede: a home pede 3, a tela do feed 8 por vez; anda para trás pelo id do último. */
+export function useFeedSocial(limite = 8) {
+  return useInfiniteQuery({
+    queryKey: chaves.socialLista(limite),
+    queryFn: ({ pageParam }) => social.listar(pageParam, limite),
+    initialPageParam: null as number | null,
+    getNextPageParam: (ultima) => (ultima.tem_mais && ultima.ultimo ? ultima.ultimo : undefined),
+  });
+}
+
+export function usePostSocial(id: number) {
+  return useQuery({ queryKey: chaves.socialPost(id), queryFn: () => social.post(id), enabled: id > 0 });
+}
+
+type PaginasSocial = { pages: PaginaSocial[]; pageParams: (number | null)[] };
+
+/** Muda um post em todo lugar onde ele aparece (home, feed e a tela do post). */
+function aplicarNoPost(cliente: ReturnType<typeof useQueryClient>, id: number, mudar: (p: PostSocial) => PostSocial | null) {
+  cliente.setQueryData<PostSocial>(chaves.socialPost(id), (p) => (p ? (mudar(p) ?? p) : p));
+  cliente.setQueriesData<PaginasSocial>({ queryKey: [...chaves.social, 'lista'] }, (dados) =>
+    dados?.pages
+      ? {
+          ...dados,
+          pages: dados.pages.map((pg) => ({
+            ...pg,
+            resultados: pg.resultados.flatMap((p) => {
+              if (p.id !== id) return [p];
+              const novo = mudar(p);
+              return novo ? [novo] : [];
+            }),
+          })),
+        }
+      : dados,
+  );
+}
+
+/** Curtir com resposta instantânea (muda antes e confirma com o portal). */
+export function useCurtirPost() {
+  const cliente = useQueryClient();
+  const inverter = (p: PostSocial) => ({ ...p, curti: !p.curti, curtidas: Math.max(0, p.curtidas + (p.curti ? -1 : 1)) });
+  return useMutation({
+    mutationFn: (id: number) => social.curtir(id),
+    onMutate: (id) => aplicarNoPost(cliente, id, inverter),
+    onSuccess: (r, id) => aplicarNoPost(cliente, id, (p) => ({ ...p, curti: r.curti, curtidas: r.curtidas })),
+    onError: (_e, id) => aplicarNoPost(cliente, id, inverter),
+  });
+}
+
+export function useComentarPost(id: number) {
+  const cliente = useQueryClient();
+  return useMutation({
+    mutationFn: (texto: string) => social.comentar(id, texto),
+    onSuccess: ({ comentario, total_comentarios }) => {
+      cliente.setQueryData<PostSocial>(chaves.socialPost(id), (p) =>
+        p ? { ...p, comentarios: [...p.comentarios, comentario], total_comentarios } : p,
+      );
+      // No feed ficam os 3 últimos, como no portal.
+      aplicarNoPost(cliente, id, (p) => ({ ...p, total_comentarios, comentarios: [...p.comentarios, comentario].slice(-3) }));
+    },
+  });
+}
+
+export function useApagarComentario(postId: number) {
+  const cliente = useQueryClient();
+  return useMutation({
+    mutationFn: (comentarioId: number) => social.apagarComentario(comentarioId),
+    onSuccess: ({ total_comentarios }, comentarioId) => {
+      aplicarNoPost(cliente, postId, (p) => ({ ...p, total_comentarios, comentarios: p.comentarios.filter((c) => c.id !== comentarioId) }));
+      void cliente.invalidateQueries({ queryKey: chaves.social });
+    },
+  });
+}
+
+export function useApagarPost() {
+  const cliente = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => social.apagar(id),
+    onSuccess: (_r, id) => {
+      aplicarNoPost(cliente, id, () => null);
+      cliente.removeQueries({ queryKey: chaves.socialPost(id) });
+    },
+  });
+}
+
+export function usePublicarPost() {
+  const cliente = useQueryClient();
+  return useMutation({
+    mutationFn: social.publicar,
+    onSuccess: () => void cliente.invalidateQueries({ queryKey: chaves.social }),
   });
 }

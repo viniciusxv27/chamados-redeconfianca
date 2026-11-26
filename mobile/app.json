@@ -45,8 +45,9 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "O app usa suas fotos para anexar imagens aos chamados.",
-          "cameraPermission": "O app usa a câmera para fotografar e anexar ao chamado."
+          "photosPermission": "O app usa suas fotos e vídeos para anexar aos chamados e publicar no Feed da rede.",
+          "cameraPermission": "O app usa a câmera para fotografar ou filmar e anexar ao chamado ou publicar no Feed da rede.",
+          "microphonePermission": "O app usa o microfone para gravar o som dos vídeos que você publica no Feed da rede."
         }
       ],
       "expo-web-browser",
@@ -57,7 +58,8 @@
           "color": "#FF6B35",
           "defaultChannel": "default"
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,

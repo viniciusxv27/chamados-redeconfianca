@@ -447,8 +447,58 @@ def convite_responder(request, convite_id):
                      'mensagem': next((t for n, t in avisos if n == 'success'), '')})
 
 
+
+# ── Cartão do Impulso na home (impulso/resumo_home.py, 25/11/2026) ───────────────
+# Font Awesome do portal → Ionicons do app (o que não estiver aqui vai como "rocket-outline").
+ICONES_DO_APP = {
+    'fa-bolt': 'flash', 'fa-trophy': 'trophy', 'fa-medal': 'medal', 'fa-award': 'ribbon',
+    'fa-handshake': 'people', 'fa-graduation-cap': 'school', 'fa-lightbulb': 'bulb',
+    'fa-triangle-exclamation': 'warning', 'fa-clock': 'time', 'fa-clipboard-check': 'clipboard',
+    'fa-bullseye': 'locate', 'fa-star': 'star', 'fa-comments': 'chatbubbles', 'fa-play-circle': 'play-circle',
+    'fa-diagram-project': 'git-network', 'fa-rocket': 'rocket', 'fa-user-clock': 'finger-print',
+}
+
+
+def _icone_do_app(fa):
+    nome = next((parte for parte in str(fa or '').split() if parte.startswith('fa-') and parte != 'fa-solid'), '')
+    return ICONES_DO_APP.get(nome, 'rocket-outline')
+
+
+@_api()
+def home(request):
+    """O cartão do Impulso da home do portal: pontuação do mês, faixa, posição e as próximas dicas.
+
+    Pedido à parte (como no portal) para a pontuação não atrasar a home; a posição vem do ranking já
+    calculado (se não estiver pronto, ele é calculado em segundo plano e aparece na próxima vez).
+    """
+    from impulso.resumo_home import contexto_do_cartao
+    try:
+        cartao = contexto_do_cartao(request.user)
+    except Exception:  # noqa: BLE001 — a home do app segue sem o cartão, como a do portal
+        import logging
+        logging.getLogger(__name__).exception('Impulso: cartão da home do app não montado para %s', request.user.pk)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    faixa = cartao['faixa']
+    return Response({
+        'mes': cartao['mes'],
+        'em_conferencia': cartao['em_conferencia'],
+        'percentual': cartao['percentual'],
+        'total': cartao['total'],
+        'maximo': cartao['maximo'],
+        'faixa': {'nome': faixa['nome'], 'cor': faixa['cor'], 'icone': _icone_do_app(faixa['icone'])},
+        'proxima': cartao['proxima'],
+        'posicao': cartao['posicao'],
+        'participantes': cartao['participantes'],
+        'blocos': [{**b, 'icone': _icone_do_app(b['icone'])} for b in cartao['blocos']],
+        'metas': cartao['metas'],
+        'dicas': [{'icone': _icone_do_app(d['icone']), 'tom': d['tom'], 'texto': d['texto'],
+                   'url': d.get('url') or None, 'pontos': d.get('pontos')} for d in cartao['dicas']],
+    })
+
+
 urlpatterns = [
     path('resumo/', resumo, name='impulso_resumo'),
+    path('home/', home, name='impulso_home'),
     path('ranking/', ranking, name='impulso_ranking'),
     path('metas/', metas, name='impulso_metas'),
     path('metas/concluidas/', metas_concluidas, name='impulso_metas_concluidas'),

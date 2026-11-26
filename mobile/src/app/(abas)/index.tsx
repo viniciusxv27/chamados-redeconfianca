@@ -4,6 +4,8 @@
  * os atalhos), comunicados obrigatórios (não aparece para o SUPERADMIN, como os popups
  * do portal), Comunicados Fixados, Reconhecimento (faixa com os 12 mais recentes e o
  * mural), Feed de Comunicados com "Carregar mais" — e, por baixo, os chamados da pessoa.
+ * Desde 25/11/2026, como no portal: o cartão do Impulso logo abaixo do topo (só para quem é do
+ * Impulso) e o Feed da rede (fotos e vídeos, os 3 mais recentes) depois do Reconhecimento.
  */
 import { type Href, router } from 'expo-router';
 import { FlatList, RefreshControl, View } from 'react-native';
@@ -13,7 +15,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CartaoChamado } from '@/components/chamados/cartao-chamado';
 import { EsqueletoPost, PostComunicado } from '@/components/comunicados/post-comunicado';
 import { CartaoReconhecimento } from '@/components/elogios/cartao-reconhecimento';
+import { CartaoImpulso } from '@/components/inicio/cartao-impulso';
 import { NumeroQueConta, TopoInicio } from '@/components/inicio/topo';
+import { BotaoPublicar, EsqueletoPostSocial, PostSocial } from '@/components/social/post-social';
 import {
   Botao,
   Cartao,
@@ -30,7 +34,8 @@ import {
   Texto,
 } from '@/components/ui';
 import { estado, fontes, marca, raios } from '@/constants/theme';
-import { useFeed, useInicio } from '@/hooks/consultas';
+import { chaves, useFeed, useFeedSocial, useInicio } from '@/hooks/consultas';
+import { useQueryClient } from '@tanstack/react-query';
 import { mensagemDoErro } from '@/services/api';
 import { useSessao } from '@/providers/sessao';
 import { useCores } from '@/providers/tema';
@@ -45,6 +50,8 @@ export default function Inicio() {
   const insets = useSafeAreaInsets();
   const inicio = useInicio();
   const feed = useFeed();
+  const rede = useFeedSocial(3);
+  const cliente = useQueryClient();
   const { data } = inicio;
   const pessoa = data?.usuario ?? usuario;
   const posts = feed.data?.pages.flatMap((p) => p.resultados) ?? [];
@@ -56,9 +63,13 @@ export default function Inicio() {
   });
   const barra = useAnimatedStyle(() => ({ opacity: interpolate(rolagem.get(), [30, 80], [0, 1], Extrapolation.CLAMP) }));
 
+  const postsDaRede = rede.data?.pages[0]?.resultados ?? [];
+
   function atualizar() {
     void inicio.refetch();
     void feed.refetch();
+    void rede.refetch();
+    void cliente.invalidateQueries({ queryKey: chaves.impulsoHome });
   }
 
   return (
@@ -71,7 +82,7 @@ export default function Inicio() {
         onScroll={aoRolar}
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: 120, gap: 32 }}
-        refreshControl={<RefreshControl refreshing={inicio.isRefetching || (feed.isRefetching && !feed.isFetchingNextPage)} onRefresh={atualizar} tintColor={marca[500]} colors={[marca[500]]} />}>
+        refreshControl={<RefreshControl refreshing={inicio.isRefetching || rede.isRefetching || (feed.isRefetching && !feed.isFetchingNextPage)} onRefresh={atualizar} tintColor={marca[500]} colors={[marca[500]]} />}>
         {/* Topo em degradê: saudação pela hora, perfil, saldo e atalhos (o estilo novo do portal) */}
         <View style={{ paddingHorizontal: 20 }}>
           <TopoInicio
@@ -111,6 +122,11 @@ export default function Inicio() {
                 </Cartao>
               </Entrada>
             ) : null}
+
+            {/* Cartão do Impulso (só para quem é do Impulso; vem à parte, sem atrasar a home) */}
+            <View style={{ paddingHorizontal: 20, marginBottom: -8 }}>
+              <CartaoImpulso />
+            </View>
 
             {/* Comunicados Fixados */}
             {inicio.isPending ? (
@@ -210,6 +226,29 @@ export default function Inicio() {
                 )}
               </Secao>
             ) : null}
+
+            {/* Feed da rede: fotos e vídeos com curtidas e comentários (os 3 mais recentes) */}
+            <Secao icone="camera" cor="#EC4899" titulo="Feed da rede" subtitulo="Fotos e vídeos da rede" acao="Abrir o feed" aoAgir={() => router.push('/feed' as Href)}>
+              <BotaoPublicar />
+              {rede.isPending ? (
+                <EsqueletoPostSocial />
+              ) : rede.isError && !postsDaRede.length ? (
+                <EstadoErro mensagem={mensagemDoErro(rede.error)} aoTentar={() => void rede.refetch()} />
+              ) : postsDaRede.length ? (
+                <>
+                  {postsDaRede.map((p, i) => (
+                    <Entrada key={p.id} indice={i + 3}>
+                      <PostSocial post={p} />
+                    </Entrada>
+                  ))}
+                  {rede.data?.pages[0]?.tem_mais ? (
+                    <Botao titulo="Ver mais publicações" variante="secundario" icone="images-outline" onPress={() => router.push('/feed' as Href)} />
+                  ) : null}
+                </>
+              ) : (
+                <EstadoVazio icone="camera-outline" titulo="Ninguém postou ainda" texto="Que tal ser o primeiro a compartilhar um momento?" />
+              )}
+            </Secao>
 
             {/* Feed de Comunicados */}
             <Secao icone="radio-outline" cor={marca[500]} titulo="Feed de Comunicados" acao="Mural" aoAgir={() => router.push('/comunicados')}>

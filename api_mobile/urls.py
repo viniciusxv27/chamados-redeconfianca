@@ -26,6 +26,8 @@ urlpatterns = [
     path('notificacoes/lidas/', views.notificacoes_lidas, name='notificacoes_lidas'),
     path('notificacoes/<str:ident>/lida/', views.notificacao_lida, name='notificacao_lida'),
     path('modulos/', views.modulos, name='modulos'),
+    # Feed da rede (/social/ do portal): api_mobile/social.py
+    path('social/', include('api_mobile.social')),
     path('arquivo/<str:assinatura>/', arquivos.baixar, name='arquivo'),
     # Um arquivo por módulo (api_mobile/modulos/<chave>.py), cada um com a regra do próprio app.
     path('m/impulso/', include('api_mobile.modulos.impulso')),

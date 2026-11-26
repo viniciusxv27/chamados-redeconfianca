@@ -6,10 +6,12 @@ import { Platform } from 'react-native';
 import { api } from './api';
 import type {
   Bloqueio,
+  CartaoImpulsoHome,
   Categoria,
   Chamado,
   ChamadoResumo,
   Comentario,
+  ComentarioSocial,
   Comunicado,
   ComunicadoResumo,
   Inicio,
@@ -20,6 +22,8 @@ import type {
   Pagina,
   PaginaDestinatarios,
   PaginaReconhecimentos,
+  PaginaSocial,
+  PostSocial,
   Prioridade,
   SituacaoComunicado,
   Usuario,
@@ -162,3 +166,52 @@ export async function listarModulos() {
   const { data } = await api.get<Modulo[]>('/modulos/');
   return data;
 }
+
+/** Cartão do Impulso da home: null quando a pessoa não é do Impulso ou a conta falhou (204/403). */
+export async function buscarImpulsoHome() {
+  try {
+    const r = await api.get<CartaoImpulsoHome | ''>('/m/impulso/home/');
+    return r.status === 200 && r.data ? r.data : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Feed da rede (/social/ do portal): fotos e vídeos com curtidas e comentários. */
+export const social = {
+  async listar(antes?: number | null, limite?: number) {
+    const { data } = await api.get<PaginaSocial>('/social/', { params: { antes: antes ?? undefined, limite } });
+    return data;
+  },
+  async post(id: number) {
+    const { data } = await api.get<PostSocial>(`/social/${id}/`);
+    return data;
+  },
+  async publicar(campos: { uri: string; nome: string; tipo: string; legenda: string; largura?: number; altura?: number }) {
+    const corpo = new FormData();
+    corpo.append('midia', { uri: campos.uri, name: campos.nome, type: campos.tipo } as unknown as Blob);
+    if (campos.legenda) corpo.append('legenda', campos.legenda);
+    if (campos.largura) corpo.append('largura', String(Math.round(campos.largura)));
+    if (campos.altura) corpo.append('altura', String(Math.round(campos.altura)));
+    const { data } = await api.post<PostSocial>('/social/publicar/', corpo, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 10 * 60_000, // vídeo de até 100 MB no 4G
+    });
+    return data;
+  },
+  async curtir(id: number) {
+    const { data } = await api.post<{ curti: boolean; curtidas: number }>(`/social/${id}/curtir/`);
+    return data;
+  },
+  async comentar(id: number, texto: string) {
+    const { data } = await api.post<{ comentario: ComentarioSocial; total_comentarios: number }>(`/social/${id}/comentar/`, { texto });
+    return data;
+  },
+  async apagar(id: number) {
+    await api.post(`/social/${id}/apagar/`);
+  },
+  async apagarComentario(id: number) {
+    const { data } = await api.post<{ total_comentarios: number }>(`/social/comentario/${id}/apagar/`);
+    return data;
+  },
+};

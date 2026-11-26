@@ -41,6 +41,8 @@ const ROTAS_DE_MODULO: [RegExp, (m: RegExpMatchArray) => string][] = [
   [/^\/gestao-metas\/(\d{4}-\d{2})\/historico\/?$/, (m) => `/modulo/gestao_metas/historico?codigo=${m[1]}`],
   [/^\/gestao-metas\/?$/, () => '/modulo/gestao_metas'],
   [/^\/compliments\/mural\/?$/, () => '/reconhecimento'],
+  [/^\/social\/(\d+)\/?$/, (m) => `/feed/${m[1]}`], // aviso de comentário no Feed da rede
+  [/^\/social\/?$/, () => '/feed'],
 ];
 
 export function abrirNoPortal(caminho: string) {

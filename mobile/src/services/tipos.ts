@@ -199,3 +199,41 @@ export type Categoria = Opcao & { descricao_padrao: string; horas_solucao: numbe
 
 /** Um módulo do portal que a pessoa pode abrir (a API já filtrou pela regra de acesso). */
 export type Modulo = { chave: string; rotulo: string; descricao: string; icone: string; cor: string; rota: string };
+
+/** Cartão do Impulso na home (/m/impulso/home/ ← impulso/resumo_home.py do portal). */
+export type DicaImpulso = { icone: string; tom: 'vermelho' | 'ambar' | 'azul' | 'laranja'; texto: string; url: string | null; pontos: string | null };
+export type CartaoImpulsoHome = {
+  mes: string;
+  em_conferencia: boolean;
+  percentual: number;
+  total: number;
+  maximo: number;
+  faixa: { nome: string; cor: string; icone: string };
+  proxima: { nome: string; falta: number } | null;
+  posicao: number | null;
+  participantes: number | null;
+  blocos: { nome: string; cor: string; icone: string; pct: number; valor: number; max: number }[];
+  metas: { abertas: number; atrasadas: number; vencem_hoje: number };
+  dicas: DicaImpulso[];
+};
+
+/** Feed da rede (/social/ do portal). */
+export type ComentarioSocial = { id: number; autor: Pessoa | null; texto: string; criado_em: string; pode_apagar: boolean };
+export type PostSocial = {
+  id: number;
+  autor: Pessoa | null;
+  tipo: 'IMAGEM' | 'VIDEO';
+  midia: string | null;
+  largura: number | null;
+  altura: number | null;
+  /** altura/largura em % (entre 52,36 e 125, como no portal). */
+  proporcao: number;
+  legenda: string;
+  curtidas: number;
+  curti: boolean;
+  total_comentarios: number;
+  comentarios: ComentarioSocial[];
+  criado_em: string;
+  pode_apagar: boolean;
+};
+export type PaginaSocial = { resultados: PostSocial[]; tem_mais: boolean; ultimo: number | null };
