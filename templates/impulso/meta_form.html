@@ -329,6 +329,13 @@
                 <button type="submit" id="impBotaoEnviar" class="px-4 py-2 rounded-lg bg-orange-600 text-white text-sm hover:bg-orange-700">
                     {% if sou_gestor %}Criar meta{% else %}Enviar solicitação{% endif %}
                 </button>
+                {% comment %}
+                Botão depois do principal: o Enter continua enviando como antes.
+                {% endcomment %}
+                <button type="submit" name="criar_outra" value="1" id="impBotaoCriarOutra"
+                        class="px-4 py-2 rounded-lg bg-white border border-orange-300 text-orange-700 text-sm hover:bg-orange-50">
+                    {% if sou_gestor %}Criar e criar outra{% else %}Enviar e criar outra{% endif %}
+                </button>
             </div>
         </form>
     </div>

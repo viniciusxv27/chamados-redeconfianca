@@ -995,6 +995,12 @@ def meta_create(request):
                     f'A avaliação no fim continua sendo sua.',
                     f'/impulso/metas/{meta.id}/')
             messages.success(request, 'Atividade criada e já disponível no seu Kanban.')
+        # "Salvar e criar outra": volta ao formulário em branco, já com o mesmo
+        # colaborador, para cadastrar a próxima sem refazer a escolha. A tarefa
+        # da agenda não vai junto — cada meta fica ligada só à sua.
+        if request.POST.get('criar_outra') == '1':
+            url = reverse('impulso:meta_create')
+            return redirect(url + '?' + urlencode({'colaborador': colaborador.id}))
         return redirect('impulso:meta_detail', meta_id=meta.id)
 
     # Para o gestor, a tela precisa saber quem é de outra área: essa demanda
