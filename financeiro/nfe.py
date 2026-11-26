@@ -1046,23 +1046,102 @@ def dados_para_devolucao(chave, emitentes):
     if not bruto:
         raise NfeInvalida('O portal não tem o XML completo desta nota. Busque a nota em PIS/Cofins (manifestar '
                           'ciência baixa o XML) ou preencha os itens à mão.')
+    return dados_do_xml(bruto, emitentes, 'devolucao')
+
+
+# ── XML importado (arquivo que a pessoa sobe na lista de notas) ────────────
+TAMANHO_MAXIMO_XML = 5 * 1024 * 1024
+
+
+def abrir_xml_nfe(bruto):
+    """XML de NF-e (nfeProc ou só a NFe) → (infNFe, chave). Levanta NfeInvalida se não for NF-e."""
+    if isinstance(bruto, str):
+        bruto = bruto.encode('utf-8')
+    if not bruto or not bruto.strip():
+        raise NfeInvalida('O arquivo está vazio.')
+    if len(bruto) > TAMANHO_MAXIMO_XML:
+        raise NfeInvalida('O XML passa de 5 MB: não parece uma NF-e.')
     try:
-        raiz = etree.fromstring(bruto.encode('utf-8') if isinstance(bruto, str) else bruto)
+        raiz = etree.fromstring(bruto.lstrip(b'\xef\xbb\xbf').strip(), parser=etree.XMLParser(
+            resolve_entities=False, no_network=True, huge_tree=False))
     except etree.XMLSyntaxError as exc:
-        raise NfeInvalida('O XML guardado da nota original não abre.') from exc
-    inf = raiz.find(f'.//{{{NS}}}infNFe')
+        raise NfeInvalida('O arquivo não é um XML válido.') from exc
+    inf = raiz if etree.QName(raiz).localname == 'infNFe' else raiz.find(f'.//{{{NS}}}infNFe')
     if inf is None:
-        raise NfeInvalida('O XML guardado não é de NF-e.')
-    emit, dest, ide = inf.find(f'{{{NS}}}emit'), inf.find(f'{{{NS}}}dest'), inf.find(f'{{{NS}}}ide')
+        if raiz.find('.//{*}infNFe') is not None or etree.QName(raiz).localname in ('nfeProc', 'NFe'):
+            raise NfeInvalida('O XML não está no padrão da NF-e (namespace do portal fiscal).')
+        if raiz.find('.//{*}infCte') is not None:
+            raise NfeInvalida('Este XML é de CT-e (frete), não de NF-e.')
+        raise NfeInvalida('Este XML não é de NF-e (modelo 55).')
+    if _t(inf.find(f'{{{NS}}}ide'), 'mod') == '65':
+        raise NfeInvalida('Este XML é de NFC-e (cupom, modelo 65): só NF-e (modelo 55) entra aqui.')
+    chave = so_digitos(inf.get('Id', ''))
+    if not chave_valida(chave):
+        raise NfeInvalida('O XML não traz uma chave de acesso válida.')
+    return inf, chave
+
+
+def _lados(inf, emitentes):
+    """Quem é nosso na nota: ('nossa', emitente) se emitimos, ('compra', emitente) se somos o destinatário."""
+    emit, dest = inf.find(f'{{{NS}}}emit'), inf.find(f'{{{NS}}}dest')
     cnpj_emit = _t(emit, 'CNPJ') or _t(emit, 'CPF')
     cnpj_dest = (_t(dest, 'CNPJ') or _t(dest, 'CPF')) if dest is not None else ''
     por_cnpj = {e.cnpj: e for e in emitentes}
-    if cnpj_emit in por_cnpj:          # a nota é nossa: o cliente devolve → entrada
-        nosso, outro, outro_end, saida = por_cnpj[cnpj_emit], dest, 'enderDest', False
-    elif cnpj_dest in por_cnpj:        # nota do fornecedor para nós: devolvemos → saída
-        nosso, outro, outro_end, saida = por_cnpj[cnpj_dest], emit, 'enderEmit', True
-    else:
+    if cnpj_emit in por_cnpj:
+        return 'nossa', por_cnpj[cnpj_emit]
+    if cnpj_dest in por_cnpj:
+        return 'compra', por_cnpj[cnpj_dest]
+    return None, None
+
+
+def resumo_do_xml(bruto, emitentes):
+    """O que a tela mostra ao subir o XML: a nota, de quem para quem e o que dá para fazer com ela.
+
+    'opcoes' vem na ordem de recomendação; cada uma é (acao, título, explicação).
+    """
+    inf, chave = abrir_xml_nfe(bruto)
+    ide, emit, dest = inf.find(f'{{{NS}}}ide'), inf.find(f'{{{NS}}}emit'), inf.find(f'{{{NS}}}dest')
+    lado, nosso = _lados(inf, emitentes)
+    resumo = {
+        'chave': chave, 'numero': _t(ide, 'nNF'), 'serie': _t(ide, 'serie'), 'emissao': _t(ide, 'dhEmi')[:10],
+        'natureza': _t(ide, 'natOp'), 'entrada': _t(ide, 'tpNF') == '0', 'devolucao': _t(ide, 'finNFe') == '4',
+        'emitente_nome': _t(emit, 'xNome'), 'emitente_doc': _t(emit, 'CNPJ') or _t(emit, 'CPF'),
+        'dest_nome': _t(dest, 'xNome'), 'dest_doc': (_t(dest, 'CNPJ') or _t(dest, 'CPF')) if dest is not None else '',
+        'valor': _t(inf.find(f'.//{{{NS}}}ICMSTot'), 'vNF') or '0', 'itens': len(inf.findall(f'{{{NS}}}det')),
+        'autorizada': inf.getparent() is not None and inf.getparent().getparent() is not None
+                      and etree.QName(inf.getparent().getparent()).localname == 'nfeProc',
+        'lado': lado, 'nosso': nosso, 'opcoes': [],
+    }
+    if lado == 'compra':
+        resumo['opcoes'] = [('devolucao', 'Devolver ao fornecedor',
+                             f'Nota de saída de devolução (CFOP {"5202/5411" if _t(emit.find(f"{{{NS}}}enderEmit"), "UF") == nosso.uf else "6202/6411"}) '
+                             f'para {resumo["emitente_nome"] or "o fornecedor"}, com os itens desta compra.')]
+    elif lado == 'nossa':
+        resumo['opcoes'] = [('devolucao', 'Receber devolução do cliente',
+                             f'Nota de entrada de devolução (CFOP 1202/2202) de {resumo["dest_nome"] or "o cliente"}, '
+                             f'com os itens desta venda.'),
+                            ('copia', 'Emitir outra igual',
+                             'Nota nova com o mesmo destinatário, natureza, itens e impostos desta.')]
+    return resumo
+
+
+def dados_do_xml(bruto, emitentes, acao):
+    """Rascunho a partir do XML de uma NF-e: 'devolucao' (nossa → entrada; compra → saída) ou 'copia' (nossa)."""
+    inf, chave = abrir_xml_nfe(bruto)
+    emit, dest, ide = inf.find(f'{{{NS}}}emit'), inf.find(f'{{{NS}}}dest'), inf.find(f'{{{NS}}}ide')
+    lado, nosso = _lados(inf, emitentes)
+    if lado is None:
         raise NfeInvalida('Nenhum emitente cadastrado (que você possa usar) é emitente nem destinatário desta nota.')
+    if acao == 'copia' and lado != 'nossa':
+        raise NfeInvalida('Só dá para emitir outra igual a partir de uma nota que nós emitimos.')
+    if acao not in ('devolucao', 'copia'):
+        raise NfeInvalida('Escolha o que fazer com o XML.')
+    devolucao = acao == 'devolucao'
+    saida = (lado == 'compra') if devolucao else _t(ide, 'tpNF') != '0'
+    if lado == 'nossa':
+        outro, outro_end = dest, 'enderDest'
+    else:
+        outro, outro_end = emit, 'enderEmit'
     if outro is None:
         raise NfeInvalida('A nota original não tem destinatário identificado.')
     end = outro.find(f'{{{NS}}}{outro_end}')
@@ -1072,46 +1151,75 @@ def dados_para_devolucao(chave, emitentes):
     ind_ie = _t(outro, 'indIEDest') or ('1' if ie_outro and ie_outro.upper() != 'ISENTO' else '9')
     if outro_end == 'enderEmit':
         ind_ie = '1' if ie_outro and ie_outro.upper() != 'ISENTO' else '2'
-    numero_original, serie_original = _t(ide, 'nNF'), _t(ide, 'serie')
-    emissao_original = _t(ide, 'dhEmi')[:10]
+    total = inf.find(f'.//{{{NS}}}ICMSTot')
     nota = {
-        'emitente': nosso.pk, 'tipo_operacao': '1' if saida else '0', 'finalidade': '4',
-        'natureza': 'Devolucao de compra' if saida else 'Devolucao de venda',
-        'chave_referenciada': chave,
+        'emitente': nosso.pk, 'tipo_operacao': '1' if saida else '0',
         'dest_documento': _t(outro, 'CNPJ') or _t(outro, 'CPF'), 'dest_nome': _t(outro, 'xNome')[:60],
         'dest_ie': '' if ie_outro.upper() == 'ISENTO' else ie_outro, 'dest_ind_ie': ind_ie,
         'dest_email': _t(outro, 'email')[:60], 'dest_telefone': _t(end, 'fone'),
         'dest_logradouro': _t(end, 'xLgr'), 'dest_numero': _t(end, 'nro') or 'S/N',
         'dest_complemento': _t(end, 'xCpl'), 'dest_bairro': _t(end, 'xBairro'),
         'dest_codigo_municipio': _t(end, 'cMun'), 'dest_municipio': _t(end, 'xMun'), 'dest_uf': uf_outro,
-        'dest_cep': _t(end, 'CEP'), 'presenca': '0', 'forma_pagamento': '90', 'modalidade_frete': '9',
-        'info_complementar': '',
-        'original': {'numero': numero_original, 'serie': serie_original, 'emissao': emissao_original,
-                     'emitente': _t(emit, 'xNome'), 'valor': _t(inf.find(f'.//{{{NS}}}ICMSTot'), 'vNF')},
+        'dest_cep': _t(end, 'CEP'), 'info_complementar': '',
+        'original': {'numero': _t(ide, 'nNF'), 'serie': _t(ide, 'serie'), 'emissao': _t(ide, 'dhEmi')[:10],
+                     'emitente': _t(emit, 'xNome'), 'valor': _t(total, 'vNF'), 'chave': chave},
     }
+    if devolucao:
+        nota.update({'finalidade': '4', 'natureza': 'Devolucao de compra' if saida else 'Devolucao de venda',
+                     'chave_referenciada': chave, 'presenca': '0', 'forma_pagamento': '90', 'modalidade_frete': '9'})
+    else:
+        pag = inf.find(f'.//{{{NS}}}detPag')
+        forma = _t(pag, 'tPag')
+        nota.update({
+            'finalidade': _t(ide, 'finNFe') if _t(ide, 'finNFe') in ('1', '2', '3', '4') else '1',
+            'natureza': _t(ide, 'natOp')[:60] or 'Venda de mercadoria',
+            'chave_referenciada': _t(ide.find(f'{{{NS}}}NFref'), 'refNFe'),
+            'presenca': _t(ide, 'indPres') if _t(ide, 'indPres') in ('0', '1', '2', '3', '4', '5', '9') else '1',
+            'consumidor_final': _t(ide, 'indFinal') == '1',
+            'forma_pagamento': forma if forma in {'90', '01', '15', '17', '03', '04', '99'} else '99',
+            'modalidade_frete': _t(inf.find(f'{{{NS}}}transp'), 'modFrete') or '9',
+            'valor_frete': dec(_t(total, 'vFrete') or '0'), 'valor_seguro': dec(_t(total, 'vSeg') or '0'),
+            'valor_outras': dec(_t(total, 'vOutro') or '0'),
+            'info_complementar': _t(inf.find(f'{{{NS}}}infAdic'), 'infCpl')[:5000],
+        })
     itens = []
     for det in inf.findall(f'{{{NS}}}det'):
         prod = det.find(f'{{{NS}}}prod')
         imposto = det.find(f'{{{NS}}}imposto')
         icms = imposto.find(f'{{{NS}}}ICMS') if imposto is not None else None
         grupo = icms[0] if icms is not None and len(icms) else None
+        pis = imposto.find(f'{{{NS}}}PIS') if imposto is not None else None
+        cofins = imposto.find(f'{{{NS}}}COFINS') if imposto is not None else None
+        g_pis = pis[0] if pis is not None and len(pis) else None
+        g_cofins = cofins[0] if cofins is not None and len(cofins) else None
         cst_original = _t(grupo, 'CST') or _t(grupo, 'CSOSN')
         aliquota = _t(grupo, 'pICMS') or '0'
-        if nosso.simples:
+        regime_ok = cst_original in (CSOSN if nosso.simples else CST_NORMAL)
+        if not devolucao and lado == 'nossa' and regime_ok:
+            cst = cst_original
+        elif nosso.simples:
             cst = '900' if Decimal(aliquota or '0') > 0 else '400'
         else:
             cst = cst_original if cst_original in CST_NORMAL else ('90' if Decimal(aliquota or '0') > 0 else '41')
+        if devolucao:
+            cfop = cfop_de_devolucao(_t(prod, 'CFOP'), saida, mesmo_estado)
+            cst_pis = cst_cofins = '49' if saida else '98'
+            aliq_pis = aliq_cofins = '0'
+        else:
+            cfop = _t(prod, 'CFOP')
+            cst_pis = _t(g_pis, 'CST') if _t(g_pis, 'CST') in CST_PIS else '49'
+            cst_cofins = _t(g_cofins, 'CST') if _t(g_cofins, 'CST') in CST_PIS else '49'
+            aliq_pis, aliq_cofins = _t(g_pis, 'pPIS') or '0', _t(g_cofins, 'pCOFINS') or '0'
         itens.append({
             'codigo': _t(prod, 'cProd'), 'descricao': _t(prod, 'xProd')[:120],
             'ean': _t(prod, 'cEAN') if _t(prod, 'cEAN') != 'SEM GTIN' else '',
-            'ncm': _t(prod, 'NCM'), 'cest': _t(prod, 'CEST'),
-            'cfop': cfop_de_devolucao(_t(prod, 'CFOP'), saida, mesmo_estado),
+            'ncm': _t(prod, 'NCM'), 'cest': _t(prod, 'CEST'), 'cfop': cfop,
             'unidade': _t(prod, 'uCom')[:6] or 'UN', 'quantidade': _t(prod, 'qCom') or '1',
             'valor_unitario': _t(prod, 'vUnCom') or '0', 'valor_desconto': _t(prod, 'vDesc') or '0',
             'origem': _t(grupo, 'orig') or '0', 'cst_icms': cst,
             'reducao_bc_icms': _t(grupo, 'pRedBC') or '0', 'aliquota_icms': aliquota,
-            'cst_pis': '49' if saida else '98', 'aliquota_pis': '0',
-            'cst_cofins': '49' if saida else '98', 'aliquota_cofins': '0', 'info_adicional': '',
+            'cst_pis': cst_pis, 'aliquota_pis': aliq_pis, 'cst_cofins': cst_cofins, 'aliquota_cofins': aliq_cofins,
+            'info_adicional': _t(det, 'infAdProd')[:500] if not devolucao else '',
         })
     if not itens:
         raise NfeInvalida('A nota original não tem itens legíveis.')

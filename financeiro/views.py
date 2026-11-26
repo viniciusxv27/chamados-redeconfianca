@@ -84,12 +84,56 @@ def _contexto_base(request, aba):
     user = request.user
     menu = [(chave, rotulo, icone) for chave, rotulo, icone, _d, _a in AREAS
             if chave != 'baixas' and pode(user, chave)]
-    return {'aba': aba, 'menu_fin': menu, 'e_superadmin': e_superadmin(user), 'pode': {c.replace('.', '_'): pode(user, c) for c in (
+    pode_baixas, pode_fech, pode_pis = pode(user, 'baixas'), _pode_ver_fechamento(user), pode_piscofins(user)
+    grupos, atual = _menu_grupos(user, aba, {c for c, *_r in menu}, pode_baixas, pode_fech, pode_pis)
+    return {'aba': aba, 'menu_fin': menu, 'menu_grupos': grupos, 'menu_atual': atual,
+            'e_superadmin': e_superadmin(user), 'pode': {c.replace('.', '_'): pode(user, c) for c in (
         'pagar.ver', 'pagar.editar', 'pagar.cancelar', 'receber.ver', 'receber.editar', 'receber.cancelar',
         'baixas.baixar', 'baixas.estornar', 'bancos.ver', 'bancos.editar', 'bancos.lancar', 'conciliacao.ver',
         'conciliacao.conciliar', 'cartoes.ver', 'cartoes.conciliar', 'plano.ver', 'plano.editar', 'auditoria.ver',
-        'caixa.ver', 'notas.ver', 'notas.emitir', 'notas.cancelar')}, 'pode_baixas': pode(user, 'baixas'), 'pode_fechamento': _pode_ver_fechamento(user),
-        'pode_piscofins': pode_piscofins(user)}
+        'caixa.ver', 'notas.ver', 'notas.emitir', 'notas.cancelar')}, 'pode_baixas': pode_baixas, 'pode_fechamento': pode_fech,
+        'pode_piscofins': pode_pis}
+
+
+# Menu lateral do Financeiro: (título do grupo, [(aba, rótulo, ícone, condição)]). A aba é também o nome da URL.
+_MENU = [
+    (None, [('painel', 'Painel', 'fa-chart-pie', 'sempre')]),
+    ('Contas', [('pagar', 'A pagar', 'fa-file-invoice-dollar', 'pagar'),
+                ('pagas', 'Pagas', 'fa-circle-check', 'pagar'),
+                ('recorrentes', 'Recorrentes', 'fa-repeat', 'recorrentes'),
+                ('receber', 'A receber', 'fa-hand-holding-dollar', 'receber'),
+                ('recebidas', 'Recebidas', 'fa-circle-check', 'receber'),
+                ('baixas', 'Baixa de títulos', 'fa-list-check', '_baixas')]),
+    ('Caixa e bancos', [('caixa', 'Caixa das lojas', 'fa-store', 'caixa'),
+                        ('fechamento', 'Fechamento de caixa', 'fa-cash-register', '_fechamento'),
+                        ('bancos', 'Contas bancárias', 'fa-building-columns', 'bancos'),
+                        ('conciliacao', 'Conciliação bancária', 'fa-scale-balanced', 'conciliacao'),
+                        ('cartoes', 'Cartões', 'fa-credit-card', 'cartoes')]),
+    ('Fiscal', [('notas', 'Notas fiscais', 'fa-file-invoice', 'notas'),
+                ('piscofins', 'PIS/Cofins', 'fa-file-invoice-dollar', '_piscofins')]),
+    ('Gestão', [('plano', 'Plano de contas', 'fa-sitemap', 'plano'),
+                ('auditoria', 'Rastreabilidade', 'fa-clock-rotate-left', 'auditoria'),
+                ('acessos', 'Acessos', 'fa-user-shield', '_superadmin')]),
+]
+
+
+def _menu_grupos(user, aba, areas, pode_baixas, pode_fech, pode_pis):
+    """Grupos do menu lateral só com o que a pessoa pode abrir, e o item da tela atual."""
+    extra = {'sempre': True, '_baixas': pode_baixas, '_fechamento': pode_fech, '_piscofins': pode_pis,
+             '_superadmin': e_superadmin(user)}
+    grupos, atual = [], None
+    for titulo, itens in _MENU:
+        visiveis = []
+        for chave, rotulo, icone, cond in itens:
+            if not (extra[cond] if cond in extra else cond in areas):
+                continue
+            item = {'aba': chave, 'rotulo': rotulo, 'icone': icone, 'url': reverse(f'financeiro:{chave}'), 'grupo': titulo}
+            visiveis.append(item)
+            if chave == aba:
+                atual = item
+        if visiveis:
+            grupos.append((titulo, visiveis))
+    return grupos, atual
 
 
 def _pode_ver_fechamento(user):

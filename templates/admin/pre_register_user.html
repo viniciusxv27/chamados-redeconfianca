@@ -102,7 +102,37 @@
                         </div>
                         <p class="text-xs text-gray-500 mt-1">Fica salvo no perfil do colaborador.</p>
                     </div>
+                    <div>
+                        <label for="branch_cnpj" class="block text-sm font-medium text-gray-700 mb-2">CNPJ Filial <span class="text-xs text-gray-400">(opcional)</span></label>
+                        <input type="text" id="branch_cnpj" name="branch_cnpj" inputmode="numeric" maxlength="18" autocomplete="off"
+                               value="{{ form_data.branch_cnpj|default:'' }}" list="cnpjsFilial"
+                               placeholder="00.000.000/0000-00"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent tabular-nums">
+                        {% if cnpjs_filial %}
+                        <datalist id="cnpjsFilial">
+                            {% for cnpj, n in cnpjs_filial %}<option value="{{ cnpj }}">{{ n }} colaborador{{ n|pluralize:"es" }}</option>{% endfor %}
+                        </datalist>
+                        <p class="text-xs text-gray-500 mt-1">Clique no campo para escolher um CNPJ já usado em outros cadastros.</p>
+                        {% else %}
+                        <p class="text-xs text-gray-500 mt-1">O mesmo campo "CNPJ Filial" da edição do cadastro.</p>
+                        {% endif %}
+                    </div>
                 </div>
+                <script>
+                (function () {
+                    var c = document.getElementById('branch_cnpj');
+                    if (!c) return;
+                    c.addEventListener('input', function () {
+                        var d = c.value.replace(/\D/g, '').slice(0, 14), f = d;
+                        if (d.length > 12) f = d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})$/, '$1.$2.$3/$4-$5');
+                        else if (d.length > 8) f = d.replace(/^(\d{2})(\d{3})(\d{3})(\d{0,4})$/, '$1.$2.$3/$4');
+                        else if (d.length > 5) f = d.replace(/^(\d{2})(\d{3})(\d{0,3})$/, '$1.$2.$3');
+                        else if (d.length > 2) f = d.replace(/^(\d{2})(\d{0,3})$/, '$1.$2');
+                        if (f !== c.value) c.value = f;
+                        c.setCustomValidity(d && d.length !== 14 ? 'O CNPJ tem 14 números.' : '');
+                    });
+                })();
+                </script>
 
                 {% include 'acess/_xml_gefac_cadastro.html' with xml_contexto='pre_cadastro' %}
 

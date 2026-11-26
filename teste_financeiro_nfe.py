@@ -271,8 +271,12 @@ try:
         n.dest_ind_ie = '1'
 
         print('\n== CERTIFICADO GUARDADO CIFRADO ==')
+        nova_config = ConfiguracaoNFe()
+        t('nasce desligada e em homologação', (nova_config.ligado, nova_config.ambiente) == (False, '2'))
+        # O banco de dev pode já estar configurado de verdade: o teste parte do zero (desfeito no fim).
+        ConfiguracaoNFe.objects.filter(pk=1).delete()
         config = ConfiguracaoNFe.atual()
-        t('nasce desligada e em homologação', (config.ligado, config.ambiente) == (False, '2'))
+        t('configuração do zero: sem certificado', not config.tem_certificado and not config.ligado)
         pfx = certificado(MATRIZ)
         try:
             nfe.guardar_certificado(config, pfx, 'senha-errada')
@@ -569,6 +573,85 @@ try:
         c.post(f'/financeiro/notas/{n2.pk}/excluir/')
         t('nota numerada não se exclui', NotaFiscalEmitida.objects.filter(pk=n2.pk).exists())
 
+        print('\n== MENU LATERAL ==')
+        r = c.get('/financeiro/notas/')
+        corpo = r.content.decode()
+        t('menu lateral agrupado (Contas, Caixa e bancos, Fiscal, Gestão)',
+          all(f'<span>{g}</span>' in corpo for g in ('Contas', 'Caixa e bancos', 'Fiscal', 'Gestão')))
+        t('item da tela atual marcado no menu', 'class="fin-menu-item fin-menu-ativo" data-dica="Notas fiscais" aria-current="page"' in corpo)
+        t('celular: barra com a tela atual abre a folha do menu', 'data-abrir="#finMenuFolha"' in corpo and 'id="finMenuFolha"' in corpo)
+        t('barra de abas horizontal saiu', 'fin-abas-lista' not in corpo and 'fin-tab-ind' not in corpo)
+        t('SUPERADMIN vê Acessos no menu', 'href="/financeiro/acessos/"' in corpo)
+
+        print('\n== IMPORTAR XML ==')
+        t('lista de notas tem a zona de importar XML', 'id="nfeXmlZona"' in corpo and '/financeiro/notas/importar-xml/' in corpo)
+
+        def subir(cliente, conteudo, nome='nota.xml', json=True):
+            extra = {'HTTP_ACCEPT': 'application/json'} if json else {}
+            if isinstance(conteudo, str):
+                conteudo = conteudo.encode()
+            return cliente.post('/financeiro/notas/importar-xml/', {'xml': SimpleUploadedFile(nome, conteudo, 'text/xml')}, **extra)
+
+        r = subir(c, proc_nfe_fornecedor(ch_forn), 'compra-801.xml')
+        j = r.json()
+        t('XML de compra lido: fornecedor, número e valor', r.status_code == 200 and j['resumo']['numero'] == '801'
+          and j['resumo']['emitente_doc'] == FORN and j['resumo']['lado'] == 'compra' and j['resumo']['valor'] == '150.00', j)
+        t('compra recebida → uma opção: devolver ao fornecedor', [o['acao'] for o in j['opcoes']] == ['devolucao'])
+        t('avisa que já existe devolução desta nota (e leva até ela)', any('Já existe devolução' in a for a in j['avisos'])
+          and j['ja_existe'].startswith('/financeiro/notas/'))
+        r = c.get(j['opcoes'][0]['url'])
+        corpo = r.content.decode()
+        t('rascunho de devolução vem preenchido do XML (CFOP 5202, item, fornecedor)', r.status_code == 200
+          and 'value="5202"' in corpo and 'ZZ CAPA SILICONE' in corpo and FORN in corpo and 'compra-801.xml' in corpo)
+        t('rascunho do XML não é gravado antes de salvar', not NotaFiscalEmitida.objects.filter(dest_nome='ZZ DISTRIBUIDORA LTDA', status='RASCUNHO').exists())
+
+        r = subir(c, n2.xml_autorizado, 'venda.xml')
+        j = r.json()
+        t('XML da nossa venda → devolução do cliente ou outra igual', r.status_code == 200 and j['resumo']['lado'] == 'nossa'
+          and [o['acao'] for o in j['opcoes']] == ['devolucao', 'copia'] and not j['avisos'], j)
+        r = c.get(j['opcoes'][1]['url'])
+        corpo = r.content.decode()
+        t('cópia: mesmo cliente, CFOP original e aviso de cópia', r.status_code == 200 and CLIENTE in corpo
+          and 'value="5102"' in corpo and 'Cópia da NF-e' in corpo)
+        copia = nfe.dados_do_xml(n2.xml_autorizado, [emit], 'copia')
+        t('cópia mantém saída, finalidade normal, CST e PIS/Cofins da nota', (copia['nota']['tipo_operacao'], copia['nota']['finalidade'])
+          == ('1', '1') and copia['itens'][0]['cst_icms'] == n2.itens.first().cst_icms
+          and copia['itens'][0]['cst_pis'] == n2.itens.first().cst_pis and not copia['nota']['chave_referenciada'], copia['itens'][0])
+        dev_venda = nfe.dados_do_xml(n2.xml_autorizado, [emit], 'devolucao')
+        t('devolução da venda pelo XML = entrada 1202 referenciando a chave', dev_venda['nota']['tipo_operacao'] == '0'
+          and dev_venda['itens'][0]['cfop'] == '1202' and dev_venda['nota']['chave_referenciada'] == n2.chave)
+        r = c.get(j['opcoes'][0]['url'])
+        t('o mesmo XML serve para a outra opção (fica guardado)', r.status_code == 200 and 'value="1202"' in r.content.decode())
+
+        r = subir(c, proc_nfe_fornecedor(ch_forn), 'compra.xml', json=False)
+        t('sem JavaScript segue direto para o rascunho', r.status_code == 302 and '/financeiro/notas/nova/?xml=' in r['Location'])
+
+        r = subir(c, 'isto nao e xml', 'nota.xml')
+        t('arquivo que não é XML: erro claro', r.status_code == 400 and 'não é um XML válido' in r.json()['erro'])
+        r = subir(c, '<nota/>', 'nota.pdf')
+        t('extensão errada recusada', r.status_code == 400 and '.xml' in r.json()['erro'])
+        r = subir(c, f'<cteProc xmlns="http://www.portalfiscal.inf.br/cte"><CTe><infCte Id="CTe1"/></CTe></cteProc>')
+        t('XML de CT-e recusado', r.status_code == 400 and 'CT-e' in r.json()['erro'])
+        estranha = proc_nfe_fornecedor(ch_forn).replace(f'<CNPJ>{MATRIZ}</CNPJ>', f'<CNPJ>{cnpj_de("777777770001")}</CNPJ>')
+        r = subir(c, estranha)
+        t('nota sem nenhum CNPJ nosso: explica e mostra a nota', r.status_code == 422 and 'Nenhum CNPJ emitente' in r.json()['erro']
+          and r.json()['resumo']['numero'] == '801')
+        r = subir(c, proc_nfe_fornecedor(ch_forn).replace('<mod>55</mod>', '<mod>65</mod>'))
+        t('NFC-e recusada', r.status_code == 400 and 'NFC-e' in r.json()['erro'])
+        xxe = ('<?xml version="1.0"?><!DOCTYPE x [<!ENTITY e SYSTEM "file:///etc/passwd">]>'
+               + proc_nfe_fornecedor(ch_forn).replace('<natOp>VENDA</natOp>', '<natOp>&e;</natOp>'))
+        r = subir(c, xxe)
+        t('entidade externa no XML não é lida (XXE)', 'root:' not in r.content.decode())
+        r = c.get('/financeiro/notas/nova/?xml=nao-existe&acao=devolucao')
+        t('XML expirado avisa e abre o formulário vazio', r.status_code == 200 and 'expirou' in r.content.decode())
+        outro = User.objects.create_user(username='zzz.nfeoutro', email='zzz.nfeoutro@exemplo-teste.local',
+                                         password='S3nha!teste', first_name='ZZ', hierarchy='SUPERADMIN')
+        co = Client()
+        co.force_login(outro)
+        url_alheia = subir(c, proc_nfe_fornecedor(ch_forn)).json()['opcoes'][0]['url']
+        r = co.get(url_alheia)
+        t('XML subido por outra pessoa não abre', 'ZZ CAPA SILICONE' not in r.content.decode() and 'expirou' in r.content.decode())
+
         print('\n== QUEM PODE ==')
         so_ver = User.objects.create_user(username='zzz.nfever', email='zzz.nfever@exemplo-teste.local',
                                           password='S3nha!teste', first_name='ZZ', hierarchy='SUPERVISOR')
@@ -588,6 +671,10 @@ try:
         r = cv.post(f'/financeiro/notas/{rj2.pk}/enviar/')
         rj2.refresh_from_db()
         t('sem notas.emitir não envia', rj2.status == 'RASCUNHO' and len(sefaz.chamadas) == antes_chamadas)
+        r = cv.post('/financeiro/notas/importar-xml/', {'xml': SimpleUploadedFile('a.xml', proc_nfe_fornecedor(ch_forn).encode())},
+                    HTTP_ACCEPT='application/json')
+        t('sem notas.emitir não importa XML', r.status_code in (302, 403))
+        t('sem notas.emitir não vê a zona de importar', 'id="nfeXmlZona"' not in cv.get('/financeiro/notas/').content.decode())
         cv.post(f'/financeiro/notas/{sn.pk}/cancelar/', {'justificativa': 'Tentativa sem permissao de cancelar'})
         sn.refresh_from_db()
         t('sem notas.cancelar não cancela', sn.status == 'AUTORIZADA')

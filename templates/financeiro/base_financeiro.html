@@ -49,33 +49,58 @@
     .fin-hero h1 { color:var(--fin-texto); letter-spacing:-.01em; }
     .fin-migalha { font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--fin-verde-texto); }
 
-    /* ── Abas (fixas sob o topo do portal) ───────────────────────────────── */
-    .fin-abas { position:sticky; top:var(--fin-topo); z-index:25; background:var(--fin-vidro);
-        -webkit-backdrop-filter:saturate(1.4) blur(10px); backdrop-filter:saturate(1.4) blur(10px);
-        border-bottom:1px solid var(--fin-borda); transition:box-shadow .25s; }
-    .fin-abas.fin-grudada { box-shadow:0 6px 16px -10px rgba(16,24,40,.35); }
-    .fin-abas-trilho { position:relative; }
-    .fin-abas-trilho::before, .fin-abas-trilho::after { content:''; position:absolute; top:0; bottom:0; width:28px; z-index:2;
-        pointer-events:none; opacity:0; transition:opacity .2s; }
-    .fin-abas-trilho::before { left:0; background:linear-gradient(90deg, var(--fin-sup), transparent); }
-    .fin-abas-trilho::after { right:0; background:linear-gradient(270deg, var(--fin-sup), transparent); }
-    .fin-abas-trilho.fin-sombra-esq::before, .fin-abas-trilho.fin-sombra-dir::after { opacity:1; }
-    .fin-abas-lista { display:flex; align-items:stretch; gap:.15rem; overflow-x:auto; scrollbar-width:none; position:relative; scroll-behavior:smooth; }
-    .fin-abas-lista::-webkit-scrollbar { display:none; }
-    .fin-tab { position:relative; white-space:nowrap; display:inline-flex; align-items:center; gap:.4rem; padding:.7rem .8rem;
-        font-size:.8125rem; font-weight:600; color:var(--fin-texto-3); border-radius:.6rem .6rem 0 0; transition:color .15s, background .15s; min-height:44px; }
-    .fin-abas.fin-grudada .fin-tab { padding-top:.5rem; padding-bottom:.5rem; min-height:40px; }
-    .fin-tab:hover { color:var(--fin-texto); }
-    .fin-tab i { font-size:.8rem; opacity:.75; }
-    .fin-tab-ativa { color:var(--fin-verde-texto); }
-    .fin-tab-ativa i { opacity:1; }
-    .fin-tab-ativa::after { content:''; position:absolute; left:.6rem; right:.6rem; bottom:0; height:3px; background:var(--fin-verde); border-radius:3px 3px 0 0; }
-    .fin-abas.fin-js .fin-tab-ativa::after { opacity:0; }
-    .fin-tab-ind { position:absolute; bottom:0; left:0; height:3px; width:0; border-radius:3px 3px 0 0; background:linear-gradient(90deg,#10B981,#059669);
-        transition:transform .35s var(--fin-ease), width .35s var(--fin-ease); pointer-events:none; }
-    .fin-tab-ind-fundo { position:absolute; top:6px; bottom:3px; left:0; width:0; border-radius:.6rem; background:var(--fin-verde-bg);
-        transition:transform .35s var(--fin-ease), width .35s var(--fin-ease); pointer-events:none; z-index:0; }
-    .fin-tab > * { position:relative; z-index:1; }
+    /* ── Menu lateral (computador) e barra com folha (celular/tablet) ───── */
+    .fin-miolo { min-width:0; }
+    .fin-menu { display:none; }
+    .fin-menu-barra { position:sticky; top:var(--fin-topo); z-index:25; background:var(--fin-vidro); padding-top:.4rem; padding-bottom:.4rem;
+        -webkit-backdrop-filter:saturate(1.4) blur(10px); backdrop-filter:saturate(1.4) blur(10px); border-bottom:1px solid var(--fin-borda); transition:box-shadow .25s; }
+    .fin-menu-barra.fin-grudada { box-shadow:0 6px 16px -10px rgba(16,24,40,.35); }
+    @media (min-width:1024px) {
+        .fin-corpo { --fin-menu-w:228px; padding-top:1.25rem; display:grid; grid-template-columns:var(--fin-menu-w) minmax(0,1fr); gap:1.25rem; align-items:start; }
+        .fin-corpo.fin-recolhido { --fin-menu-w:58px; gap:1rem; }
+        .fin-corpo.fin-anima { transition:grid-template-columns .3s var(--fin-ease); }
+        .fin-menu { display:block; position:sticky; top:calc(var(--fin-topo) + 1rem); z-index:22; }
+        .fin-menu-barra { display:none; }
+    }
+    .fin-menu-caixa { background:var(--fin-sup); border:1px solid var(--fin-borda); border-radius:1rem; box-shadow:var(--fin-sombra);
+        display:flex; flex-direction:column; max-height:calc(100vh - var(--fin-topo) - 2rem); }
+    .fin-menu-rolagem { overflow-y:auto; overflow-x:hidden; padding:.5rem; scrollbar-width:thin; flex:1; min-height:0; }
+    .fin-menu-grupo + .fin-menu-grupo { margin-top:.35rem; padding-top:.35rem; border-top:1px solid var(--fin-borda-2); }
+    .fin-menu-titulo { font-size:10.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--fin-texto-3);
+        padding:.4rem .6rem .25rem; white-space:nowrap; }
+    .fin-menu-item { position:relative; display:flex; align-items:center; gap:.65rem; padding:.5rem .65rem; border-radius:.6rem; min-height:38px;
+        font-size:.8125rem; font-weight:600; color:var(--fin-texto-2); white-space:nowrap; text-align:left; transition:background .15s, color .15s; }
+    .fin-menu-item i { width:1.1rem; text-align:center; font-size:.85rem; color:var(--fin-texto-3); flex-shrink:0; transition:color .15s, transform .3s var(--fin-ease); }
+    .fin-menu-item span { overflow:hidden; text-overflow:ellipsis; }
+    .fin-menu-item:hover { background:var(--fin-sup-3); color:var(--fin-texto); }
+    .fin-menu-item:hover i { color:var(--fin-verde); }
+    .fin-menu-ativo, .fin-menu-ativo:hover { background:var(--fin-verde-bg); color:var(--fin-verde-texto); }
+    .fin-menu-ativo i, .fin-menu-ativo:hover i { color:var(--fin-verde-texto); }
+    .fin-menu .fin-menu-ativo::before { content:''; position:absolute; left:-.5rem; top:.5rem; bottom:.5rem; width:3px; border-radius:0 3px 3px 0; background:var(--fin-verde); }
+    .fin-menu-pe { border-top:1px solid var(--fin-borda-2); padding:.4rem .5rem .5rem; }
+    /* Recolhido: trilho de ícones; passar o mouse (ou o foco do teclado) abre por cima do conteúdo, sem empurrar a tela. */
+    .fin-menu-caixa { width:100%; transition:width .22s var(--fin-ease), box-shadow .22s; }
+    .fin-recolhido .fin-menu-caixa { width:var(--fin-menu-w); position:relative; z-index:30; }
+    .fin-recolhido .fin-menu-titulo { display:none; }
+    .fin-recolhido .fin-menu-item > span { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+    .fin-recolhido .fin-menu-item { padding-left:0; padding-right:0; justify-content:center; }
+    .fin-recolhido #finMenuRecolher i { transform:rotate(180deg); }
+    .fin-recolhido .fin-menu.fin-espiando .fin-menu-caixa { width:228px; box-shadow:var(--fin-sombra-alta); }
+    .fin-recolhido .fin-menu.fin-espiando .fin-menu-item { padding-left:.65rem; padding-right:.65rem; justify-content:flex-start; }
+    .fin-recolhido .fin-menu.fin-espiando .fin-menu-item > span { position:static; width:auto; height:auto; overflow:hidden; clip:auto; }
+    .fin-recolhido .fin-menu.fin-espiando .fin-menu-titulo { display:block; }
+    .fin-menu-atual { display:flex; align-items:center; gap:.65rem; width:100%; padding:.3rem .35rem; border-radius:.8rem; color:var(--fin-texto); min-height:48px; transition:background .15s; }
+    .fin-menu-atual:hover { background:var(--fin-sup-3); }
+    .fin-menu-atual-icone { width:2.25rem; height:2.25rem; border-radius:.7rem; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;
+        background:var(--fin-verde-bg); color:var(--fin-verde-texto); }
+    .fin-menu-atual-abrir { display:inline-flex; align-items:center; gap:.4rem; padding:.45rem .8rem; border-radius:9999px; font-size:.75rem; font-weight:700;
+        color:var(--fin-texto-2); background:var(--fin-sup); border:1px solid var(--fin-borda); flex-shrink:0; }
+    .fin-folha-item { display:flex; align-items:center; gap:.55rem; padding:.6rem .7rem; border-radius:.75rem; border:1px solid var(--fin-borda); min-height:46px;
+        font-size:.8125rem; font-weight:600; color:var(--fin-texto-2); background:var(--fin-sup); line-height:1.2; transition:background .15s, border-color .15s; }
+    .fin-folha-item i { width:1rem; text-align:center; color:var(--fin-texto-3); flex-shrink:0; }
+    .fin-folha-item:hover { background:var(--fin-sup-2); }
+    .fin-folha-item.fin-menu-ativo { border-color:rgba(5,150,105,.45); }
+    #finMenuFolha .fin-menu-titulo { padding-left:.15rem; }
 
     /* ── Texto, campos e botões ──────────────────────────────────────────── */
     .tabular { font-variant-numeric: tabular-nums; }
@@ -283,7 +308,7 @@
     #rc-conteudo:has(> .fin-app) > div.rounded-md.mb-4 { display:none; }
 
     /* ── Atalhos ─────────────────────────────────────────────────────────── */
-    .fin-atalhos { position:absolute; right:0; top:calc(100% + .4rem); width:16rem; padding:.75rem; z-index:40; display:none; }
+    .fin-atalhos { position:absolute; left:0; bottom:calc(100% + .4rem); width:16rem; padding:.75rem; z-index:40; display:none; }
     .fin-atalhos.aberto { display:block; animation:finAparece .2s var(--fin-ease) both; }
     .fin-atalhos li { display:flex; align-items:center; justify-content:space-between; gap:.5rem; padding:.3rem 0; font-size:.8125rem; color:var(--fin-texto-2); }
 
@@ -341,64 +366,35 @@ window.Fin.brl = function (n) { return Number(n || 0).toLocaleString('pt-BR', {s
     </div>
 </div>
 
-<div class="fin-abas -mx-2 sm:-mx-4 lg:-mx-6 px-1 sm:px-3 lg:px-5 mb-5" id="finAbas">
-    <div class="flex items-center gap-1">
-    <div class="fin-abas-trilho flex-1 min-w-0">
-    <nav class="fin-abas-lista" aria-label="Partes do Financeiro" id="finAbasLista">
-        <span class="fin-tab-ind-fundo" aria-hidden="true"></span>
-        <a href="{% url 'financeiro:painel' %}" class="fin-tab {% if aba == 'painel' %}fin-tab-ativa{% endif %}" {% if aba == 'painel' %}aria-current="page"{% endif %}><i class="fas fa-chart-pie"></i><span>Painel</span></a>
-        {% for chave, rotulo, icone in menu_fin %}
-            {% if chave == 'pagar' %}
-            <a href="{% url 'financeiro:pagar' %}" class="fin-tab {% if aba == 'pagar' %}fin-tab-ativa{% endif %}" {% if aba == 'pagar' %}aria-current="page"{% endif %}><i class="fas {{ icone }}"></i><span>A pagar</span></a>
-            <a href="{% url 'financeiro:pagas' %}" class="fin-tab {% if aba == 'pagas' %}fin-tab-ativa{% endif %}" {% if aba == 'pagas' %}aria-current="page"{% endif %}><i class="fas fa-circle-check"></i><span>Pagas</span></a>
-            {% elif chave == 'recorrentes' %}
-            <a href="{% url 'financeiro:recorrentes' %}" class="fin-tab {% if aba == 'recorrentes' %}fin-tab-ativa{% endif %}" {% if aba == 'recorrentes' %}aria-current="page"{% endif %}><i class="fas {{ icone }}"></i><span>Recorrentes</span></a>
-            {% elif chave == 'receber' %}
-            <a href="{% url 'financeiro:receber' %}" class="fin-tab {% if aba == 'receber' %}fin-tab-ativa{% endif %}" {% if aba == 'receber' %}aria-current="page"{% endif %}><i class="fas {{ icone }}"></i><span>A receber</span></a>
-            <a href="{% url 'financeiro:recebidas' %}" class="fin-tab {% if aba == 'recebidas' %}fin-tab-ativa{% endif %}" {% if aba == 'recebidas' %}aria-current="page"{% endif %}><i class="fas fa-circle-check"></i><span>Recebidas</span></a>
-            {% elif chave == 'caixa' %}
-            <a href="{% url 'financeiro:caixa' %}" class="fin-tab {% if aba == 'caixa' %}fin-tab-ativa{% endif %}" {% if aba == 'caixa' %}aria-current="page"{% endif %}><i class="fas {{ icone }}"></i><span>Caixa das lojas</span></a>
-            {% elif chave == 'bancos' %}
-            <a href="{% url 'financeiro:bancos' %}" class="fin-tab {% if aba == 'bancos' %}fin-tab-ativa{% endif %}" {% if aba == 'bancos' %}aria-current="page"{% endif %}><i class="fas {{ icone }}"></i><span>Contas bancárias</span></a>
-            {% elif chave == 'conciliacao' %}
-            <a href="{% url 'financeiro:conciliacao' %}" class="fin-tab {% if aba == 'conciliacao' %}fin-tab-ativa{% endif %}" {% if aba == 'conciliacao' %}aria-current="page"{% endif %}><i class="fas {{ icone }}"></i><span>Conciliação bancária</span></a>
-            {% elif chave == 'cartoes' %}
-            <a href="{% url 'financeiro:cartoes' %}" class="fin-tab {% if aba == 'cartoes' %}fin-tab-ativa{% endif %}" {% if aba == 'cartoes' %}aria-current="page"{% endif %}><i class="fas {{ icone }}"></i><span>Cartões</span></a>
-            {% elif chave == 'notas' %}
-            <a href="{% url 'financeiro:notas' %}" class="fin-tab {% if aba == 'notas' %}fin-tab-ativa{% endif %}" {% if aba == 'notas' %}aria-current="page"{% endif %}><i class="fas {{ icone }}"></i><span>Notas fiscais</span></a>
-            {% elif chave == 'plano' %}
-            <a href="{% url 'financeiro:plano' %}" class="fin-tab {% if aba == 'plano' %}fin-tab-ativa{% endif %}" {% if aba == 'plano' %}aria-current="page"{% endif %}><i class="fas {{ icone }}"></i><span>Plano de contas</span></a>
-            {% elif chave == 'auditoria' %}
-            <a href="{% url 'financeiro:auditoria' %}" class="fin-tab {% if aba == 'auditoria' %}fin-tab-ativa{% endif %}" {% if aba == 'auditoria' %}aria-current="page"{% endif %}><i class="fas {{ icone }}"></i><span>Rastreabilidade</span></a>
-            {% endif %}
-        {% endfor %}
-        {% if pode_fechamento %}
-        <a href="{% url 'financeiro:fechamento' %}" class="fin-tab {% if aba == 'fechamento' %}fin-tab-ativa{% endif %}" {% if aba == 'fechamento' %}aria-current="page"{% endif %}><i class="fas fa-cash-register"></i><span>Fechamento de caixa</span></a>
-        {% endif %}
-        {% if pode_piscofins %}
-        <a href="{% url 'financeiro:piscofins' %}" class="fin-tab {% if aba == 'piscofins' %}fin-tab-ativa{% endif %}" {% if aba == 'piscofins' %}aria-current="page"{% endif %}><i class="fas fa-file-invoice-dollar"></i><span>PIS/Cofins</span></a>
-        {% endif %}
-        {% if pode_baixas %}
-        <a href="{% url 'financeiro:baixas' %}" class="fin-tab {% if aba == 'baixas' %}fin-tab-ativa{% endif %}" {% if aba == 'baixas' %}aria-current="page"{% endif %}><i class="fas fa-list-check"></i><span>Baixa de títulos</span></a>
-        {% endif %}
-        {% if e_superadmin %}
-        <a href="{% url 'financeiro:acessos' %}" class="fin-tab {% if aba == 'acessos' %}fin-tab-ativa{% endif %}" {% if aba == 'acessos' %}aria-current="page"{% endif %}><i class="fas fa-user-shield"></i><span>Acessos</span></a>
-        {% endif %}
-        <span class="fin-tab-ind" aria-hidden="true"></span>
-    </nav>
-    </div>
-    <div class="relative hidden md:block shrink-0">
-        <button type="button" class="fin-btn-icone" id="finAtalhosBotao" aria-expanded="false" aria-controls="finAtalhos" title="Atalhos de teclado (?)"><i class="fas fa-keyboard"></i></button>
-        <div class="fin-card fin-atalhos" id="finAtalhos" role="dialog" aria-label="Atalhos de teclado">
-            <p class="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1">Atalhos de teclado</p>
-            <ul>
-                <li><span>Buscar nesta tela</span><span class="fin-kbd">/</span></li>
-                <li><span>Novo lançamento</span><span class="fin-kbd">N</span></li>
-                <li><span>Fechar janela</span><span class="fin-kbd">Esc</span></li>
-                <li><span>Mostrar atalhos</span><span class="fin-kbd">?</span></li>
-            </ul>
+{# Celular e tablet: barra fina com a tela atual; o menu abre numa folha. #}
+<div class="fin-abas fin-menu-barra -mx-2 sm:-mx-4 px-2 sm:px-4 mb-4" id="finAbas">
+    <button type="button" class="fin-menu-atual" data-abrir="#finMenuFolha" aria-haspopup="dialog" aria-controls="finMenuFolha">
+        <span class="fin-menu-atual-icone"><i class="fas {% if menu_atual %}{{ menu_atual.icone }}{% else %}fa-coins{% endif %}"></i></span>
+        <span class="min-w-0 flex-1 text-left">
+            <span class="block text-[10.5px] font-bold uppercase tracking-wide text-gray-500 leading-tight">{% if menu_atual and menu_atual.grupo %}{{ menu_atual.grupo }}{% else %}Financeiro{% endif %}</span>
+            <span class="block font-semibold truncate leading-tight">{% if menu_atual %}{{ menu_atual.rotulo }}{% else %}Menu do Financeiro{% endif %}</span>
+        </span>
+        <span class="fin-menu-atual-abrir"><i class="fas fa-grip"></i><span>Menu</span></span>
+    </button>
+</div>
+<div class="fin-modal" id="finMenuFolha" role="dialog" aria-modal="true" aria-labelledby="finMenuFolhaTitulo">
+    <div class="sm:max-w-lg">
+        <div class="px-4 pt-3 pb-2 flex items-center justify-between">
+            <h2 id="finMenuFolhaTitulo" class="font-bold">Menu do Financeiro</h2>
+            <button type="button" class="fin-btn-icone" data-fechar aria-label="Fechar menu"><i class="fas fa-xmark"></i></button>
         </div>
-    </div>
+        <nav class="px-3 pb-4 space-y-3" aria-label="Partes do Financeiro">
+            {% for titulo, itens in menu_grupos %}
+            <div>
+                {% if titulo %}<p class="fin-menu-titulo">{{ titulo }}</p>{% endif %}
+                <ul class="grid grid-cols-2 gap-1.5">
+                    {% for it in itens %}
+                    <li><a href="{{ it.url }}" class="fin-folha-item {% if aba == it.aba %}fin-menu-ativo{% endif %}" {% if aba == it.aba %}aria-current="page"{% endif %}><i class="fas {{ it.icone }}"></i><span>{{ it.rotulo }}</span></a></li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endfor %}
+        </nav>
     </div>
 </div>
 
@@ -415,7 +411,44 @@ window.Fin.brl = function (n) { return Number(n || 0).toLocaleString('pt-BR', {s
     {% endfor %}
 </div>
 
+<div class="fin-corpo">
+    <script>(function (corpo) { var v = null; try { v = localStorage.getItem('finMenuRecolhido'); } catch (e) { /* sem storage */ }
+        if (v === '1' || (v === null && window.innerWidth < 1600)) corpo.classList.add('fin-recolhido'); })(document.currentScript.parentNode);</script>
+    <aside class="fin-menu" id="finMenu" aria-label="Menu do Financeiro">
+        <div class="fin-menu-caixa">
+        <nav class="fin-menu-rolagem" aria-label="Partes do Financeiro">
+            {% for titulo, itens in menu_grupos %}
+            <div class="fin-menu-grupo">
+                {% if titulo %}<p class="fin-menu-titulo"><span>{{ titulo }}</span></p>{% endif %}
+                <ul>
+                    {% for it in itens %}
+                    <li><a href="{{ it.url }}" class="fin-menu-item {% if aba == it.aba %}fin-menu-ativo{% endif %}" data-dica="{{ it.rotulo }}" {% if aba == it.aba %}aria-current="page"{% endif %}><i class="fas {{ it.icone }}" aria-hidden="true"></i><span>{{ it.rotulo }}</span></a></li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endfor %}
+        </nav>
+        <div class="fin-menu-pe">
+            <div class="relative">
+                <button type="button" class="fin-menu-item w-full" id="finAtalhosBotao" aria-expanded="false" aria-controls="finAtalhos" data-dica="Atalhos de teclado (?)"><i class="fas fa-keyboard" aria-hidden="true"></i><span>Atalhos</span></button>
+                <div class="fin-card fin-atalhos" id="finAtalhos" role="dialog" aria-label="Atalhos de teclado">
+                    <p class="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1">Atalhos de teclado</p>
+                    <ul>
+                        <li><span>Buscar nesta tela</span><span class="fin-kbd">/</span></li>
+                        <li><span>Novo lançamento</span><span class="fin-kbd">N</span></li>
+                        <li><span>Fechar janela</span><span class="fin-kbd">Esc</span></li>
+                        <li><span>Mostrar atalhos</span><span class="fin-kbd">?</span></li>
+                    </ul>
+                </div>
+            </div>
+            <button type="button" class="fin-menu-item w-full" id="finMenuRecolher" aria-pressed="false" data-dica="Abrir o menu"><i class="fas fa-angles-left" aria-hidden="true"></i><span>Recolher menu</span></button>
+        </div>
+        </div>
+    </aside>
+    <div class="fin-miolo">
 {% block fin_conteudo %}{% endblock %}
+    </div>
+</div>
 </div>
 
 <script>
@@ -457,38 +490,41 @@ window.Fin.brl = function (n) { return Number(n || 0).toLocaleString('pt-BR', {s
     grudaQuando(abas);
     document.querySelectorAll('.fin-ferramentas').forEach(grudaQuando);
 
-    /* ── Abas: indicador que desliza e sombras de rolagem ── */
+    /* ── Menu lateral: recolher (lembrado neste navegador) e dica com o nome quando recolhido ── */
     (function () {
-        var lista = document.getElementById('finAbasLista');
-        if (!lista) return;
-        var trilho = lista.parentNode, ind = lista.querySelector('.fin-tab-ind'), fundo = lista.querySelector('.fin-tab-ind-fundo');
-        var ativa = lista.querySelector('.fin-tab-ativa');
-        abas.classList.add('fin-js');
-        function mover(alvo, comFundo) {
-            if (!alvo) { ind.style.width = '0'; return; }
-            var x = alvo.offsetLeft, w = alvo.offsetWidth;
-            ind.style.transform = 'translateX(' + (x + 10) + 'px)'; ind.style.width = Math.max(w - 20, 8) + 'px';
-            fundo.style.transform = 'translateX(' + x + 'px)'; fundo.style.width = (comFundo ? w : 0) + 'px';
-            fundo.style.opacity = comFundo ? '1' : '0';
+        var corpo = app && app.querySelector('.fin-corpo'), botao = document.getElementById('finMenuRecolher');
+        if (!corpo || !botao) return;
+        function pintar() {
+            var r = corpo.classList.contains('fin-recolhido');
+            botao.setAttribute('aria-pressed', r ? 'true' : 'false');
+            botao.querySelector('span').textContent = r ? 'Abrir menu' : 'Recolher menu';
+            botao.setAttribute('data-dica', r ? 'Abrir o menu' : 'Recolher o menu');
+            botao.setAttribute('aria-label', r ? 'Abrir o menu' : 'Recolher o menu');
         }
-        function sombras() {
-            trilho.classList.toggle('fin-sombra-esq', lista.scrollLeft > 4);
-            trilho.classList.toggle('fin-sombra-dir', lista.scrollLeft + lista.clientWidth < lista.scrollWidth - 4);
+        botao.addEventListener('click', function () {
+            corpo.classList.add('fin-anima');
+            corpo.classList.toggle('fin-recolhido');
+            try { localStorage.setItem('finMenuRecolhido', corpo.classList.contains('fin-recolhido') ? '1' : '0'); } catch (e) { /* sem storage */ }
+            pintar(); esconderDica();
+            setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 320);
+        });
+        pintar();
+        // Recolhido: o mouse parado sobre o trilho (ou o foco do teclado) abre o menu por cima; sair fecha.
+        var menu = document.getElementById('finMenu'), timer = null;
+        function espiar(abre, ja) {
+            clearTimeout(timer);
+            if (!corpo.classList.contains('fin-recolhido')) { menu.classList.remove('fin-espiando'); return; }
+            if (ja) menu.classList.toggle('fin-espiando', abre);
+            else timer = setTimeout(function () { menu.classList.toggle('fin-espiando', abre); }, abre ? 180 : 120);
         }
-        if (ativa) {
-            var semAnim = ind.style.transition; ind.style.transition = 'none'; fundo.style.transition = 'none';
-            mover(ativa, true);
-            requestAnimationFrame(function () { ind.style.transition = semAnim; fundo.style.transition = ''; });
-            var meio = ativa.offsetLeft - (lista.clientWidth - ativa.offsetWidth) / 2;
-            lista.scrollLeft = Math.max(0, meio);
-        }
-        lista.addEventListener('mouseover', function (e) { var a = e.target.closest('.fin-tab'); if (a) mover(a, true); });
-        lista.addEventListener('focusin', function (e) { var a = e.target.closest('.fin-tab'); if (a) mover(a, true); });
-        lista.addEventListener('mouseleave', function () { mover(ativa, true); });
-        lista.addEventListener('focusout', function () { mover(ativa, true); });
-        lista.addEventListener('scroll', sombras, {passive: true});
-        window.addEventListener('resize', function () { mover(ativa, true); sombras(); });
-        sombras();
+        function esconderDica() { espiar(false, true); }
+        menu.addEventListener('mouseenter', function () { espiar(true); });
+        menu.addEventListener('mouseleave', function () { espiar(false); });
+        menu.addEventListener('focusin', function () { espiar(true, true); });
+        menu.addEventListener('focusout', function (e) { if (!menu.contains(e.relatedTarget)) espiar(false, true); });
+        // A tela atual aparece no menu mesmo quando a lista é mais alta que a janela.
+        var ativo = menu.querySelector('.fin-menu-ativo'), rol = menu.querySelector('.fin-menu-rolagem');
+        if (ativo && ativo.offsetTop > rol.clientHeight - 40) rol.scrollTop = ativo.offsetTop - rol.clientHeight / 2;
     })();
 
     /* ── Avisos ── */

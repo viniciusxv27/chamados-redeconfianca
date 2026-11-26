@@ -24,6 +24,8 @@
 </div>
 {% endif %}
 
+{% if pode.notas_emitir and tem_emitente %}{% include 'financeiro/_nfe_importar_xml.html' %}{% endif %}
+
 <div class="fin-ferramentas mb-3">
     <form method="get" class="fin-card p-2.5 sm:p-3 flex items-center gap-2 flex-wrap">
         <label class="fin-busca flex-1 min-w-[12rem]">

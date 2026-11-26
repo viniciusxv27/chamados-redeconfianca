@@ -49,47 +49,112 @@
 
         <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <h4 class="font-medium text-blue-900 mb-3 flex items-center text-sm">
-                <i class="fas fa-plus mr-2"></i> Adicionar documento
+                <i class="fas fa-plus mr-2"></i> Adicionar documentos
             </h4>
-            <form method="post" action="{% url 'admin_upload_user_document' alvo.id %}" enctype="multipart/form-data"
-                  class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+            <form method="post" action="{% url 'admin_upload_user_document' alvo.id %}" enctype="multipart/form-data" id="docEnvio{{ alvo.id }}" data-doc-envio>
                 {% csrf_token %}
                 <input type="hidden" name="voltar" value="{{ request.path }}">
-                <div>
-                    <label class="block text-xs font-medium text-blue-900 mb-1" for="docCategoria{{ alvo.id }}">Categoria</label>
-                    <select id="docCategoria{{ alvo.id }}" name="categoria" class="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white text-sm">
-                        <option value="">Pelo nome do documento</option>
-                        {% for valor, rotulo in categorias_para_escolher %}<option value="{{ valor }}">{{ rotulo }}</option>{% endfor %}
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-blue-900 mb-1" for="docTipo{{ alvo.id }}">Tipo</label>
-                    <select id="docTipo{{ alvo.id }}" name="document_type" class="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white text-sm">
-                        <option value="">Outro (livre)</option>
-                        {% for rd in required_documents %}<option value="{{ rd.id }}">{{ rd.name }}</option>{% endfor %}
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-blue-900 mb-1" for="docNome{{ alvo.id }}">Nome (se "Outro")</label>
-                    <input id="docNome{{ alvo.id }}" type="text" name="document_name" placeholder="Ex: Contrato"
-                           class="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white text-sm">
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-blue-900 mb-1" for="docArquivo{{ alvo.id }}">Arquivo</label>
-                    <input id="docArquivo{{ alvo.id }}" type="file" name="file" required accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
-                           class="w-full text-sm text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:bg-blue-500 file:text-white hover:file:bg-blue-600">
-                </div>
-                <div class="sm:col-span-2 lg:col-span-4 flex justify-end">
-                    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm inline-flex items-center">
-                        <i class="fas fa-upload mr-2"></i> Enviar documento
+                <div class="space-y-3" data-doc-linhas></div>
+                <div class="flex flex-wrap items-center justify-between gap-2 mt-3">
+                    <button type="button" data-doc-mais class="px-3 py-2 rounded-lg border border-blue-300 bg-white text-blue-700 hover:bg-blue-100 text-sm font-medium inline-flex items-center">
+                        <i class="fas fa-plus mr-2"></i> Adicionar mais
+                    </button>
+                    <button type="submit" data-doc-enviar class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm inline-flex items-center disabled:opacity-60">
+                        <i class="fas fa-upload mr-2"></i> <span>Enviar documento</span>
                     </button>
                 </div>
             </form>
-            <p class="text-xs text-blue-600 mt-2">Formatos aceitos: PDF, imagem ou Word (máx. 20MB). Atestados e declarações enviados em "Solicitações ao DP" entram aqui sozinhos quando o DP aprova.</p>
+            <template id="docLinhaModelo{{ alvo.id }}">
+                <div class="doc-linha relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end p-3 rounded-lg bg-white/70 border border-blue-200" data-doc-linha>
+                    <p class="sm:col-span-2 lg:col-span-4 -mb-1 flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-blue-800">
+                        <span data-doc-titulo>Documento 1</span>
+                        <button type="button" data-doc-tirar class="w-8 h-8 -my-1.5 -mr-1.5 rounded-lg text-blue-400 hover:text-red-600 hover:bg-red-50 normal-case" aria-label="Tirar esta linha" title="Tirar esta linha"><i class="fas fa-xmark"></i></button>
+                    </p>
+                    <div>
+                        <label class="block text-xs font-medium text-blue-900 mb-1" data-for="categoria">Categoria</label>
+                        <select data-nome="categoria" class="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white text-sm">
+                            <option value="">Pelo nome do documento</option>
+                            {% for valor, rotulo in categorias_para_escolher %}<option value="{{ valor }}">{{ rotulo }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-blue-900 mb-1" data-for="document_type">Tipo</label>
+                        <select data-nome="document_type" class="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white text-sm">
+                            <option value="">Outro (livre)</option>
+                            {% for rd in required_documents %}<option value="{{ rd.id }}">{{ rd.name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-blue-900 mb-1" data-for="document_name">Nome (se "Outro")</label>
+                        <input type="text" data-nome="document_name" placeholder="Ex: Contrato" maxlength="200"
+                               class="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-blue-900 mb-1" data-for="file">Arquivo(s)</label>
+                        <input type="file" data-nome="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
+                               class="w-full text-sm text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:bg-blue-500 file:text-white hover:file:bg-blue-600">
+                    </div>
+                    <p class="sm:col-span-2 lg:col-span-4 -mt-1 text-xs text-blue-800 break-words" data-doc-arquivos hidden></p>
+                </div>
+            </template>
+            <p class="text-xs text-blue-600 mt-2">Formatos aceitos: PDF, imagem ou Word (máx. 20MB cada). Use "Adicionar mais" para mandar vários documentos de uma vez; numa linha dá para escolher vários arquivos do mesmo tipo. Atestados e declarações enviados em "Solicitações ao DP" entram aqui sozinhos quando o DP aprova.</p>
         </div>
     </div>
 </div>
 <script>
+(function () {
+    var form = document.getElementById('docEnvio{{ alvo.id }}'), modelo = document.getElementById('docLinhaModelo{{ alvo.id }}');
+    if (!form || !modelo) return;
+    var caixa = form.querySelector('[data-doc-linhas]'), enviar = form.querySelector('[data-doc-enviar]'), proximo = 0;
+    function arquivos() {
+        return Array.prototype.reduce.call(caixa.querySelectorAll('input[type=file]'), function (n, f) { return n + f.files.length; }, 0);
+    }
+    function renumerar() {
+        var linhas = caixa.querySelectorAll('[data-doc-linha]');
+        Array.prototype.forEach.call(linhas, function (l, i) {
+            l.querySelector('[data-doc-titulo]').textContent = 'Documento ' + (i + 1);
+            l.querySelector('[data-doc-tirar]').hidden = linhas.length < 2;
+        });
+        var n = arquivos();
+        enviar.querySelector('span').textContent = n > 1 ? 'Enviar ' + n + ' documentos' : 'Enviar documento';
+    }
+    function nova(foca) {
+        var i = proximo++, frag = modelo.content.cloneNode(true), linha = frag.querySelector('[data-doc-linha]');
+        linha.querySelectorAll('[data-nome]').forEach(function (c) {
+            c.name = c.getAttribute('data-nome') + '_' + i;
+            c.id = 'doc{{ alvo.id }}_' + c.name;
+        });
+        linha.querySelectorAll('[data-for]').forEach(function (l) { l.htmlFor = 'doc{{ alvo.id }}_' + l.getAttribute('data-for') + '_' + i; });
+        caixa.appendChild(frag);
+        renumerar();
+        if (foca) { var s = linha.querySelector('select'); if (s) s.focus(); linha.scrollIntoView({block: 'nearest', behavior: 'smooth'}); }
+        return linha;
+    }
+    form.querySelector('[data-doc-mais]').addEventListener('click', function () { nova(true); });
+    caixa.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-doc-tirar]'); if (!b) return;
+        b.closest('[data-doc-linha]').remove(); renumerar();
+    });
+    caixa.addEventListener('change', function (e) {
+        if (e.target.type !== 'file') return;
+        var lista = e.target.closest('[data-doc-linha]').querySelector('[data-doc-arquivos]'), nomes = Array.prototype.map.call(e.target.files, function (f) { return f.name; });
+        lista.hidden = !nomes.length;
+        lista.textContent = nomes.length > 1 ? nomes.length + ' arquivos (um documento cada): ' + nomes.join(', ') : nomes.join('');
+        renumerar();
+    });
+    form.addEventListener('submit', function (e) {
+        if (!arquivos()) { e.preventDefault(); alert('Escolha ao menos um arquivo.'); return; }
+        // Linhas sem arquivo não vão.
+        caixa.querySelectorAll('[data-doc-linha]').forEach(function (l) {
+            if (!l.querySelector('input[type=file]').files.length) l.querySelectorAll('[name]').forEach(function (c) { c.disabled = true; });
+        });
+        enviar.disabled = true;
+        enviar.querySelector('i').className = 'fas fa-circle-notch fa-spin mr-2';
+        enviar.querySelector('span').textContent = 'Enviando…';
+    });
+    window.addEventListener('pageshow', function (e) { if (e.persisted) { enviar.disabled = false; enviar.querySelector('i').className = 'fas fa-upload mr-2'; renumerar(); } });
+    nova(false);
+})();
 document.querySelectorAll('#documentos .js-doc-categoria').forEach(function (sel) {
     var antes = sel.value;
     sel.addEventListener('change', function () {

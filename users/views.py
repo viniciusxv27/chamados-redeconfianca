@@ -1615,6 +1615,27 @@ def _voltar_documentos(request, target_id):
     return redirect('view_user_profile', user_id=target_id)
 
 
+def _cnpj_filial(valor):
+    """CNPJ Filial digitado → (texto para gravar, ok). 14 números saem no formato 00.000.000/0000-00."""
+    texto = (valor or '').strip()
+    digitos = ''.join(c for c in texto if c.isdigit())
+    if not digitos:
+        return '', True
+    if len(digitos) != 14:
+        return texto[:20], False
+    return f'{digitos[:2]}.{digitos[2:5]}.{digitos[5:8]}/{digitos[8:12]}-{digitos[12:]}', True
+
+
+def _cnpjs_filial_em_uso():
+    """Os CNPJs de filial já usados nos cadastros (formatados, sem repetir), para sugerir na tela."""
+    vistos = {}
+    for valor in User.objects.exclude(branch_cnpj='').values_list('branch_cnpj', flat=True):
+        formatado, ok = _cnpj_filial(valor)
+        if ok and formatado:
+            vistos[formatado] = vistos.get(formatado, 0) + 1
+    return sorted(vistos.items(), key=lambda x: -x[1])[:50]
+
+
 @login_required
 def pre_register_user_view(request):
     """Cria um pré-cadastro (dados básicos) e gera um link para o colaborador concluir."""
@@ -1657,6 +1678,7 @@ def pre_register_user_view(request):
         'pre_reg_rejected': pre_reg_rejected,
         'pre_reg_stats': pre_reg_stats,
         'required_documents': RequiredDocument.objects.filter(is_active=True),
+        'cnpjs_filial': _cnpjs_filial_em_uso(),
     }
 
     if request.method == 'POST':
@@ -1668,6 +1690,7 @@ def pre_register_user_view(request):
         phone = request.POST.get('phone', '').strip()
         admission_date = request.POST.get('admission_date', '').strip()
         salary = _parse_salary(request.POST.get('salary'))
+        branch_cnpj, branch_cnpj_ok = _cnpj_filial(request.POST.get('branch_cnpj'))
 
         context = {
             'sectors': Sector.objects.all(),
@@ -1685,6 +1708,9 @@ def pre_register_user_view(request):
             return render(request, 'admin/pre_register_user.html', context)
         if User.objects.filter(email=email).exists():
             messages.error(request, 'Já existe um usuário com este e-mail.')
+            return render(request, 'admin/pre_register_user.html', context)
+        if not branch_cnpj_ok:
+            messages.error(request, 'O CNPJ Filial precisa ter 14 números (ou fique vazio).')
             return render(request, 'admin/pre_register_user.html', context)
 
         # Segurança: não permitir hierarquia acima da do próprio usuário
@@ -1733,6 +1759,7 @@ def pre_register_user_view(request):
                 phone=phone,
                 admission_date=admission_date if admission_date else None,
                 salary=salary,
+                branch_cnpj=branch_cnpj,
                 is_active=False,  # inativo até o colaborador concluir o pré-cadastro
                 pre_registration_status=User.PRE_REG_PENDING,
                 pre_registration_token=token,
@@ -2905,39 +2932,57 @@ def admin_upload_user_document_view(request, user_id):
 
     from .documentos_acesso import pode_ver_categoria
     target = get_object_or_404(User, id=user_id)
-    uploaded = request.FILES.get('file')
-    if not uploaded:
+    # Vários documentos de uma vez: cada linha da tela vem com sufixo (_0, _1…) e pode trazer
+    # mais de um arquivo. Sem sufixo é o formulário antigo, de um documento só.
+    indices = sorted({int(k.rsplit('_', 1)[1]) for k in request.FILES if k.startswith('file_') and k.rsplit('_', 1)[1].isdigit()})
+    linhas = [(f'_{i}', n) for n, i in enumerate(indices, start=1)]
+    if not linhas and request.FILES.get('file'):
+        linhas = [('', 1)]
+    if not linhas:
         messages.error(request, 'Selecione um arquivo para enviar.')
         return _voltar_documentos(request, target.id)
 
-    ok, err = _document_is_valid(uploaded)
-    if not ok:
-        messages.error(request, err)
-        return _voltar_documentos(request, target.id)
+    categorias = dict(CATEGORIAS_DOCUMENTO)
+    tipos = {str(t.id): t for t in RequiredDocument.objects.filter(
+        id__in=[v for v in (request.POST.get(f'document_type{suf}') for suf, _n in linhas) if v and v.isdigit()])}
+    enviados, falhas, escondidos = [], [], []
+    for sufixo, numero in linhas:
+        prefixo = f'Linha {numero}: ' if len(linhas) > 1 else ''
+        categoria = request.POST.get(f'categoria{sufixo}', '')
+        if categoria and (categoria not in categorias or not pode_ver_categoria(request.user, categoria)):
+            falhas.append(f'{prefixo}você não tem acesso a esta categoria de documento.')
+            continue
+        doc_type = tipos.get(request.POST.get(f'document_type{sufixo}') or '')
+        custom_name = request.POST.get(f'document_name{sufixo}', '').strip()
+        for uploaded in request.FILES.getlist(f'file{sufixo}'):
+            ok, err = _document_is_valid(uploaded)
+            if not ok:
+                falhas.append(f'{prefixo}{err}')
+                continue
+            documento = _store_user_document(target, uploaded, document_type=doc_type, document_name=custom_name,
+                                             uploaded_by=request.user)
+            if categoria:
+                UserDocument.objects.filter(pk=documento.pk).update(categoria=categoria)
+            elif not pode_ver_categoria(request.user, documento.categoria_efetiva):
+                escondidos.append(documento)
+            enviados.append(documento)
 
-    doc_type_id = request.POST.get('document_type') or None
-    doc_type = RequiredDocument.objects.filter(id=doc_type_id).first() if doc_type_id else None
-    custom_name = request.POST.get('document_name', '').strip()
-    categoria = request.POST.get('categoria', '')
-    if categoria and (categoria not in dict(CATEGORIAS_DOCUMENTO) or not pode_ver_categoria(request.user, categoria)):
-        messages.error(request, 'Você não tem acesso a esta categoria de documento.')
-        return _voltar_documentos(request, target.id)
-
-    documento = _store_user_document(target, uploaded, document_type=doc_type, document_name=custom_name, uploaded_by=request.user)
-
-    if categoria:
-        UserDocument.objects.filter(pk=documento.pk).update(categoria=categoria)
-    elif not pode_ver_categoria(request.user, documento.categoria_efetiva):
-        messages.info(request, f'Pelo nome, o documento ficou em "{dict(CATEGORIAS_DOCUMENTO)[documento.categoria_efetiva]}", '
-                               'que tem acesso restrito: você não vai vê-lo na lista.')
-
-    log_action(
-        request.user,
-        'USER_UPDATE',
-        f'Documento adicionado ao colaborador {target.full_name} ({target.email})',
-        request
-    )
-    messages.success(request, 'Documento adicionado com sucesso.')
+    for documento in escondidos:
+        messages.info(request, f'Pelo nome, "{documento.display_name}" ficou em '
+                               f'"{categorias[documento.categoria_efetiva]}", que tem acesso restrito: você não vai vê-lo na lista.')
+    if enviados:
+        nomes = ', '.join(d.display_name or d.original_filename for d in enviados[:5]) + (
+            f' e mais {len(enviados) - 5}' if len(enviados) > 5 else '')
+        log_action(
+            request.user,
+            'USER_UPDATE',
+            f'{len(enviados)} documento(s) adicionado(s) ao colaborador {target.full_name} ({target.email}): {nomes}',
+            request
+        )
+        messages.success(request, 'Documento adicionado com sucesso.' if len(enviados) == 1
+                         else f'{len(enviados)} documentos adicionados.')
+    for falha in falhas:
+        messages.error(request, f'Não enviado — {falha}')
     return _voltar_documentos(request, target.id)
 
 

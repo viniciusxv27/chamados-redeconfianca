@@ -43,7 +43,8 @@
                 </div>
             </div>
             
-            <form method="post" enctype="multipart/form-data" class="p-6">
+            <form method="post" enctype="multipart/form-data" class="p-6" id="formEditarUsuario"
+                  data-erro-ao-salvar="{% for m in messages %}{% if m.level_tag == 'error' %}1{% endif %}{% endfor %}">
                 {% csrf_token %}
                 
                 <!-- Personal Information -->
@@ -1461,4 +1462,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
 {# Digitou o CEP, o endereço chega pronto — a mesma busca do pré-cadastro. #}
 {% include 'users/_cep_autocompletar.html' %}
+{# O que foi digitado e não salvo fica no navegador, por pessoa editada (some ao salvar). #}
+{% include 'admin/_rascunho_local.html' with rascunho_form='formEditarUsuario' rascunho_chave='edicao-usuario' rascunho_id=user_to_edit.id %}
 {% endblock %}
