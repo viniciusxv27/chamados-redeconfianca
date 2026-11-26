@@ -69,6 +69,16 @@
                 <i class="fas fa-rotate mr-1"></i>Buscar notas novas
             </button>
         </form>
+        {% if pode_importar_notas %}
+        <form method="post" action="{% url 'financeiro:nota_importar_sefaz' %}" id="pcParaNotas" title="Traz as NF-e deste mês para a lista de Notas fiscais (as NFS-e ficam só aqui)">
+            {% csrf_token %}<input type="hidden" name="competencia" value="{{ competencia|date:'Y-m' }}">
+            <input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+            <button class="w-full px-4 py-2 bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 text-sm font-semibold rounded-lg">
+                <i class="fas fa-file-import mr-1"></i>Enviar NF-e de {{ competencia|date:"m/Y" }} para Notas fiscais
+            </button>
+        </form>
+        <a href="{% url 'financeiro:notas' %}?origem=TERCEIRO&competencia={{ competencia|date:'Y-m' }}" class="text-[12px] text-emerald-700 hover:underline text-center">Ver em Notas fiscais</a>
+        {% endif %}
         </div>
     </div>
 </div>

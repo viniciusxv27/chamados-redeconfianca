@@ -2,12 +2,12 @@
 {% load caixa_tags %}
 {% block fin_titulo %}{% if nota.numero %}NF-e {{ nota.numero }}{% else %}Rascunho de NF-e{% endif %}{% endblock %}
 {% block fin_cabecalho %}{% if nota.numero %}NF-e nº {{ nota.numero }} <span class="text-gray-400 font-semibold text-base">série {{ nota.serie }}</span>{% else %}Rascunho #{{ nota.pk }}{% endif %}{% endblock %}
-{% block fin_subtitulo %}{{ nota.rotulo_tipo }} · {{ nota.natureza|default:'sem natureza' }} · {{ nota.emitente.nome_fantasia|default:nota.emitente.razao_social }}{% endblock %}
+{% block fin_subtitulo %}{{ nota.rotulo_tipo }} · {{ nota.natureza|default:'sem natureza' }} · {{ nota.nosso_rotulo }}{% endblock %}
 {% block fin_acoes %}
 <a href="{% url 'financeiro:notas' %}" class="fin-btn fin-btn-claro"><i class="fas fa-arrow-left"></i>Notas</a>
-<a href="{% url 'financeiro:nota_danfe' nota.pk %}" target="_blank" rel="noopener" class="fin-btn fin-btn-claro"><i class="fas fa-file-pdf"></i>{% if nota.xml_autorizado %}DANFE{% else %}Prévia da DANFE{% endif %}</a>
+{% if nota.xml_autorizado or not nota.importada and nota.emitente_id %}<a href="{% url 'financeiro:nota_danfe' nota.pk %}" target="_blank" rel="noopener" class="fin-btn fin-btn-claro"><i class="fas fa-file-pdf"></i>{% if nota.xml_autorizado %}DANFE{% else %}Prévia da DANFE{% endif %}</a>{% endif %}
 {% if nota.xml_autorizado or nota.xml_assinado %}<a href="{% url 'financeiro:nota_xml' nota.pk %}" class="fin-btn fin-btn-claro"><i class="fas fa-file-code"></i>XML</a>{% endif %}
-{% if pode.notas_emitir and not nota.recebida %}<a href="{% url 'financeiro:nota_nova' %}?copiar={{ nota.pk }}" class="fin-btn fin-btn-claro" title="Nova nota com os mesmos dados"><i class="fas fa-copy"></i><span class="hidden sm:inline">Copiar</span></a>{% endif %}
+{% if pode.notas_emitir and not nota.recebida and nota.emitente_id %}<a href="{% url 'financeiro:nota_nova' %}?copiar={{ nota.pk }}" class="fin-btn fin-btn-claro" title="Nova nota com os mesmos dados"><i class="fas fa-copy"></i><span class="hidden sm:inline">Copiar</span></a>{% endif %}
 {% endblock %}
 {% block fin_css %}{% include 'financeiro/_nfe_css.html' %}{% endblock %}
 
@@ -51,10 +51,16 @@
         <div {% if nota.recebida %}class="order-2 mt-4"{% endif %}>
         <p class="nfe-secao"><i class="fas fa-building"></i>{% if nota.recebida %}Destinatário (nós){% else %}Emitente{% endif %}</p>
         <dl class="nfe-dl">
+            {% if nota.emitente_id %}
             <div><dt>Razão social</dt><dd>{{ nota.emitente.razao_social }}</dd></div>
             <div><dt>CNPJ · IE</dt><dd class="tabular">{{ nota.emitente.cnpj_formatado }} · {{ nota.emitente.ie }}</dd></div>
             <div><dt>Regime</dt><dd>{{ nota.emitente.get_crt_display }}</dd></div>
             <div><dt>Endereço</dt><dd>{{ nota.emitente.logradouro }}, {{ nota.emitente.numero }} · {{ nota.emitente.municipio }}/{{ nota.emitente.uf }}</dd></div>
+            {% else %}
+            <div><dt>Razão social</dt><dd>{{ nota.nosso_nome|default:'—' }}</dd></div>
+            <div><dt>CNPJ</dt><dd class="tabular">{{ nota.nosso_cnpj_formatado|default:'—' }}</dd></div>
+            <div class="sm:col-span-2"><dt>Cadastro</dt><dd class="text-xs text-gray-500">CNPJ ainda não cadastrado como emitente: a nota fica sem loja.{% if e_superadmin %} <a class="fin-link" href="{% url 'financeiro:notas_configuracao' %}#emitentes">Cadastrar emitente</a>{% endif %}</dd></div>
+            {% endif %}
         </dl>
         </div>
         <div {% if nota.recebida %}class="order-1"{% else %}class="mt-4"{% endif %}>
@@ -116,10 +122,10 @@
             </form>
             <a href="{% url 'financeiro:nota_editar' nota.pk %}" class="fin-btn fin-btn-claro w-full"><i class="fas fa-pen"></i>Editar</a>
         {% endif %}
-        {% if nota.status == 'AUTORIZADA' and pode.notas_emitir and not nota.devolucao %}
+        {% if nota.status == 'AUTORIZADA' and pode.notas_emitir and not nota.devolucao and nota.emitente_id and not nota.so_resumo %}
             <a href="{% url 'financeiro:nota_nova' %}?tipo=devolucao&devolver={{ nota.chave }}" class="fin-btn fin-btn-claro w-full"><i class="fas fa-rotate-left"></i>{% if nota.recebida %}Devolver ao fornecedor{% elif nota.tipo_operacao == '1' %}Receber devolução{% else %}Gerar devolução{% endif %}</a>
         {% endif %}
-        {% if nota.chave and nota.status != 'RASCUNHO' and not nota.recebida %}
+        {% if nota.chave and nota.status != 'RASCUNHO' and not nota.recebida and nota.emitente_id %}
             <form method="post" action="{% url 'financeiro:nota_consultar' nota.pk %}">{% csrf_token %}
                 <button class="fin-btn fin-btn-claro w-full" {% if not config.ligado %}disabled title="Emissão desligada"{% endif %}><i class="fas fa-rotate"></i>Consultar na SEFAZ</button></form>
         {% endif %}
@@ -133,6 +139,7 @@
             {% endif %}
         {% endif %}
         </div>
+        {% if nota.so_resumo %}<p class="text-[11px] text-sky-700 mt-2"><i class="fas fa-circle-info mr-1"></i>Só o resumo da SEFAZ: sem itens, XML nem DANFE. Manifeste ciência na <a class="fin-link" href="{% url 'financeiro:piscofins' %}?visao=sefaz">visão SEFAZ do PIS/Cofins</a> para baixar o XML e puxe da SEFAZ de novo.</p>{% elif nota.importada and not nota.emitente_id and nota.status == 'AUTORIZADA' %}<p class="text-[11px] text-gray-500 mt-2">Para gerar devolução, o CNPJ {{ nota.nosso_cnpj_formatado }} precisa estar cadastrado como emitente.</p>{% endif %}
         {% if nota.importada %}<p class="text-[11px] text-gray-500 mt-2">{% if nota.recebida %}Recebida de {{ nota.dest_nome }} e importada pelo XML: cancelamento e correção são com quem emitiu.{% else %}Emitida em outro sistema e importada pelo XML: cancelamento e carta de correção se fazem lá. Se cancelar, importe aqui o XML do cancelamento.{% endif %}</p>{% endif %}
         {% if nota.status == 'REJEITADA' %}<p class="text-[11px] text-gray-500 mt-2">O número {{ nota.numero }} fica reservado para esta nota: corrija e envie de novo.</p>{% endif %}
     </section>

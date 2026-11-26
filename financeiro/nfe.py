@@ -889,6 +889,8 @@ def consultar(nota, transporte=None):
         raise NfeInvalida('A nota ainda não foi enviada.')
     if nota.origem == 'TERCEIRO':
         raise NfeInvalida('Nota recebida de terceiro: a consulta é feita por quem emitiu.')
+    if not nota.emitente_id:
+        raise NfeInvalida('Cadastre o CNPJ desta nota como emitente para consultá-la na SEFAZ.')
     if config.ambiente != nota.ambiente:
         config.ambiente = nota.ambiente   # pergunta no ambiente em que a nota foi emitida (não grava)
     uf = nota.emitente.uf
@@ -1262,7 +1264,8 @@ def _cancelamento_importado(raiz, emitentes_ids):
     if ret is None or _t(ret, 'cStat') not in ('135', '136', '155'):
         raise NfeInvalida('O XML do cancelamento não traz o registro da SEFAZ.')
     chave = _t(inf, 'chNFe')
-    nota = NotaFiscalEmitida.objects.filter(chave=chave, emitente_id__in=emitentes_ids).first()
+    from django.db.models import Q
+    nota = NotaFiscalEmitida.objects.filter(Q(emitente_id__in=emitentes_ids) | Q(emitente__isnull=True), chave=chave).first()
     if nota is None:
         raise NfeInvalida('Cancelamento de uma nota que não está na lista: importe antes o XML da nota.')
     if nota.status == 'CANCELADA':
@@ -1276,12 +1279,14 @@ def _cancelamento_importado(raiz, emitentes_ids):
     return 'cancelada', nota, []
 
 
-def importar_nota(bruto, emitentes, usuario=None):
+def importar_nota(bruto, emitentes, usuario=None, contexto=None):
     """Grava na lista uma NF-e já autorizada, a partir do XML (nfeProc com protocolo).
 
     Nossa (emitida em outro sistema) → origem PROPRIA; de terceiro para um CNPJ nosso → TERCEIRO,
-    com o tipo do nosso ponto de vista (a venda do fornecedor é entrada para nós).
-    Devolve (situação, nota, avisos): 'importada', 'repetida' ou 'cancelada'. Levanta NfeInvalida.
+    com o tipo do nosso ponto de vista (a venda do fornecedor é entrada para nós). O CNPJ nosso não
+    precisa ser emitente cadastrado (ver _nosso_lado); se for, a nota fica dele e da loja dele.
+    Nota que estava só com o resumo da SEFAZ é completada ('completada').
+    Devolve (situação, nota, avisos): 'importada', 'completada', 'repetida' ou 'cancelada'. Levanta NfeInvalida.
     """
     from .models_nfe import ItemNotaFiscal, NotaFiscalEmitida
     emitentes = list(emitentes)
@@ -1304,21 +1309,19 @@ def importar_nota(bruto, emitentes, usuario=None):
         raise NfeInvalida(f'A SEFAZ não autorizou esta nota ({cstat} {_t(prot, "xMotivo")}).')
     if _t(prot, 'chNFe') and _t(prot, 'chNFe') != chave:
         raise NfeInvalida('O protocolo do XML é de outra chave.')
-    lado, nosso = _lados(inf, emitentes)
-    if lado is None:
-        raise NfeInvalida('Nenhum CNPJ emitente cadastrado (que você possa usar) aparece nesta nota, nem como emitente '
-                          'nem como destinatário. O SUPERADMIN cadastra os CNPJs em Notas fiscais → Configuração.')
+    contexto = contexto if contexto is not None else {}
+    lado, nosso = _nosso_lado(inf, emitentes, contexto)
     ja = NotaFiscalEmitida.objects.filter(chave=chave).first()
-    if ja is not None:
+    if ja is not None and not ja.so_resumo:
         return 'repetida', ja, []
 
     ide, emit, dest = inf.find(f'{{{NS}}}ide'), inf.find(f'{{{NS}}}emit'), inf.find(f'{{{NS}}}dest')
     tot = inf.find(f'{{{NS}}}total/{{{NS}}}ICMSTot')
     if lado == 'nossa':
-        outro, outro_end = dest, 'enderDest'
+        outro, outro_end, nos = dest, 'enderDest', emit
         tipo = '0' if _t(ide, 'tpNF') == '0' else '1'
     else:
-        outro, outro_end = emit, 'enderEmit'
+        outro, outro_end, nos = emit, 'enderEmit', dest
         tipo = '1' if _t(ide, 'tpNF') == '0' else '0'     # a saída do fornecedor é a nossa entrada
     end = outro.find(f'{{{NS}}}{outro_end}') if outro is not None else None
     ie_outro = _t(outro, 'IE')
@@ -1330,7 +1333,8 @@ def importar_nota(bruto, emitentes, usuario=None):
     forma = _t(pag, 'tPag')
     status = 'AUTORIZADA' if cstat in AUTORIZADA else 'DENEGADA'
     nota = NotaFiscalEmitida(
-        origem='PROPRIA' if lado == 'nossa' else 'TERCEIRO', emitente=nosso, loja=nosso.loja,
+        origem='PROPRIA' if lado == 'nossa' else 'TERCEIRO', emitente=nosso, loja=nosso.loja if nosso else None,
+        nosso_cnpj=(_t(nos, 'CNPJ') or _t(nos, 'CPF'))[:14], nosso_nome=_t(nos, 'xNome')[:60],
         tipo_operacao=tipo, finalidade=_t(ide, 'finNFe') if _t(ide, 'finNFe') in ('1', '2', '3', '4') else '1',
         natureza=_t(ide, 'natOp')[:60], chave_referenciada=_t(ide.find(f'{{{NS}}}NFref'), 'refNFe')[:44],
         dest_documento=(_t(outro, 'CNPJ') or _t(outro, 'CPF') or _t(outro, 'idEstrangeiro'))[:14],
@@ -1380,15 +1384,27 @@ def importar_nota(bruto, emitentes, usuario=None):
             valor_icms=_dec_ou_zero(_t(grupo, 'vICMS')), valor_pis=_dec_ou_zero(_t(g_pis, 'vPIS')),
             valor_cofins=_dec_ou_zero(_t(g_cofins, 'vCOFINS'))))
     avisos = []
-    if lado == 'nossa' and nota.numero:
+    if nosso is None:
+        avisos.append(f'O CNPJ {nota.nosso_cnpj_formatado or "nosso"} não é emitente cadastrado: a nota entrou sem loja '
+                      f'(só quem vê todas as lojas a enxerga). Cadastrando o CNPJ, ela passa para a loja dele.')
+    if lado == 'nossa' and nosso is not None and nota.numero:
         campo = 'proximo_numero' if nota.ambiente == '1' else 'proximo_numero_homologacao'
         if nota.serie == nosso.serie and nota.numero >= getattr(nosso, campo):
             avisos.append(f'A nota nº {nota.numero} usa a série {nota.serie}, a mesma do portal, e o próximo número do '
                           f'portal é {getattr(nosso, campo)}: acerte em Configuração para não repetir número.')
     from django.db import IntegrityError
+    situacao = 'importada'
+    if ja is not None:                 # estava só com o resumo: completa a mesma linha
+        nota.pk, nota.criado_em, nota.criado_por = ja.pk, ja.criado_em, ja.criado_por or usuario
+        nota.historico = list(ja.historico or []) + nota.historico[-1:]
+        if ja.status == 'CANCELADA':
+            nota.status, nota.cancelada_em = 'CANCELADA', ja.cancelada_em
+        situacao = 'completada'
     try:
         with transaction.atomic():
             nota.save()
+            if ja is not None:
+                nota.itens.all().delete()
             for item in itens:
                 item.nota = nota
             ItemNotaFiscal.objects.bulk_create(itens)
@@ -1397,5 +1413,116 @@ def importar_nota(bruto, emitentes, usuario=None):
         if ja is not None:
             return 'repetida', ja, []
         raise NfeInvalida(f'O número {nota.numero} série {nota.serie} já existe na lista para '
-                          f'{nosso.razao_social} com outra chave.') from exc
-    return 'importada', nota, avisos
+                          f'{nota.nosso_rotulo} com outra chave.') from exc
+    return situacao, nota, avisos
+
+
+def raizes_da_empresa():
+    """Raízes (8 primeiros números) dos CNPJs da empresa: emitentes, certificados e CNPJs vistos na SEFAZ."""
+    from contagem_caixa.models import NotaRecebida
+
+    from .models_nfe import ConfiguracaoNFe, EmitenteNFe
+    raizes = {c[:8] for c in EmitenteNFe.objects.values_list('cnpj', flat=True) if len(c) == 14}
+    raizes |= {c[:8] for c in NotaRecebida.objects.order_by().values_list('cnpj_destinatario', flat=True).distinct()
+               if len(c or '') == 14}
+    try:
+        cert = ConfiguracaoNFe.atual().certificado_cnpj
+        if len(cert or '') == 14:
+            raizes.add(cert[:8])
+        from contagem_caixa import sefaz
+        raizes |= {c[:8] for c in sefaz.cnpjs_monitorados() if len(c or '') == 14}
+    except Exception:  # noqa: BLE001 — sem configuração: valem os outros
+        pass
+    return raizes
+
+
+def _nosso_lado(inf, emitentes, contexto):
+    """('nossa'|'compra', EmitenteNFe ou None). Sem emitente cadastrado vale a raiz do CNPJ da empresa;
+    sem nem isso, a nota é tratada como recebida (somos o destinatário)."""
+    from .models_nfe import EmitenteNFe
+    lado, nosso = _lados(inf, emitentes)
+    if lado is not None:
+        return lado, nosso
+    if 'todos' not in contexto:
+        contexto['todos'] = list(EmitenteNFe.objects.all())
+    if _lados(inf, contexto['todos'])[0] is not None:
+        raise NfeInvalida('A nota é de um CNPJ emitente de loja que você não acessa.')
+    if 'raizes' not in contexto:
+        contexto['raizes'] = raizes_da_empresa()
+    emit, dest = inf.find(f'{{{NS}}}emit'), inf.find(f'{{{NS}}}dest')
+    cnpj_emit = _t(emit, 'CNPJ')
+    if cnpj_emit[:8] in contexto['raizes']:
+        return 'nossa', None
+    return 'compra', None
+
+
+def importar_resumo(recebida, emitentes, usuario=None, contexto=None):
+    """Nota da SEFAZ que só tem o resumo (sem ciência manifestada): entra na lista sem itens nem XML.
+
+    Quando o XML completo chegar (PIS/Cofins → manifestar ciência), puxar de novo completa a linha.
+    """
+    from .models_nfe import EmitenteNFe, NotaFiscalEmitida
+    contexto = contexto if contexto is not None else {}
+    ja = NotaFiscalEmitida.objects.filter(chave=recebida.chave).first()
+    if ja is not None:
+        return 'repetida', ja, []
+    por_cnpj = {e.cnpj: e for e in emitentes}
+    nosso = por_cnpj.get(recebida.cnpj_destinatario)
+    if nosso is None:
+        if 'todos' not in contexto:
+            contexto['todos'] = list(EmitenteNFe.objects.all())
+        if any(e.cnpj == recebida.cnpj_destinatario for e in contexto['todos']):
+            raise NfeInvalida('A nota é de um CNPJ emitente de loja que você não acessa.')
+    prot_num = prot_data = ''
+    try:
+        raiz = etree.fromstring((recebida.xml_resumo or '').encode('utf-8'), parser=etree.XMLParser(
+            resolve_entities=False, no_network=True)) if recebida.xml_resumo else None
+    except etree.XMLSyntaxError:
+        raiz = None
+    if raiz is not None:
+        prot_num, prot_data = _t(raiz, 'nProt'), _t(raiz, 'dhRecbto')
+    numero = so_digitos(recebida.numero)
+    status = {'CANCELADA': 'CANCELADA', 'DENEGADA': 'DENEGADA'}.get(recebida.situacao, 'AUTORIZADA')
+    nota = NotaFiscalEmitida(
+        origem='TERCEIRO', emitente=nosso, loja=nosso.loja if nosso else None,
+        nosso_cnpj=recebida.cnpj_destinatario[:14], nosso_nome=(nosso.razao_social if nosso else '')[:60],
+        tipo_operacao='1' if recebida.tipo_operacao == '0' else '0', finalidade='1', natureza='',
+        dest_documento=recebida.emitente_cnpj[:14], dest_nome=(recebida.emitente_nome or '')[:60],
+        dest_ie=(recebida.emitente_ie or '')[:14], dest_ind_ie='1' if recebida.emitente_ie else '9',
+        valor_total=recebida.valor or ZERO, ambiente='1', serie=int(so_digitos(recebida.serie) or 0) or None,
+        numero=int(numero) if numero else None, chave=recebida.chave, status=status,
+        cstat='100' if status == 'AUTORIZADA' else '', motivo='Resumo da SEFAZ (sem o XML completo)',
+        protocolo=prot_num[:20], emitida_em=recebida.emissao, autorizada_em=_data_hora(prot_data),
+        cancelada_em=timezone.now() if status == 'CANCELADA' else None, criado_por=usuario,
+    )
+    nota.anotar('Importada do resumo da SEFAZ (PIS/Cofins)')
+    nota.save()
+    return 'resumo', nota, []
+
+
+def importar_da_sefaz(recebidas, emitentes, usuario=None):
+    """Traz para a lista as NF-e recebidas na SEFAZ (contagem_caixa.NotaRecebida) — XML completo ou só o resumo.
+
+    Devolve {'conta': {situação: n}, 'erros': [(nota recebida, motivo)], 'notas': [NotaFiscalEmitida…]}.
+    """
+    contexto, conta, erros, notas = {}, {}, [], []
+    emitentes = list(emitentes)
+    for recebida in recebidas:
+        try:
+            if recebida.xml_completo:
+                situacao, nota, _avisos = importar_nota(recebida.xml_completo, emitentes, usuario, contexto)
+            else:
+                situacao, nota, _avisos = importar_resumo(recebida, emitentes, usuario, contexto)
+        except NfeInvalida as exc:
+            erros.append((recebida, str(exc)))
+            conta['erro'] = conta.get('erro', 0) + 1
+            continue
+        if recebida.situacao == 'CANCELADA' and nota.status != 'CANCELADA':
+            nota.status, nota.cancelada_em = 'CANCELADA', nota.cancelada_em or timezone.now()
+            nota.anotar('Cancelada segundo a SEFAZ (PIS/Cofins)')
+            nota.save(update_fields=['status', 'cancelada_em', 'historico', 'atualizado_em'])
+            if situacao == 'repetida':
+                situacao = 'cancelada'
+        conta[situacao] = conta.get(situacao, 0) + 1
+        notas.append(nota)
+    return {'conta': conta, 'erros': erros, 'notas': notas}

@@ -619,7 +619,7 @@ try:
         t('o XML fica guardado e a importação na rastreabilidade', rec.xml_autorizado.startswith('<nfeProc')
           and LogFinanceiro.objects.filter(area='notas', acao='CRIAR', objeto_id=str(rec.pk)).exists())
         r = subir(c, ('de-novo.xml', compra_xml))
-        t('importar a mesma nota de novo não duplica', r.json()['conta'] == {'importada': 0, 'repetida': 1, 'cancelada': 0, 'erro': 0}
+        t('importar a mesma nota de novo não duplica', r.json()['conta'] == {'importada': 0, 'completada': 0, 'repetida': 1, 'cancelada': 0, 'erro': 0}
           and NotaFiscalEmitida.objects.filter(chave=ch_forn).count() == 1)
         r = c.get('/financeiro/notas/?origem=TERCEIRO')
         corpo = r.content.decode()
@@ -695,7 +695,35 @@ try:
         r = subir(c, ('ct.xml', '<cteProc xmlns="http://www.portalfiscal.inf.br/cte"><CTe><infCte Id="CTe1"/></CTe></cteProc>'))
         t('XML de CT-e recusado', 'CT-e' in r.json()['resultados'][0]['erro'])
         estranha = autorizado(proc_nfe_fornecedor(ch_z), ch_z).replace(f'<CNPJ>{MATRIZ}</CNPJ>', f'<CNPJ>{cnpj_de("777777770001")}</CNPJ>')
-        t('nota sem nenhum CNPJ nosso: explica', 'Nenhum CNPJ emitente' in subir(c, ('x.xml', estranha)).json()['resultados'][0]['erro'])
+        OUTRO_CNPJ = cnpj_de('777777770001')
+        ch_e = chave_independente(f'321905{FORN}55001000000810112345678')
+        estranha = autorizado(proc_nfe_fornecedor(ch_e), ch_e).replace(f'<CNPJ>{MATRIZ}</CNPJ>', f'<CNPJ>{OUTRO_CNPJ}</CNPJ>')
+        j = subir(c, ('sem-emitente.xml', estranha)).json()
+        sem = NotaFiscalEmitida.objects.filter(chave=ch_e).first()
+        t('sem emitente cadastrado a nota entra assim mesmo (recebida, sem loja)', j['conta']['importada'] == 1 and sem is not None
+          and (sem.origem, sem.emitente_id, sem.loja_id, sem.nosso_cnpj) == ('TERCEIRO', None, None, OUTRO_CNPJ), j)
+        t('…e avisa que o CNPJ não é emitente cadastrado', any('não é emitente cadastrado' in a for a in j['resultados'][0]['avisos']))
+        r = c.get(f'/financeiro/notas/{sem.pk}/')
+        corpo = r.content.decode()
+        t('tela da nota sem emitente abre (nosso CNPJ do XML, sem devolução nem consulta)', r.status_code == 200
+          and 'ainda não cadastrado como emitente' in corpo and 'Devolver ao fornecedor' not in corpo
+          and 'Consultar na SEFAZ' not in corpo and c.get(f'/financeiro/notas/{sem.pk}/danfe/').status_code == 200)
+        r = c.get('/financeiro/notas/')
+        t('lista mostra a nota sem loja com o CNPJ', r.status_code == 200 and 'sem loja' in r.content.decode())
+        FILIAL_NOVA = MATRIZ[:8] + '009900'
+        ch_f = chave_independente(f'322611{MATRIZ}55001000000777187654321')
+        filial_xml = (n2.xml_autorizado.replace(n2.chave, ch_f).replace(f'<nNF>{n2.numero}</nNF>', '<nNF>777</nNF>')
+                      .replace(f'<CNPJ>{MATRIZ}</CNPJ>', f'<CNPJ>{FILIAL_NOVA}</CNPJ>', 1))
+        j = subir(c, ('filial.xml', filial_xml)).json()
+        fil = NotaFiscalEmitida.objects.filter(chave=ch_f).first()
+        t('CNPJ da mesma raiz da empresa como emitente = nota nossa (importada) sem emitente',
+          fil is not None and (fil.origem, fil.emitente_id, fil.nosso_cnpj) == ('PROPRIA', None, FILIAL_NOVA), j)
+        nova_filial = EmitenteNFe.objects.create(loja=loja_es, cnpj=FILIAL_NOVA, razao_social='ZZ REDE FILIAL', ie='083000099',
+                                                 crt='3', logradouro='Rua F', numero='9', bairro='Centro',
+                                                 codigo_municipio='3205309', municipio='Vitoria', uf='ES', cep='29000000')
+        fil.refresh_from_db()
+        t('cadastrar o CNPJ como emitente puxa as notas importadas para ele e a loja', fil.emitente_id == nova_filial.pk
+          and fil.loja_id == loja_es.pk)
         xxe = ('<?xml version="1.0"?><!DOCTYPE x [<!ENTITY e SYSTEM "file:///etc/passwd">]>'
                + compra_xml.replace('<natOp>VENDA</natOp>', '<natOp>&e;</natOp>'))
         r = subir(c, ('xxe.xml', xxe))
@@ -717,6 +745,60 @@ try:
           and dev_venda['itens'][0]['cfop'] == '1202' and dev_venda['nota']['chave_referenciada'] == n2.chave)
         t('formulário de devolução sobe o XML e abre a devolução', 'data-nfe-xml-abrir' in c.get('/financeiro/notas/nova/?tipo=devolucao').content.decode())
 
+        print('\n== PUXAR DA SEFAZ (PIS/Cofins) ==')
+        from datetime import timezone as tz
+        quando = datetime(2019, 5, 3, 12, 0, tzinfo=tz.utc)
+        def recebida(numero, xml_completo=True, situacao='AUTORIZADA', cnpj=MATRIZ):
+            ch = chave_independente(f'321905{FORN}55001{numero:09d}112345678')
+            completo = autorizado(proc_nfe_fornecedor(ch), ch).replace(f'<CNPJ>{MATRIZ}</CNPJ>', f'<CNPJ>{cnpj}</CNPJ>')
+            return NotaRecebida.objects.create(
+                chave=ch, cnpj_destinatario=cnpj, emitente_cnpj=FORN, emitente_nome='ZZ DISTRIBUIDORA LTDA', emitente_ie='082000001',
+                modelo='55', serie='1', numero=str(numero), valor=Decimal('150'), emissao=quando, situacao=situacao, tipo_operacao='1',
+                xml_resumo=(f'<resNFe xmlns="{NS}" versao="1.01"><chNFe>{ch}</chNFe><nProt>1352600000{numero}</nProt>'
+                            f'<dhRecbto>2019-05-03T09:01:00-03:00</dhRecbto></resNFe>'),
+                xml_completo=completo if xml_completo else '')
+        r_ok, r_resumo, r_cancel = recebida(901), recebida(902, xml_completo=False), recebida(903, situacao='CANCELADA')
+        r_nfse = NotaRecebida.objects.create(chave='9' * 50, tipo_documento='NFSE', cnpj_destinatario=MATRIZ, emitente_cnpj=FORN,
+                                             emissao=quando, valor=Decimal('10'))
+        r_rj = recebida(904, cnpj=FILIAL_RJ)
+        r = c.get('/financeiro/notas/?competencia=2019-05')
+        corpo = r.content.decode()
+        t('lista mostra o cartão da SEFAZ com o que falta puxar do mês', 'Puxar da SEFAZ' in corpo
+          and '4 notas do mês ainda fora da lista' in corpo, corpo[corpo.find('nfeSefaz'):corpo.find('nfeSefaz') + 1500][-400:])
+        r = c.post('/financeiro/notas/importar-sefaz/', {'competencia': '2019-05'})
+        msgs = [str(m) for m in r.wsgi_request._messages]
+        ok_n = NotaFiscalEmitida.objects.filter(chave=r_ok.chave).first()
+        res_n = NotaFiscalEmitida.objects.filter(chave=r_resumo.chave).first()
+        can_n = NotaFiscalEmitida.objects.filter(chave=r_cancel.chave).first()
+        t('puxar da SEFAZ traz as NF-e do mês (XML completo vira recebida com itens)', r.status_code == 302 and ok_n is not None
+          and ok_n.origem == 'TERCEIRO' and ok_n.itens.count() == 1 and ok_n.emitente_id == emit.pk, msgs)
+        t('nota só com resumo entra sem itens, marcada "só resumo"', res_n is not None and res_n.so_resumo and res_n.itens.count() == 0
+          and (res_n.numero, res_n.valor_total, res_n.tipo_operacao, res_n.dest_documento) == (902, Decimal('150.00'), '0', FORN)
+          and res_n.protocolo == '1352600000902')
+        t('cancelada na SEFAZ entra cancelada', can_n is not None and can_n.status == 'CANCELADA')
+        t('NFS-e fica só no PIS/Cofins', not NotaFiscalEmitida.objects.filter(chave=r_nfse.chave).exists())
+        t('mensagem diz quantas e o que falta (ciência)', any('manifeste ciência' in m for m in msgs), msgs)
+        t('volta para a lista das recebidas', r['Location'].endswith('?origem=TERCEIRO'))
+        r = c.get(f'/financeiro/notas/{res_n.pk}/')
+        corpo = r.content.decode()
+        t('tela da nota só com resumo: sem DANFE, explica a ciência', r.status_code == 200 and 'Só o resumo da SEFAZ' in corpo
+          and f'/financeiro/notas/{res_n.pk}/danfe/' not in corpo and c.get(f'/financeiro/notas/{res_n.pk}/danfe/').status_code == 404)
+        r = c.get('/financeiro/notas/?competencia=2019-05')
+        t('depois de puxar, nada do mês fora da lista', 'Tudo do mês já está na lista' in r.content.decode())
+        NotaRecebida.objects.filter(pk=r_resumo.pk).update(xml_completo=autorizado(proc_nfe_fornecedor(r_resumo.chave), r_resumo.chave))
+        t('chegou o XML completo: a nota volta a contar como pendente',
+          '1 nota do mês ainda fora da lista' in c.get('/financeiro/notas/?competencia=2019-05').content.decode())
+        r = c.post('/financeiro/notas/importar-sefaz/', {'competencia': '2019-05', 'voltar': '/financeiro/pis-cofins/?competencia=2019-05&visao=sefaz'})
+        res_n2 = NotaFiscalEmitida.objects.get(chave=r_resumo.chave)
+        t('puxar de novo completa a mesma linha (itens e XML)', res_n2.pk == res_n.pk and not res_n2.so_resumo
+          and res_n2.itens.count() == 1 and NotaFiscalEmitida.objects.filter(chave=r_resumo.chave).count() == 1)
+        t('volta para a visão SEFAZ do PIS/Cofins quando veio de lá', r['Location'] == '/financeiro/pis-cofins/?competencia=2019-05&visao=sefaz')
+        r = c.get('/financeiro/pis-cofins/?competencia=2019-05&visao=sefaz')
+        corpo = r.content.decode()
+        t('PIS/Cofins (visão SEFAZ) tem o botão de enviar para Notas fiscais', r.status_code == 200
+          and ('pcParaNotas' in corpo or 'pcBuscarSefaz' not in corpo))
+        t('importações da SEFAZ na rastreabilidade', LogFinanceiro.objects.filter(area='notas', descricao__contains='Puxou da SEFAZ').exists())
+
         print('\n== QUEM PODE ==')
         so_ver = User.objects.create_user(username='zzz.nfever', email='zzz.nfever@exemplo-teste.local',
                                           password='S3nha!teste', first_name='ZZ', hierarchy='SUPERVISOR')
@@ -726,7 +808,8 @@ try:
         cv.force_login(so_ver)
         r = cv.get('/financeiro/notas/')
         t('quem tem notas.ver abre a lista', r.status_code == 200)
-        t('…e só vê as notas das suas lojas', 'ZZ DISTRIBUIDORA' not in r.content.decode())
+        t('…e só vê as notas das suas lojas', f'/financeiro/notas/{rec.pk}/' not in r.content.decode()
+          and f'/financeiro/notas/{nova.pk}/' not in r.content.decode() and f'/financeiro/notas/{sem.pk}/' not in r.content.decode())
         t('nota de outra loja dá 404', cv.get(f'/financeiro/notas/{nova.pk}/').status_code == 404)
         t('vê a nota da sua loja', cv.get(f'/financeiro/notas/{sn.pk}/').status_code == 200)
         antes_chamadas = len(sefaz.chamadas)
@@ -749,6 +832,10 @@ try:
         cv = Client()
         cv.force_login(so_ver)
         r = cv.get('/financeiro/notas/nova/')
+        r_rj2, r_es2 = recebida(905, cnpj=FILIAL_RJ), recebida(906)
+        cv.post('/financeiro/notas/importar-sefaz/', {'competencia': '2019-05'})
+        t('quem só vê a loja RJ puxa da SEFAZ só as notas do CNPJ dela', NotaFiscalEmitida.objects.filter(
+          chave=r_rj2.chave, emitente=emit_rj).exists() and not NotaFiscalEmitida.objects.filter(chave=r_es2.chave).exists())
         t('quem emite só escolhe emitente das suas lojas', r.status_code == 200 and FILIAL_RJ[:2] in r.content.decode()
           and emit.cnpj_formatado not in r.content.decode())
         sem = User.objects.create_user(username='zzz.nfesem', email='zzz.nfesem@exemplo-teste.local',

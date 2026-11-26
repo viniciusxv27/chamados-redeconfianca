@@ -197,9 +197,16 @@ def notas(request):
                 filtro |= Q(numero=int(digitos))
         qs = qs.filter(filtro)
     pagina = Paginator(qs, 50).get_page(request.GET.get('pagina'))
+    inicio, fim = _mes(request.GET.get('competencia'))
+    # Fora da lista, ou na lista só com o resumo quando o XML completo já chegou (puxar de novo completa).
+    na_lista = NotaFiscalEmitida.objects.exclude(chave='')
+    pendentes = (_recebidas_da_sefaz(request.user, inicio, fim)
+                 .exclude(chave__in=na_lista.exclude(xml_autorizado='').values('chave'))
+                 .exclude(Q(chave__in=na_lista.filter(xml_autorizado='').values('chave')) & Q(xml_completo='')))
     return render(request, 'financeiro/notas.html', _contexto(
         request, pagina=pagina, contagem=contagem, total=sum(contagem.values()), filtro_status=status,
         filtro_tipo=tipo, busca=busca, filtro_origem=origem, origens=NotaFiscalEmitida.ORIGENS,
+        sefaz_competencia=inicio.strftime('%Y-%m'), sefaz_pendentes=pendentes.count(),
         status_opcoes=[(v, r, contagem.get(v, 0)) for v, r in NotaFiscalEmitida.STATUS],
         tem_emitente=_emitentes_do(request.user).exists()))
 
@@ -302,7 +309,7 @@ def importar_xml(request):
             except nfe.NfeInvalida as exc:
                 resultados.append({'arquivo': rotulo, 'situacao': 'erro', 'erro': str(exc)})
                 continue
-            if situacao == 'importada':
+            if situacao in ('importada', 'completada'):
                 _registrar(request, 'CRIAR', f'Importou do XML a NF-e {nota_obj.chave} '
                                              f'({nota_obj.get_origem_display().lower()}, {nota_obj.dest_nome})', nota_obj)
             elif situacao == 'cancelada':
@@ -311,11 +318,12 @@ def importar_xml(request):
     if len(arquivos) > MAXIMO_ARQUIVOS_POR_VEZ:
         resultados.append({'arquivo': f'{len(arquivos) - MAXIMO_ARQUIVOS_POR_VEZ} arquivo(s)', 'situacao': 'erro',
                            'erro': f'Máximo de {MAXIMO_ARQUIVOS_POR_VEZ} arquivos por vez (use um .zip para mais).'})
-    conta = {s: sum(1 for r in resultados if r['situacao'] == s) for s in ('importada', 'repetida', 'cancelada', 'erro')}
+    conta = {s: sum(1 for r in resultados if r['situacao'] == s)
+             for s in ('importada', 'completada', 'repetida', 'cancelada', 'erro')}
     if quer_json:
         return JsonResponse({'resultados': resultados, 'conta': conta})
-    if conta['importada']:
-        messages.success(request, f'{conta["importada"]} nota(s) importada(s) para a lista.')
+    if conta['importada'] or conta['completada']:
+        messages.success(request, f'{conta["importada"] + conta["completada"]} nota(s) importada(s) para a lista.')
     if conta['cancelada']:
         messages.success(request, f'{conta["cancelada"]} cancelamento(s) aplicado(s).')
     if conta['repetida']:
@@ -332,6 +340,65 @@ def importar_xml(request):
 
 
 MAXIMO_ARQUIVOS_POR_VEZ = 200
+
+
+def _mes(texto):
+    """'2026-11' → (1º dia do mês, 1º dia do mês seguinte); vazio ou inválido → mês atual."""
+    from datetime import date
+    try:
+        ano, mes = (int(x) for x in (texto or '').split('-')[:2])
+        inicio = date(ano, mes, 1)
+    except (TypeError, ValueError):
+        hoje = timezone.localdate()
+        inicio = date(hoje.year, hoje.month, 1)
+    return inicio, date(inicio.year + (inicio.month == 12), inicio.month % 12 + 1, 1)
+
+
+def _recebidas_da_sefaz(user, inicio, fim):
+    """NF-e recebidas na SEFAZ (visão SEFAZ do PIS/Cofins) emitidas no mês, nas lojas que a pessoa vê."""
+    from contagem_caixa.models import NotaRecebida
+    qs = NotaRecebida.objects.filter(tipo_documento='NFE', emissao__date__gte=inicio, emissao__date__lt=fim)
+    if lojas_permitidas(user) is not None:
+        qs = qs.filter(cnpj_destinatario__in=list(_emitentes_do(user, so_ativos=False).values_list('cnpj', flat=True)))
+    return qs
+
+
+@login_required
+@exige('notas.emitir')
+@require_POST
+def importar_sefaz(request):
+    """Puxa para a lista as NF-e recebidas na SEFAZ no mês (as mesmas da visão SEFAZ do PIS/Cofins)."""
+    inicio, fim = _mes(request.POST.get('competencia'))
+    recebidas = list(_recebidas_da_sefaz(request.user, inicio, fim).order_by('emissao'))
+    resultado = nfe.importar_da_sefaz(recebidas, _emitentes_do(request.user), request.user)
+    conta = resultado['conta']
+    novas = conta.get('importada', 0) + conta.get('completada', 0) + conta.get('resumo', 0)
+    rotulo_mes = inicio.strftime('%m/%Y')
+    if novas or conta.get('cancelada'):
+        auditoria.registrar(request, 'CRIAR', f'Puxou da SEFAZ (PIS/Cofins) as NF-e de {rotulo_mes}: '
+                            f'{novas} nova(s), {conta.get("cancelada", 0)} cancelada(s)', area='notas')
+    if not recebidas:
+        messages.info(request, f'Nenhuma NF-e recebida na SEFAZ em {rotulo_mes}.')
+    else:
+        partes = []
+        if conta.get('importada') or conta.get('completada'):
+            partes.append(f'{conta.get("importada", 0) + conta.get("completada", 0)} com o XML completo')
+        if conta.get('resumo'):
+            partes.append(f'{conta["resumo"]} só com o resumo (manifeste ciência no PIS/Cofins para baixar o XML e puxe de novo)')
+        if conta.get('cancelada'):
+            partes.append(f'{conta["cancelada"]} marcada(s) como cancelada(s)')
+        if conta.get('repetida'):
+            partes.append(f'{conta["repetida"]} já estava(m) na lista')
+        nivel = messages.success if novas else messages.info
+        nivel(request, f'NF-e da SEFAZ de {rotulo_mes}: ' + '; '.join(partes) + '.' if partes else f'NF-e da SEFAZ de {rotulo_mes}.')
+    for recebida, motivo in resultado['erros'][:5]:
+        messages.error(request, f'NF {recebida.numero} de {recebida.emitente_nome}: {motivo}')
+    if len(resultado['erros']) > 5:
+        messages.error(request, f'E mais {len(resultado["erros"]) - 5} nota(s) com problema.')
+    destino = request.POST.get('voltar') or ''
+    if destino.startswith('/financeiro/'):
+        return redirect(destino)
+    return redirect(f'{reverse("financeiro:notas")}?origem=TERCEIRO')
 
 
 def _tela_formulario(request, nota, nova, emitentes, itens_form, original=None):
@@ -381,7 +448,7 @@ def nota(request, pk):
         historico=_historico_para_tela(nota_obj),
         correcoes=[e for e in eventos if e.tipo == '110110' and e.sucesso],
         pode_excluir=(nota_obj.status == 'RASCUNHO' and nota_obj.numero is None) or nota_obj.importada,
-        id_dest=nfe.destino(nota_obj) if nota_obj.emitente.uf in nfe.CODIGOS_UF else ''))
+        id_dest=nfe.destino(nota_obj) if nota_obj.emitente_id and nota_obj.emitente.uf in nfe.CODIGOS_UF else ''))
 
 
 def _historico_para_tela(nota_obj):
@@ -546,6 +613,8 @@ def evento_xml(request, pk):
 @exige('notas.ver')
 def nota_danfe(request, pk):
     nota_obj = _nota_ou_404(request, pk)
+    if not nota_obj.xml_autorizado and (nota_obj.importada or not nota_obj.emitente_id):
+        raise Http404('Nota sem o XML completo: não há DANFE.')
     if nota_obj.xml_autorizado:
         previa = 'NF-E CANCELADA' if nota_obj.status == 'CANCELADA' else ''
         pdf = danfe.gerar(nota_obj.xml_autorizado, previa=previa)

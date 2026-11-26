@@ -17,14 +17,34 @@
 {% include 'financeiro/_nfe_faixa.html' %}
 
 {% if not tem_emitente %}
-<div class="fin-card fin-vazio mb-4">
-    <div class="fin-vazio-icone"><i class="fas fa-building"></i></div>
-    <p>Nenhum CNPJ emitente cadastrado{% if not e_superadmin %} para as suas lojas{% endif %}.</p>
-    {% if e_superadmin %}<a href="{% url 'financeiro:notas_configuracao' %}#emitentes" class="fin-btn fin-btn-verde mt-3"><i class="fas fa-plus"></i>Cadastrar emitente</a>{% endif %}
+<div class="fin-card p-3 mb-3 flex items-center gap-3 flex-wrap">
+    <span class="fin-kpi-icone" style="background:var(--fin-sup-3);color:var(--fin-texto-3)"><i class="fas fa-building"></i></span>
+    <p class="text-sm text-gray-600 flex-1 min-w-[14rem]">Para <strong>emitir</strong> notas pelo portal, cadastre um CNPJ emitente{% if not e_superadmin %} (o SUPERADMIN cadastra){% endif %}. Importar XML e puxar da SEFAZ funcionam sem isso.</p>
+    {% if e_superadmin %}<a href="{% url 'financeiro:notas_configuracao' %}#emitentes" class="fin-btn fin-btn-claro"><i class="fas fa-plus"></i>Cadastrar emitente</a>{% endif %}
 </div>
 {% endif %}
 
-{% if pode.notas_emitir and tem_emitente %}{% include 'financeiro/_nfe_importar_xml.html' %}{% endif %}
+{% if pode.notas_emitir %}
+<div class="grid lg:grid-cols-2 gap-3 mb-3">
+    <div>{% include 'financeiro/_nfe_importar_xml.html' %}</div>
+    <form method="post" action="{% url 'financeiro:nota_importar_sefaz' %}" class="fin-card nfe-sefaz p-3 sm:p-4 flex flex-col gap-2" id="nfeSefaz">{% csrf_token %}
+        <div class="flex items-start gap-3">
+            <span class="nfe-xml-icone" aria-hidden="true" style="background:rgba(14,165,233,.12);color:#0369A1"><i class="fas fa-cloud-arrow-down"></i></span>
+            <div class="min-w-0 flex-1">
+                <p class="font-semibold text-sm">Notas recebidas na SEFAZ</p>
+                <p class="text-xs text-gray-500">As NF-e emitidas contra os nossos CNPJs (as mesmas da <a class="fin-link" href="{% url 'financeiro:piscofins' %}?competencia={{ sefaz_competencia }}&visao=sefaz">visão SEFAZ do PIS/Cofins</a>) entram aqui como recebidas.</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+            <label class="sr-only" for="nfeSefazMes">Mês de emissão</label>
+            <input type="month" id="nfeSefazMes" name="competencia" value="{{ sefaz_competencia }}" class="fin-input w-auto" data-livre
+                   onchange="location.href='?competencia='+this.value{% if filtro_origem %}+'&origem={{ filtro_origem }}'{% endif %}">
+            <button class="fin-btn fin-btn-claro"><i class="fas fa-cloud-arrow-down"></i>Puxar da SEFAZ</button>
+            <span class="text-xs {% if sefaz_pendentes %}text-sky-700 font-semibold{% else %}text-gray-500{% endif %}">{% if sefaz_pendentes %}{{ sefaz_pendentes }} nota{{ sefaz_pendentes|pluralize }} do mês ainda fora da lista{% else %}Tudo do mês já está na lista{% endif %}</span>
+        </div>
+    </form>
+</div>
+{% endif %}
 
 <div class="fin-ferramentas mb-3">
     <form method="get" class="fin-card p-2.5 sm:p-3 flex items-center gap-2 flex-wrap">
@@ -63,12 +83,12 @@
             <td class="fin-td-principal" data-label="Nota">
                 <a href="{% url 'financeiro:nota' n.pk %}" class="font-semibold text-gray-900 hover:underline">
                     {% if n.numero %}Nº {{ n.numero }} <span class="text-gray-400 font-normal">série {{ n.serie }}</span>{% else %}Rascunho #{{ n.pk }}{% endif %}</a>
-                {% if n.origem == 'PROPRIA' %}<span class="nfe-origem nfe-origem-propria">importada</span>{% elif n.origem == 'TERCEIRO' %}<span class="nfe-origem nfe-origem-recebida">recebida</span>{% endif %}
+                {% if n.origem == 'PROPRIA' %}<span class="nfe-origem nfe-origem-propria">importada</span>{% elif n.origem == 'TERCEIRO' %}<span class="nfe-origem nfe-origem-recebida">recebida</span>{% endif %}{% if n.so_resumo %}<span class="nfe-origem" style="background:var(--fin-sup-3);color:var(--fin-texto-3)" title="Só o resumo da SEFAZ: manifeste ciência no PIS/Cofins para baixar o XML completo">só resumo</span>{% endif %}
                 {% if n.ambiente == '2' and n.numero %}<span class="block text-[10.5px] text-amber-600 font-semibold">homologação</span>{% endif %}
             </td>
             <td data-label="Tipo"><span class="nfe-tipo {% if n.devolucao %}nfe-tipo-devolucao{% elif n.tipo_operacao == '0' %}nfe-tipo-entrada{% else %}nfe-tipo-saida{% endif %}">{{ n.rotulo_tipo }}</span></td>
             <td data-label="Destinatário"><span class="text-gray-900">{{ n.dest_nome|default:'—' }}</span><span class="block text-[11px] text-gray-500 tabular">{{ n.dest_documento_formatado }}</span></td>
-            <td data-label="Nosso CNPJ"><span class="text-xs text-gray-700">{{ n.emitente.nome_fantasia|default:n.emitente.razao_social }}</span>{% if n.loja %}<span class="block text-[11px] text-gray-400">{{ n.loja.name }}</span>{% endif %}</td>
+            <td data-label="Nosso CNPJ"><span class="text-xs text-gray-700">{{ n.nosso_rotulo|default:'—' }}</span>{% if n.loja %}<span class="block text-[11px] text-gray-400">{{ n.loja.name }}</span>{% elif not n.emitente_id %}<span class="block text-[11px] text-gray-400 tabular">{% if n.nosso_nome %}{{ n.nosso_cnpj_formatado }} · {% endif %}sem loja</span>{% endif %}</td>
             <td data-label="Emissão" class="tabular text-xs text-gray-600 whitespace-nowrap">{% if n.emitida_em %}{{ n.emitida_em|date:'d/m/Y H:i' }}{% else %}—{% endif %}</td>
             <td data-label="Valor" class="text-right tabular font-semibold whitespace-nowrap">{{ n.valor_total|brl_zero }}</td>
             <td data-label="Situação"><span class="nfe-st nfe-{{ n.status }}" title="{{ n.cstat }} {{ n.motivo }}">{{ n.get_status_display }}</span></td>

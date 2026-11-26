@@ -289,7 +289,17 @@ def piscofins(request):
         'query': parametros.urlencode(),
         'extensoes': ','.join(EXTENSOES),
         **_contexto_sefaz(request, competencia),
+        'pode_importar_notas': _pode_importar_notas(request.user),
     })
+
+
+def _pode_importar_notas(user):
+    """Quem emite NF-e no Financeiro pode trazer as NF-e da SEFAZ para Notas fiscais."""
+    try:
+        from financeiro.permissoes import pode
+        return pode(user, 'notas.emitir')
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _com_manifestacao(notas):

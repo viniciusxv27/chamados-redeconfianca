@@ -37,6 +37,7 @@ urlpatterns = [
     path('notas/', views_nfe.notas, name='notas'),
     path('notas/nova/', views_nfe.nota_nova, name='nota_nova'),
     path('notas/importar-xml/', views_nfe.importar_xml, name='nota_importar_xml'),
+    path('notas/importar-sefaz/', views_nfe.importar_sefaz, name='nota_importar_sefaz'),
     path('notas/configuracao/', views_nfe.notas_configuracao, name='notas_configuracao'),
     path('notas/<int:pk>/', views_nfe.nota, name='nota'),
     path('notas/<int:pk>/editar/', views_nfe.nota_editar, name='nota_editar'),

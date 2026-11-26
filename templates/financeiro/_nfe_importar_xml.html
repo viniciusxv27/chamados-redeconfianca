@@ -27,7 +27,7 @@ devolução da nota importada (formulário de devolução).
     <span class="nfe-xml-icone" aria-hidden="true"><i class="fas fa-file-code"></i></span>
     <div class="min-w-0 flex-1">
         <p class="font-semibold text-sm">Importar XML de NF-e</p>
-        <p class="text-xs text-gray-500" id="nfeXmlAjuda" data-texto>Arraste os arquivos aqui (ou em qualquer lugar da tela) ou clique. Vale um XML, vários ou um .zip. Notas emitidas em outro sistema entram como importadas; as de fornecedor, como recebidas.</p>
+        <p class="text-xs text-gray-500" id="nfeXmlAjuda" data-texto>Arraste aqui (ou em qualquer lugar da tela) ou clique: um XML, vários ou um .zip. Não precisa de emitente cadastrado. Notas nossas de outro sistema entram como importadas; as de fornecedor, como recebidas.</p>
     </div>
     <span class="fin-btn fin-btn-claro hidden sm:inline-flex" aria-hidden="true"><i class="fas fa-upload"></i>Escolher XML</span>
 </div>
@@ -76,11 +76,12 @@ devolução da nota importada (formulário de devolução).
         zona.setAttribute('aria-busy', tipo === 'lendo' ? 'true' : 'false');
     }
 
-    var ICONES = {importada: ['fa-circle-check', 'text-emerald-600'], repetida: ['fa-equals', 'text-gray-400'],
+    var ICONES = {importada: ['fa-circle-check', 'text-emerald-600'], completada: ['fa-circle-check', 'text-emerald-600'], repetida: ['fa-equals', 'text-gray-400'],
                   cancelada: ['fa-ban', 'text-red-500'], erro: ['fa-circle-xmark', 'text-red-600']};
     function resumo(r) {
         var c = r.conta, partes = [];
-        if (c.importada) partes.push(c.importada + (c.importada === 1 ? ' importada' : ' importadas'));
+        var novas = (c.importada || 0) + (c.completada || 0);
+        if (novas) partes.push(novas + (novas === 1 ? ' importada' : ' importadas'));
         if (c.cancelada) partes.push(c.cancelada + (c.cancelada === 1 ? ' cancelamento' : ' cancelamentos'));
         if (c.repetida) partes.push(c.repetida + ' já ' + (c.repetida === 1 ? 'estava' : 'estavam') + ' na lista');
         if (c.erro) partes.push(c.erro + ' com problema');
@@ -90,7 +91,7 @@ devolução da nota importada (formulário de devolução).
             var corpo = x.situacao === 'erro'
                 ? '<span class="nfe-xml-erro">' + esc(x.erro) + '</span>'
                 : '<a class="fin-link" href="' + esc(x.url) + '">' + esc(x.rotulo) + '</a> <span class="text-xs text-gray-500">· ' +
-                  esc(x.situacao === 'repetida' ? 'já estava na lista' : x.situacao === 'cancelada' ? 'marcada como cancelada' : x.origem.toLowerCase()) + '</span>' +
+                  esc(x.situacao === 'repetida' ? 'já estava na lista' : x.situacao === 'cancelada' ? 'marcada como cancelada' : x.situacao === 'completada' ? 'completada (antes só com o resumo)' : x.origem.toLowerCase()) + '</span>' +
                   (x.avisos || []).map(function (a) { return '<span class="block text-xs text-amber-700 mt-0.5"><i class="fas fa-triangle-exclamation mr-1"></i>' + esc(a) + '</span>'; }).join('');
             return '<div class="nfe-xml-linha"><i class="fas ' + ic[0] + ' ' + ic[1] + '" aria-hidden="true"></i><div class="min-w-0 flex-1">' +
                 '<p class="text-[11px] text-gray-500 break-all">' + esc(x.arquivo) + '</p>' + corpo + '</div></div>';

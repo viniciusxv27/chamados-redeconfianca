@@ -97,6 +97,11 @@ class EmitenteNFe(models.Model):
     def __str__(self):
         return f'{self.nome_fantasia or self.razao_social} · {self.cnpj_formatado}'
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Notas importadas antes de o CNPJ ser cadastrado passam a ser deste emitente (e da loja dele).
+        NotaFiscalEmitida.objects.filter(emitente__isnull=True, nosso_cnpj=self.cnpj).update(emitente=self, loja=self.loja)
+
     @property
     def cnpj_formatado(self):
         c = self.cnpj
@@ -133,7 +138,12 @@ class NotaFiscalEmitida(models.Model):
 
     origem = models.CharField(max_length=8, choices=ORIGENS, default='PORTAL', db_default='PORTAL', db_index=True,
                               verbose_name='Origem')
-    emitente = models.ForeignKey(EmitenteNFe, on_delete=models.PROTECT, related_name='notas', verbose_name='Emitente')
+    # Vazio só em nota importada cujo CNPJ nosso ainda não é emitente cadastrado (nosso_cnpj diz qual é).
+    emitente = models.ForeignKey(EmitenteNFe, on_delete=models.PROTECT, related_name='notas', null=True, blank=True,
+                                 verbose_name='Emitente')
+    nosso_cnpj = models.CharField(max_length=14, blank=True, default='', db_default='', db_index=True,
+                                  verbose_name='CNPJ nosso na nota')
+    nosso_nome = models.CharField(max_length=60, blank=True, default='', db_default='', verbose_name='Nome nosso na nota')
     loja = models.ForeignKey('users.Sector', on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
                              verbose_name='Loja')
     tipo_operacao = models.CharField(max_length=1, choices=TIPOS, default='1', verbose_name='Tipo')
@@ -223,6 +233,22 @@ class NotaFiscalEmitida(models.Model):
     @property
     def recebida(self):
         return self.origem == 'TERCEIRO'
+
+    @property
+    def so_resumo(self):
+        """Recebida que veio só com o resumo da SEFAZ (sem o XML completo: sem itens nem DANFE)."""
+        return self.importada and not self.xml_autorizado
+
+    @property
+    def nosso_rotulo(self):
+        if self.emitente_id:
+            return self.emitente.nome_fantasia or self.emitente.razao_social
+        return self.nosso_nome or self.nosso_cnpj_formatado
+
+    @property
+    def nosso_cnpj_formatado(self):
+        c = self.emitente.cnpj if self.emitente_id else self.nosso_cnpj
+        return f'{c[:2]}.{c[2:5]}.{c[5:8]}/{c[8:12]}-{c[12:]}' if len(c or '') == 14 else (c or '')
 
     @property
     def devolucao(self):
