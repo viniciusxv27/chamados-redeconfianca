@@ -29,6 +29,30 @@ class PrizeCategory(models.Model):
         return self.name
 
 
+# Resgates que ocupam uma unidade do estoque: tudo, menos o cancelado (o cancelamento
+# devolve a unidade). O pendente conta para ninguém resgatar a última unidade duas vezes
+# enquanto o primeiro espera aprovação. Uma régua só para /prizes/, /prizes/manage/,
+# /prizes/<id>/edit/ e o app (26/11/2026).
+STATUS_QUE_OCUPAM_ESTOQUE = ('PENDENTE', 'APROVADO', 'ENTREGUE')
+
+
+class PrizeQuerySet(models.QuerySet):
+    def visiveis(self):
+        """Fora os excluídos da gestão (exclusão lógica: os resgates continuam)."""
+        return self.filter(excluido_em__isnull=True)
+
+    def com_resgates(self):
+        """Anota as contagens de resgate de uma vez (sem uma consulta por prêmio)."""
+        from django.db.models import Count, Q
+        return self.annotate(
+            n_resgates_ativos=Count('redemption', filter=Q(redemption__status__in=STATUS_QUE_OCUPAM_ESTOQUE), distinct=True),
+            n_pendentes=Count('redemption', filter=Q(redemption__status='PENDENTE'), distinct=True),
+            n_aprovados=Count('redemption', filter=Q(redemption__status='APROVADO'), distinct=True),
+            n_entregues=Count('redemption', filter=Q(redemption__status='ENTREGUE'), distinct=True),
+            n_cancelados=Count('redemption', filter=Q(redemption__status='CANCELADO'), distinct=True),
+        )
+
+
 class Prize(models.Model):
     PRIORITY_CHOICES = [
         ('BAIXA', 'Baixa'),
@@ -58,7 +82,14 @@ class Prize(models.Model):
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, verbose_name="Criado por")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+    # Exclusão lógica (26/11/2026): some da gestão e do Mercadinho, mas o prêmio fica salvo
+    # para o histórico de quem já resgatou.
+    excluido_em = models.DateTimeField(null=True, blank=True, verbose_name="Excluído em")
+    excluido_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name='+', verbose_name="Excluído por")
+
+    objects = PrizeQuerySet.as_manager()
+
     class Meta:
         verbose_name = "Prêmio"
         verbose_name_plural = "Prêmios"
@@ -82,27 +113,46 @@ class Prize(models.Model):
         return Decimal('0.00')
     
     @property
+    def resgates_ativos(self):
+        """Resgates que ocupam o estoque (todos, menos os cancelados). Usa a anotação de
+        PrizeQuerySet.com_resgates quando existe; senão conta no banco."""
+        n = getattr(self, 'n_resgates_ativos', None)
+        if n is None:
+            n = self.redemption_set.filter(status__in=STATUS_QUE_OCUPAM_ESTOQUE).count()
+        return n
+
+    @property
+    def estoque_restante(self):
+        """Unidades que ainda dá para resgatar (None = ilimitado)."""
+        if self.unlimited_stock:
+            return None
+        return max(0, self.stock - self.resgates_ativos)
+
+    @property
+    def esgotado(self):
+        return not self.unlimited_stock and self.estoque_restante == 0
+
+    @property
+    def excluido(self):
+        return self.excluido_em is not None
+
+    @property
     def available(self):
-        if not self.is_active:
+        if not self.is_active or self.excluido:
             return False
         if self.valid_until and self.valid_until < timezone.now().date():
             return False
-        if not self.unlimited_stock:
-            # Contar apenas resgates aprovados e entregues
-            approved_count = self.redemption_set.filter(status__in=['APROVADO', 'ENTREGUE']).count()
-            if approved_count >= self.stock:
-                return False
+        if self.esgotado:
+            return False
         return True
-    
+
     @property
     def availability_percentage(self):
         if self.unlimited_stock:
             return 100
         if self.stock == 0:
             return 0
-        # Contar apenas resgates aprovados e entregues
-        approved_count = self.redemption_set.filter(status__in=['APROVADO', 'ENTREGUE']).count()
-        return max(0, ((self.stock - approved_count) / self.stock) * 100)
+        return (self.estoque_restante / self.stock) * 100
 
 
 class PrizeDiscount(models.Model):

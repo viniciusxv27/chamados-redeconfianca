@@ -1,453 +1,315 @@
 {% extends 'base.html' %}
+{% load l10n %}
 
 {% block title %}Editar Prêmio - Rede de Confiança{% endblock %}
 
+{% block extra_css %}
+{% include '_rc_animacoes.html' %}
+<style>
+    .rc-premio-foto { aspect-ratio: 16 / 10; background: #fff; }
+    .rc-premio-foto img { width: 100%; height: 100%; object-fit: contain; }
+    html.dark .rc-premio-foto { background: #f6f7f9; }
+    .rc-campo { width: 100%; padding: .7rem .9rem; border-radius: .85rem; border: 1px solid #e5e7eb; background: #fff; font-size: .9rem; }
+    .rc-campo:focus { outline: none; border-color: #fb923c; box-shadow: 0 0 0 3px rgba(251, 146, 60, .2); }
+    html.dark .rc-campo { background: var(--tema-superficie, #1f2937); border-color: var(--tema-borda, #374151); color: inherit; }
+    .rc-rotulo { display: block; font-size: .8rem; font-weight: 600; color: #374151; margin-bottom: .35rem; }
+    html.dark .rc-rotulo { color: #d1d5db; }
+    .rc-barra { height: .375rem; border-radius: 9999px; background: #f3f4f6; overflow: hidden; }
+    html.dark .rc-barra { background: rgba(255, 255, 255, .12); }
+    .rc-barra > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #ff6b35, #f59e0b); transition: width .3s ease; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="min-h-screen bg-gray-50 py-6">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <!-- Header -->
-        <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
-            <div class="px-6 py-4">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center">
-                        <i class="fas fa-edit text-primary text-2xl mr-3"></i>
+<div class="max-w-6xl mx-auto px-4 sm:px-0">
+    <section class="rc-hero rc-surge relative overflow-hidden rounded-3xl text-white shadow-lg mb-5">
+        <span class="rc-forma rc-forma-1" aria-hidden="true"></span>
+        <span class="rc-forma rc-forma-2" aria-hidden="true"></span>
+        <div class="relative p-5 sm:p-7">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0">
+                    <p class="rc-hero-suave text-xs font-semibold uppercase tracking-wide"><i class="fas fa-pen mr-1"></i>Editar prêmio</p>
+                    <h1 class="text-2xl sm:text-3xl font-bold mt-1 break-words">{{ prize.name }}</h1>
+                </div>
+                <a href="{% url 'manage_prizes' %}" data-rc-pop class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-orange-600 font-semibold text-sm shadow hover:shadow-md transition-shadow">
+                    <i class="fas fa-arrow-left"></i> Voltar
+                </a>
+            </div>
+            <div class="grid grid-cols-3 gap-2 sm:gap-3 mt-5">
+                <div style="--i: 1" class="rc-hero-acao rc-sobe rounded-2xl px-4 py-3">
+                    <span class="block text-2xl font-bold" data-rc-conta="{{ resgates_ativos }}">{{ resgates_ativos }}</span>
+                    <span class="rc-hero-suave text-xs"><i class="fas fa-handshake mr-1"></i>Resgates</span>
+                </div>
+                <div style="--i: 2" class="rc-hero-acao rc-sobe rounded-2xl px-4 py-3">
+                    {% if prize.unlimited_stock %}
+                    <span class="block text-2xl font-bold"><i class="fas fa-infinity"></i></span>
+                    <span class="rc-hero-suave text-xs"><i class="fas fa-box mr-1"></i>Estoque ilimitado</span>
+                    {% else %}
+                    <span class="block text-2xl font-bold">{{ prize.estoque_restante }}<span class="text-sm font-semibold rc-hero-suave"> de {{ prize.stock }}</span></span>
+                    <span class="rc-hero-suave text-xs"><i class="fas fa-box mr-1"></i>Em estoque</span>
+                    {% endif %}
+                </div>
+                <div style="--i: 3" class="rc-hero-acao rc-sobe rounded-2xl px-4 py-3">
+                    <span class="block text-2xl font-bold"><i class="fas fa-{% if prize.is_active %}check-circle{% else %}pause-circle{% endif %}"></i></span>
+                    <span class="rc-hero-suave text-xs">{% if prize.is_active %}Ativo no Mercadinho{% else %}Pausado{% endif %}</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <form method="post" enctype="multipart/form-data" class="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-5 items-start" novalidate data-premio-form>
+        {% csrf_token %}
+        <div class="lg:col-span-2 space-y-4">
+            <section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5 rc-sobe" style="--i: 1">
+                <div class="rc-secao-titulo mb-4">
+                    <span class="rc-secao-icone" style="background:linear-gradient(135deg,#ff6b35,#f59e0b)"><i class="fas fa-gift"></i></span>
+                    <h2 class="font-bold text-gray-900">Informações</h2>
+                </div>
+                <div class="space-y-4">
+                    <div>
+                        <label for="name" class="rc-rotulo">Nome do prêmio <span class="text-red-500">*</span></label>
+                        <input type="text" id="name" name="name" value="{{ prize.name }}" required maxlength="200" class="rc-campo" placeholder="Digite o nome do prêmio">
+                    </div>
+                    <div>
+                        <label for="description" class="rc-rotulo">Descrição</label>
+                        <textarea id="description" name="description" rows="4" class="rc-campo" placeholder="Descreva o prêmio">{{ prize.description }}</textarea>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                            <h1 class="text-2xl font-bold text-gray-900">Editar Prêmio</h1>
-                            <p class="text-sm text-gray-600">Modifique as informações do prêmio</p>
+                            <label for="category" class="rc-rotulo">Categoria</label>
+                            <select id="category" name="category" class="rc-campo">
+                                <option value="">Sem categoria</option>
+                                {% for category in categories %}
+                                <option value="{{ category.id }}" {% if prize.category_id == category.id %}selected{% endif %}>{{ category.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label for="priority" class="rc-rotulo">Prioridade</label>
+                            <select id="priority" name="priority" class="rc-campo">
+                                <option value="BAIXA" {% if prize.priority == 'BAIXA' %}selected{% endif %}>Baixa</option>
+                                <option value="NORMAL" {% if prize.priority == 'NORMAL' %}selected{% endif %}>Normal</option>
+                                <option value="ALTA" {% if prize.priority == 'ALTA' %}selected{% endif %}>Alta</option>
+                                <option value="DESTAQUE" {% if prize.priority == 'DESTAQUE' %}selected{% endif %}>Destaque</option>
+                            </select>
                         </div>
                     </div>
-                    <a href="{% url 'manage_prizes' %}" 
-                       class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
-                        <i class="fas fa-arrow-left mr-2"></i>
-                        Voltar
-                    </a>
                 </div>
-            </div>
-        </div>
+            </section>
 
-        <!-- Formulário de Edição -->
-        <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
-            <div class="px-6 py-6">
-                <form method="post" enctype="multipart/form-data" class="space-y-6">
-                    {% csrf_token %}
-                    
-                    <!-- Nome do Prêmio -->
+            <section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5 rc-sobe" style="--i: 2">
+                <div class="rc-secao-titulo mb-4">
+                    <span class="rc-secao-icone" style="background:linear-gradient(135deg,#16a34a,#22c55e)"><i class="fas fa-coins"></i></span>
+                    <h2 class="font-bold text-gray-900">Valor e desconto</h2>
+                </div>
+                {% comment %}O número sai sem localizar: "8250,00" num type=number o navegador descarta e o campo abre vazio.{% endcomment %}
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                        <label for="name" class="block text-sm font-semibold text-gray-900 mb-2">
-                            Nome do Prêmio <span class="text-red-500">*</span>
-                        </label>
-                        <input type="text" 
-                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" 
-                               id="name" 
-                               name="name" 
-                               value="{{ prize.name }}"
-                               placeholder="Digite o nome do prêmio"
-                               required>
+                        <label for="value_cs" class="rc-rotulo">Valor em C$ <span class="text-red-500">*</span></label>
+                        <input type="number" id="value_cs" name="value_cs" value="{{ prize.value_cs|unlocalize }}" min="0.01" step="0.01" required inputmode="decimal" class="rc-campo" placeholder="0">
                     </div>
-
-                    <!-- Descrição -->
+                    <div class="flex items-end">
+                        <label class="flex items-center gap-2 text-sm font-semibold text-gray-800 py-3 cursor-pointer">
+                            <input type="checkbox" id="has_discount" name="has_discount" class="h-5 w-5 rounded" {% if prize.has_discount %}checked{% endif %}>
+                            <i class="fas fa-percent text-orange-500"></i> Aplicar desconto
+                        </label>
+                    </div>
+                </div>
+                <div id="discount_fields" class="{% if not prize.has_discount %}hidden{% endif %} grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 p-4 rounded-xl bg-orange-50 border border-orange-100">
                     <div>
-                        <label for="description" class="block text-sm font-semibold text-gray-900 mb-2">
-                            Descrição
-                        </label>
-                        <textarea class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" 
-                                  id="description" 
-                                  name="description" 
-                                  rows="4" 
-                                  placeholder="Descreva o prêmio">{{ prize.description }}</textarea>
+                        <label for="discount_percentage" class="rc-rotulo">Desconto (%)</label>
+                        <input type="number" id="discount_percentage" name="discount_percentage" min="0.01" max="99.99" step="0.01" inputmode="decimal"
+                               value="{% if prize.discount_percentage is not None %}{{ prize.discount_percentage|unlocalize }}{% endif %}" class="rc-campo" placeholder="Ex.: 15">
                     </div>
-
-                    <!-- Categoria -->
                     <div>
-                        <label for="category" class="block text-sm font-semibold text-gray-900 mb-2">
-                            Categoria
-                        </label>
-                        <select class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" 
-                                id="category" 
-                                name="category">
-                            <option value="">Selecione uma categoria</option>
-                            {% for category in categories %}
-                            <option value="{{ category.id }}" {% if prize.category == category %}selected{% endif %}>{{ category.name }}</option>
-                            {% endfor %}
-                        </select>
+                        <span class="rc-rotulo">Valor final</span>
+                        <span id="final_value" class="block text-2xl font-bold text-orange-600 py-1.5">C$ {{ prize.final_value|floatformat:2 }}</span>
+                        <span class="text-[11px] text-gray-500">O valor cheio aparece riscado no Mercadinho.</span>
                     </div>
+                </div>
+            </section>
 
-                    <!-- Custo em C$ -->
+            <section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5 rc-sobe" style="--i: 3">
+                <div class="rc-secao-titulo mb-4">
+                    <span class="rc-secao-icone" style="background:linear-gradient(135deg,#0ea5e9,#6366f1)"><i class="fas fa-box"></i></span>
+                    <h2 class="font-bold text-gray-900">Estoque</h2>
+                </div>
+                <label class="flex items-center gap-2 text-sm font-semibold text-gray-800 mb-4 cursor-pointer">
+                    <input type="checkbox" id="unlimited_stock" name="unlimited_stock" class="h-5 w-5 rounded" {% if prize.unlimited_stock %}checked{% endif %}>
+                    Estoque ilimitado
+                </label>
+                <div id="stock_field" class="{% if prize.unlimited_stock %}hidden{% endif %}" data-resgates="{{ resgates_ativos }}">
+                    <label for="estoque_disponivel" class="rc-rotulo">Quantidade em estoque (disponível agora)</label>
+                    <input type="number" id="estoque_disponivel" name="estoque_disponivel" min="0" step="1" inputmode="numeric"
+                           value="{{ estoque_disponivel|default_if_none:'0'|unlocalize }}" class="rc-campo sm:max-w-xs" placeholder="0">
+                    <div class="rc-barra mt-3 sm:max-w-xs"><span data-estoque-barra style="width: 0%"></span></div>
+                    <p class="text-xs text-gray-500 mt-2 leading-relaxed" data-estoque-conta>
+                        {{ resgates_ativos }} resgate{{ resgates_ativos|pluralize }} já ocupa{{ resgates_ativos|pluralize:"m" }} o estoque (pendentes, aprovados e entregues; cancelado devolve a unidade).
+                    </p>
+                </div>
+            </section>
+
+            <section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5 rc-sobe" style="--i: 4">
+                <div class="rc-secao-titulo mb-4">
+                    <span class="rc-secao-icone" style="background:linear-gradient(135deg,#8b5cf6,#ec4899)"><i class="fas fa-sliders"></i></span>
+                    <h2 class="font-bold text-gray-900">Regras e publicação</h2>
+                </div>
+                <div class="space-y-4">
                     <div>
-                        <label for="value_cs" class="block text-sm font-semibold text-gray-900 mb-2">
-                            Valor Original em C$ <span class="text-red-500">*</span>
-                        </label>
-                        <input type="number" 
-                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" 
-                               id="value_cs" 
-                               name="value_cs" 
-                               value="{{ prize.value_cs }}"
-                               min="1" 
-                               step="0.01"
-                               placeholder="0"
-                               onchange="calculateDiscount()"
-                               required>
+                        <label for="terms" class="rc-rotulo">Termos e condições</label>
+                        <textarea id="terms" name="terms" rows="3" class="rc-campo" placeholder="Termos e condições do prêmio">{{ prize.terms }}</textarea>
                     </div>
-
-                    <!-- Desconto -->
-                    <div class="bg-orange-50 rounded-lg border border-orange-100 p-6">
-                        <div class="flex items-center mb-4">
-                            <input type="checkbox" id="has_discount" name="has_discount" 
-                                   class="h-5 w-5 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
-                                   onchange="toggleDiscount()"
-                                   {% if prize.has_discount %}checked{% endif %}>
-                            <label for="has_discount" class="ml-3 block text-sm font-semibold text-orange-800">
-                                <i class="fas fa-percent mr-2"></i>
-                                Aplicar Desconto neste Prêmio
-                            </label>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label for="valid_until" class="rc-rotulo">Válido até</label>
+                            <input type="date" id="valid_until" name="valid_until" value="{% if prize.valid_until %}{{ prize.valid_until|date:'Y-m-d' }}{% endif %}" class="rc-campo">
+                            <p class="text-[11px] text-gray-500 mt-1">Em branco: sem data de expiração.</p>
                         </div>
-                        
-                        <div id="discount_fields" class="{% if not prize.has_discount %}hidden{% endif %} space-y-4">
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <label for="discount_percentage" class="block text-sm font-medium text-orange-700 mb-2">
-                                        <i class="fas fa-percentage mr-1"></i>
-                                        Desconto (%)
-                                    </label>
-                                    <input type="number" id="discount_percentage" name="discount_percentage" 
-                                           min="1" max="99" step="0.01"
-                                           class="w-full px-4 py-2 border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500 bg-white"
-                                           placeholder="Ex: 15"
-                                           value="{{ prize.discount_percentage|default:'' }}"
-                                           onchange="calculateDiscount()">
-                                </div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-orange-700 mb-2">
-                                        <i class="fas fa-tag mr-1"></i>
-                                        Valor Final
-                                    </label>
-                                    <div class="w-full px-4 py-2 bg-white border border-orange-300 rounded-lg">
-                                        <span id="final_value" class="text-lg font-bold text-orange-600">
-                                            C$ {{ prize.discounted_value|default:prize.value_cs }}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="bg-orange-100 rounded-lg p-4">
-                                <p class="text-sm text-orange-800">
-                                    <i class="fas fa-info-circle mr-2"></i>
-                                    O preço original será exibido riscado no marketplace, destacando o desconto.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Prioridade -->
-                    <div>
-                        <label for="priority" class="block text-sm font-semibold text-gray-900 mb-2">
-                            Prioridade
-                        </label>
-                        <select class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" 
-                                id="priority" 
-                                name="priority">
-                            <option value="BAIXA" {% if prize.priority == 'BAIXA' %}selected{% endif %}>Baixa</option>
-                            <option value="NORMAL" {% if prize.priority == 'NORMAL' %}selected{% endif %}>Normal</option>
-                            <option value="ALTA" {% if prize.priority == 'ALTA' %}selected{% endif %}>Alta</option>
-                            <option value="DESTAQUE" {% if prize.priority == 'DESTAQUE' %}selected{% endif %}>Destaque</option>
-                        </select>
-                    </div>
-
-                    <!-- Estoque -->
-                    <div class="space-y-4">
                         <div class="flex items-center">
-                            <input type="checkbox" id="unlimited_stock" name="unlimited_stock" 
-                                   class="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
-                                   onchange="toggleStock()"
-                                   {% if prize.unlimited_stock %}checked{% endif %}>
-                            <label for="unlimited_stock" class="ml-2 block text-sm text-gray-700">
-                                Estoque ilimitado
+                            <label class="flex items-center gap-2 text-sm font-semibold text-gray-800 cursor-pointer">
+                                <input type="checkbox" id="is_active" name="is_active" class="h-5 w-5 rounded" {% if prize.is_active %}checked{% endif %}>
+                                Ativo no Mercadinho
                             </label>
                         </div>
-                        
-                        <div id="stock_field" {% if prize.unlimited_stock %}class="hidden"{% endif %}>
-                            <label for="stock" class="block text-sm font-semibold text-gray-900 mb-2">
-                                Quantidade em Estoque
-                            </label>
-                            <input type="number" 
-                                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" 
-                                   id="stock" 
-                                   name="stock" 
-                                   value="{{ prize.stock }}"
-                                   min="0" 
-                                   placeholder="0">
-                        </div>
                     </div>
-
-                    <!-- Termos e Condições -->
-                    <div>
-                        <label for="terms" class="block text-sm font-semibold text-gray-900 mb-2">
-                            Termos e Condições
-                        </label>
-                        <textarea class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" 
-                                  id="terms" 
-                                  name="terms" 
-                                  rows="3" 
-                                  placeholder="Termos e condições do prêmio">{{ prize.terms }}</textarea>
-                    </div>
-
-                    <!-- Data de Validade -->
-                    <div>
-                        <label for="valid_until" class="block text-sm font-semibold text-gray-900 mb-2">
-                            Válido até
-                        </label>
-                        <input type="date" 
-                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors" 
-                               id="valid_until" 
-                               name="valid_until" 
-                               value="{% if prize.valid_until %}{{ prize.valid_until|date:'Y-m-d' }}{% endif %}">
-                        <p class="text-sm text-gray-500 mt-1">Deixe em branco se não houver data de expiração</p>
-                    </div>
-
-                    <!-- Imagem do Prêmio -->
-                    <div>
-                        <label for="image" class="block text-sm font-semibold text-gray-900 mb-2">
-                            Imagem do Prêmio
-                        </label>
-                        
-                        <!-- Imagem atual -->
-                        {% if prize.image %}
-                        <div class="mb-4">
-                            <p class="text-sm text-gray-600 mb-2">Imagem atual:</p>
-                            <div class="relative inline-block">
-                                <img src="{{ prize.image.url }}" alt="{{ prize.name }}" class="w-32 h-32 object-cover rounded-lg border-2 border-gray-200">
-                                <div class="absolute top-2 right-2">
-                                    <input type="checkbox" name="remove_image" id="remove_image" class="mr-1">
-                                    <label for="remove_image" class="bg-red-500 text-white px-2 py-1 rounded text-xs">Remover</label>
-                                </div>
-                            </div>
-                        </div>
-                        {% endif %}
-                        
-                        <!-- Upload nova imagem -->
-                        <div class="flex items-center justify-center w-full">
-                            <label for="image" class="flex flex-col items-center justify-center w-full h-64 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
-                                <div class="flex flex-col items-center justify-center pt-5 pb-6">
-                                    <i class="fas fa-cloud-upload-alt text-gray-400 text-4xl mb-4"></i>
-                                    <p class="mb-2 text-sm text-gray-500">
-                                        <span class="font-semibold">Clique para fazer upload</span> ou arraste a imagem
-                                    </p>
-                                    <p class="text-xs text-gray-500">PNG, JPG ou JPEG (MAX. 5MB)</p>
-                                </div>
-                                <input id="image" name="image" type="file" class="hidden" accept="image/*" onchange="previewImage(this)">
-                            </label>
-                        </div>
-                        
-                        <!-- Preview da nova imagem -->
-                        <div id="image-preview" class="hidden mt-4">
-                            <p class="text-sm text-gray-600 mb-2">Nova imagem:</p>
-                            <div class="relative">
-                                <img id="preview-img" class="w-32 h-32 object-cover rounded-lg" src="" alt="Preview">
-                                <button type="button" onclick="removePreview()" class="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors">
-                                    <i class="fas fa-times text-xs"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Status -->
-                    <div class="flex items-center">
-                        <input type="checkbox" 
-                               id="is_active" 
-                               name="is_active" 
-                               class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
-                               {% if prize.is_active %}checked{% endif %}>
-                        <label for="is_active" class="ml-2 text-sm text-gray-900">Prêmio ativo</label>
-                    </div>
-
-                    <!-- Botões -->
-                    <div class="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
-                        <a href="{% url 'manage_prizes' %}" 
-                           class="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
-                            Cancelar
-                        </a>
-                        <button type="submit" 
-                                class="bg-primary text-white px-6 py-3 rounded-lg hover:bg-orange-600 transition-colors flex items-center">
-                            <i class="fas fa-save mr-2"></i>
-                            Salvar Alterações
-                        </button>
-                    </div>
-                </form>
-            </div>
+                </div>
+            </section>
         </div>
 
-        <!-- Lista de Resgates -->
-        <div class="bg-white rounded-lg shadow-sm border border-gray-200">
-            <div class="px-6 py-4 border-b border-gray-200">
-                <h2 class="text-lg font-semibold text-gray-900 flex items-center">
-                    <i class="fas fa-history text-primary mr-2"></i>
-                    Histórico de Resgates
-                </h2>
-            </div>
-            <div class="px-6 py-4">
-                {% if redemptions %}
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Usuário
-                                </th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Data do Resgate
-                                </th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Custo
-                                </th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Status
-                                </th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Ações
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
-                            {% for redemption in redemptions %}
-                            <tr>
-                                <td class="px-6 py-4 whitespace-nowrap">
-                                    <div class="flex items-center">
-                                        <div class="w-10 h-10 bg-gray-500 rounded-full flex items-center justify-center mr-3">
-                                            <i class="fas fa-user text-white"></i>
-                                        </div>
-                                        <div>
-                                            <div class="text-sm font-medium text-gray-900">{{ redemption.user.full_name }}</div>
-                                            <div class="text-sm text-gray-500">{{ redemption.user.email }}</div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                    {{ redemption.redeemed_at|date:"d/m/Y H:i" }}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                    C$ {{ redemption.prize.value_cs }}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap">
-                                    <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                                        Resgatado
-                                    </span>
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                    <button onclick="cancelRedemption({{ redemption.id }})" 
-                                            class="text-red-600 hover:text-red-900">
-                                        <i class="fas fa-times mr-1"></i>
-                                        Cancelar
-                                    </button>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+        <aside class="space-y-4 lg:sticky lg:top-4">
+            <section class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden rc-sobe" style="--i: 2">
+                <div class="rc-premio-foto flex items-center justify-center p-3 border-b border-gray-100">
+                    {% if prize.image %}
+                    <img src="{{ prize.image.url }}" alt="{{ prize.name }}" data-foto-atual>
+                    {% else %}
+                    <i class="fas fa-gift text-gray-300 text-5xl" data-foto-atual></i>
+                    {% endif %}
+                    <img src="" alt="Nova imagem" class="hidden" id="preview-img">
                 </div>
-                {% else %}
-                <div class="text-center py-8">
-                    <i class="fas fa-gift text-gray-400 text-4xl mb-4"></i>
-                    <p class="text-gray-500">Nenhum resgate realizado ainda</p>
+                <div class="p-4 space-y-3">
+                    <label for="image" class="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl border-2 border-dashed border-gray-300 text-sm font-semibold text-gray-600 cursor-pointer hover:bg-gray-50">
+                        <i class="fas fa-cloud-upload-alt"></i> <span data-foto-rotulo>{% if prize.image %}Trocar imagem{% else %}Enviar imagem{% endif %}</span>
+                    </label>
+                    <input id="image" name="image" type="file" class="hidden" accept="image/*">
+                    <button type="button" id="removePreview" class="hidden w-full text-xs font-semibold text-gray-500 hover:text-gray-700"><i class="fas fa-times mr-1"></i>Desfazer a troca</button>
+                    {% if prize.image %}
+                    <label class="flex items-center gap-2 text-xs font-semibold text-red-600 cursor-pointer">
+                        <input type="checkbox" name="remove_image" id="remove_image" class="rounded"> Remover a imagem atual
+                    </label>
+                    {% endif %}
+                    <p class="text-[11px] text-gray-500">PNG ou JPG. A imagem aparece inteira no Mercadinho.</p>
                 </div>
+            </section>
+            <button type="submit" data-rc-pop class="w-full inline-flex items-center justify-center gap-2 py-3 rounded-2xl text-white font-semibold shadow-md hover:shadow-lg transition-shadow" style="background:linear-gradient(120deg,#ff6b35,#f59e0b)">
+                <i class="fas fa-save"></i> Salvar alterações
+            </button>
+            <a href="{% url 'manage_prizes' %}" class="block text-center text-sm font-semibold text-gray-500 hover:text-gray-700">Cancelar</a>
+        </aside>
+    </form>
+
+    <section class="mt-6" data-rc-revela>
+        <div class="rc-secao-titulo mb-3">
+            <span class="rc-secao-icone" style="background:linear-gradient(135deg,#8b5cf6,#ec4899)"><i class="fas fa-history"></i></span>
+            <h2 class="text-lg font-bold text-gray-900">Resgates deste prêmio</h2>
+            <a href="{% url 'prize_redemptions' prize.id %}" class="ml-auto text-sm font-semibold text-orange-600 hover:underline">Ver todos <i class="fas fa-arrow-right text-xs"></i></a>
+        </div>
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm divide-y divide-gray-100">
+            {% for redemption in redemptions %}
+            <div class="flex items-center gap-3 p-3 sm:p-4 flex-wrap sm:flex-nowrap">
+                <span class="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0" style="background:linear-gradient(135deg,#ff6b35,#f59e0b)">{{ redemption.user.first_name.0 }}{{ redemption.user.last_name.0 }}</span>
+                <div class="min-w-0 flex-1">
+                    <p class="text-sm font-semibold text-gray-900 truncate">{{ redemption.user.full_name }}</p>
+                    <p class="text-xs text-gray-500 truncate">{{ redemption.redeemed_at|date:"d/m/Y H:i" }} · {% if redemption.final_value is not None %}{{ redemption.final_value|floatformat:'0g' }}{% else %}{{ prize.value_cs|floatformat:'0g' }}{% endif %} C$</p>
+                </div>
+                <span class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold flex-shrink-0 {% if redemption.status == 'PENDENTE' %}bg-yellow-100 text-yellow-800{% elif redemption.status == 'APROVADO' %}bg-blue-100 text-blue-800{% elif redemption.status == 'ENTREGUE' %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-700{% endif %}">{{ redemption.get_status_display }}</span>
+                {% if redemption.status == 'PENDENTE' or redemption.status == 'APROVADO' %}
+                <button type="button" onclick="cancelRedemption({{ redemption.id }})" class="px-3 py-1.5 rounded-lg bg-red-50 text-red-700 text-xs font-semibold hover:bg-red-100 flex-shrink-0"><i class="fas fa-times mr-1"></i>Cancelar</button>
                 {% endif %}
             </div>
+            {% empty %}
+            <div class="p-8 text-center text-sm text-gray-500"><i class="fas fa-gift text-2xl text-gray-300 block mb-2"></i>Nenhum resgate deste prêmio ainda.</div>
+            {% endfor %}
         </div>
-    </div>
+    </section>
 </div>
 
 <script>
-// Toggle de desconto
-function toggleDiscount() {
-    const hasDiscount = document.getElementById('has_discount').checked;
-    const discountFields = document.getElementById('discount_fields');
-    
-    if (hasDiscount) {
-        discountFields.classList.remove('hidden');
-    } else {
-        discountFields.classList.add('hidden');
-        document.getElementById('discount_percentage').value = '';
-        updateFinalValue();
+(function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var valor = $('value_cs'), desconto = $('discount_percentage'), temDesconto = $('has_discount');
+    var ilimitado = $('unlimited_stock'), campoEstoque = $('stock_field'), estoque = $('estoque_disponivel');
+    var resgates = parseInt(campoEstoque.dataset.resgates, 10) || 0;
+
+    function numero(campo) { return parseFloat(String(campo.value || '').replace(',', '.')) || 0; }
+    function brl(v) { return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+    function atualizarValor() {
+        var v = numero(valor), p = temDesconto.checked ? numero(desconto) : 0;
+        $('final_value').textContent = 'C$ ' + brl(p > 0 ? v - v * p / 100 : v);
     }
-}
+    temDesconto.addEventListener('change', function () {
+        $('discount_fields').classList.toggle('hidden', !temDesconto.checked);
+        atualizarValor();
+    });
+    valor.addEventListener('input', atualizarValor);
+    desconto.addEventListener('input', atualizarValor);
 
-// Toggle de estoque
-function toggleStock() {
-    const unlimitedStock = document.getElementById('unlimited_stock').checked;
-    const stockField = document.getElementById('stock_field');
-    
-    if (unlimitedStock) {
-        stockField.classList.add('hidden');
-    } else {
-        stockField.classList.remove('hidden');
+    // Estoque dinâmico: o campo é o que ainda dá para resgatar; o total gravado soma os resgates.
+    function atualizarEstoque() {
+        var disp = Math.max(0, parseInt(estoque.value, 10) || 0), total = disp + resgates;
+        document.querySelector('[data-estoque-barra]').style.width = (total ? Math.round(disp / total * 100) : 0) + '%';
+        document.querySelector('[data-estoque-conta]').textContent =
+            (resgates === 1 ? '1 resgate já ocupa' : resgates + ' resgates já ocupam') +
+            ' o estoque (pendentes, aprovados e entregues; cancelado devolve a unidade). Total cadastrado: ' +
+            total + ' = ' + disp + ' disponíve' + (disp === 1 ? 'l' : 'is') + ' + ' + resgates + ' resgatado' + (resgates === 1 ? '' : 's') + '.';
     }
-}
+    ilimitado.addEventListener('change', function () { campoEstoque.classList.toggle('hidden', ilimitado.checked); });
+    estoque.addEventListener('input', atualizarEstoque);
+    atualizarEstoque();
 
-// Calcular desconto
-function calculateDiscount() {
-    const valueCs = parseFloat(document.getElementById('value_cs').value) || 0;
-    const discountPercentage = parseFloat(document.getElementById('discount_percentage').value) || 0;
-    
-    if (valueCs > 0 && discountPercentage > 0) {
-        const finalValue = valueCs - (valueCs * discountPercentage / 100);
-        document.getElementById('final_value').textContent = 'C$ ' + finalValue.toFixed(2);
-    } else {
-        document.getElementById('final_value').textContent = 'C$ ' + valueCs.toFixed(2);
-    }
-}
+    // Prévia da nova imagem (inteira, como no Mercadinho).
+    var arquivo = $('image'), previa = $('preview-img'), atual = document.querySelector('[data-foto-atual]'), desfazer = $('removePreview');
+    arquivo.addEventListener('change', function () {
+        if (!arquivo.files || !arquivo.files[0]) { return; }
+        var leitor = new FileReader();
+        leitor.onload = function (e) {
+            previa.src = e.target.result;
+            previa.classList.remove('hidden');
+            if (atual) { atual.classList.add('hidden'); }
+            desfazer.classList.remove('hidden');
+        };
+        leitor.readAsDataURL(arquivo.files[0]);
+    });
+    desfazer.addEventListener('click', function () {
+        arquivo.value = '';
+        previa.classList.add('hidden');
+        if (atual) { atual.classList.remove('hidden'); }
+        desfazer.classList.add('hidden');
+    });
 
-function updateFinalValue() {
-    const valueCs = parseFloat(document.getElementById('value_cs').value) || 0;
-    document.getElementById('final_value').textContent = 'C$ ' + valueCs.toFixed(2);
-}
-
-function previewImage(input) {
-    const preview = document.getElementById('image-preview');
-    const previewImg = document.getElementById('preview-img');
-    
-    if (input.files && input.files[0]) {
-        const reader = new FileReader();
-        
-        reader.onload = function(e) {
-            previewImg.src = e.target.result;
-            preview.classList.remove('hidden');
-        }
-        
-        reader.readAsDataURL(input.files[0]);
-    }
-}
-
-function removePreview() {
-    const imageInput = document.getElementById('image');
-    const preview = document.getElementById('image-preview');
-    
-    imageInput.value = '';
-    preview.classList.add('hidden');
-}
+    // novalidate: a conferência é esta (uma mensagem clara) e a do servidor.
+    document.querySelector('[data-premio-form]').addEventListener('submit', function (e) {
+        var erro = null;
+        if (!$('name').value.trim()) { erro = 'Informe o nome do prêmio.'; }
+        else if (!(numero(valor) > 0)) { erro = 'Informe o valor em C$ (maior que zero).'; }
+        else if (temDesconto.checked && !(numero(desconto) > 0 && numero(desconto) < 100)) { erro = 'Informe o desconto entre 0 e 100% (ou desmarque o desconto).'; }
+        if (erro) { e.preventDefault(); alert(erro); }
+    });
+})();
 
 function cancelRedemption(redemptionId) {
-    if (confirm('Tem certeza que deseja cancelar este resgate? O C$ será devolvido ao usuário.')) {
-        fetch(`/prizes/redemptions/${redemptionId}/cancel/`, {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
-                'Content-Type': 'application/json',
-            },
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert(data.message || 'Resgate cancelado com sucesso!');
-                location.reload();
-            } else {
-                alert('Erro ao cancelar resgate: ' + data.error);
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Erro ao cancelar resgate');
-        });
-    }
+    if (!confirm('Tem certeza que deseja cancelar este resgate? O C$ será devolvido ao usuário.')) { return; }
+    fetch(`/prizes/redemptions/${redemptionId}/cancel/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value, 'Content-Type': 'application/json' },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) { alert(data.message || 'Resgate cancelado com sucesso!'); location.reload(); }
+        else { alert('Erro ao cancelar resgate: ' + data.error); }
+    })
+    .catch(() => alert('Erro ao cancelar resgate'));
 }
 </script>
+{% include '_rc_animacoes_script.html' %}
 {% endblock %}

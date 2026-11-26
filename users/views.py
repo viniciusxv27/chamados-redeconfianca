@@ -5645,46 +5645,9 @@ def create_tutorial_view(request):
 
 @login_required
 def manage_prizes_view(request):
-    """Gerenciar prêmios (admin only)"""
-    if not request.user.can_manage_users():
-        messages.error(request, 'Você não tem permissão para acessar esta página.')
-        return redirect('dashboard')
-    
-    from prizes.models import Prize, Redemption
-    from django.db.models import Count, Sum, Q
-    
-    # Buscar prêmios com estatísticas de resgates
-    prizes = Prize.objects.annotate(
-        total_redemptions=Count('redemption'),
-        pending_redemptions=Count('redemption', filter=Q(redemption__status='PENDENTE')),
-        approved_redemptions=Count('redemption', filter=Q(redemption__status='APROVADO')),
-        delivered_redemptions=Count('redemption', filter=Q(redemption__status='ENTREGUE')),
-        total_cs_spent=Sum('redemption__prize__value_cs', filter=Q(redemption__status__in=['APROVADO', 'ENTREGUE']))
-    ).order_by('-created_at')
-    
-    # Resgates recentes (últimos 15 dias, todos os status)
-    from django.utils import timezone
-    from datetime import timedelta
-    fifteen_days_ago = timezone.now() - timedelta(days=15)
-    recent_redemptions = Redemption.objects.filter(
-        redeemed_at__gte=fifteen_days_ago
-    ).select_related('user', 'prize').order_by('-redeemed_at')[:10]
-    
-    # Calcular total real de C$ em circulação somando os saldos de todos os usuários
-    total_cs_circulation = User.objects.aggregate(
-        total=Sum('balance_cs')
-    )['total'] or Decimal('0')
-    
-    context = {
-        'prizes': prizes,
-        'recent_redemptions': recent_redemptions,
-        'total_prizes': prizes.count(),
-        'active_prizes': prizes.filter(is_active=True).count(),
-        'pending_redemptions': Redemption.objects.filter(status='PENDENTE').count(),
-        'total_cs_circulation': total_cs_circulation,
-        'user': request.user,
-    }
-    return render(request, 'prizes/manage.html', context)
+    """Cópia antiga da gestão de prêmios: a tela de verdade é /prizes/manage/ (mesma conta
+    de resgates e estoque, exclusão lógica). Fica só o redirecionamento (26/11/2026)."""
+    return redirect('/prizes/manage/')
 
 
 @login_required
@@ -5721,73 +5684,9 @@ def create_prize_view(request):
 
 @login_required
 def edit_prize_view(request, prize_id):
-    """Editar prêmio (admin only)"""
-    if not request.user.can_manage_users():
-        messages.error(request, 'Você não tem permissão para acessar esta página.')
-        return redirect('dashboard')
-    
-    from prizes.models import Prize, PrizeCategory, Redemption
-    prize = get_object_or_404(Prize, id=prize_id)
-    
-    if request.method == 'POST':
-        prize.name = request.POST.get('name', prize.name)
-        prize.description = request.POST.get('description', prize.description)
-        prize.value_cs = request.POST.get('cost', prize.value_cs)  # Corrigindo para 'cost'
-        
-        # Processar categoria
-        category_id = request.POST.get('category')
-        if category_id:
-            prize.category_id = category_id
-        else:
-            prize.category = None
-        
-        # Processar remoção de imagem
-        if request.POST.get('remove_image'):
-            if prize.image:
-                prize.image.delete()
-                prize.image = None
-        
-        # Processar upload de nova imagem
-        if request.FILES.get('image'):
-            if prize.image:
-                prize.image.delete()
-            prize.image = request.FILES.get('image')
-        
-        # Status ativo
-        prize.is_active = request.POST.get('is_active') == 'on'
-        
-        # Estoque
-        stock = request.POST.get('stock')
-        if stock:
-            prize.stock = int(stock)
-        
-        try:
-            prize.save()
-            
-            log_action(
-                request.user,
-                'PRIZE_UPDATE',
-                f'Prêmio atualizado: {prize.name}',
-                request
-            )
-            
-            messages.success(request, 'Prêmio atualizado com sucesso!')
-            return redirect('manage_prizes')
-            
-        except Exception as e:
-            messages.error(request, f'Erro ao atualizar prêmio: {str(e)}')
-    
-    # Buscar categorias e resgates
-    categories = PrizeCategory.objects.all().order_by('name')
-    redemptions = Redemption.objects.filter(prize=prize).order_by('-redeemed_at')
-    
-    context = {
-        'prize': prize,
-        'categories': categories,
-        'redemptions': redemptions,
-        'user': request.user,
-    }
-    return render(request, 'prizes/edit.html', context)
+    """Cópia antiga da edição (lia o valor do campo "cost", que o formulário não manda).
+    A tela de verdade é /prizes/<id>/edit/ (26/11/2026)."""
+    return redirect(f'/prizes/{prize_id}/edit/')
 
 
 @login_required

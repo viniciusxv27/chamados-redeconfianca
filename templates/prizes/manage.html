@@ -2,367 +2,320 @@
 
 {% block title %}Gerenciar Prêmios{% endblock %}
 
+{% block extra_css %}
+{% include '_rc_animacoes.html' %}
+<style>
+    .rc-filtro[aria-pressed="true"] { box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgba(255, 255, 255, .65); background: rgba(255, 255, 255, .3); }
+    .rc-premio-foto { aspect-ratio: 16 / 10; background: #fff; }
+    .rc-premio-foto img { width: 100%; height: 100%; object-fit: contain; }
+    html.dark .rc-premio-foto { background: #f6f7f9; }
+    .rc-premio-pausado .rc-premio-foto img { filter: grayscale(70%); opacity: .6; }
+    .rc-barra { height: .375rem; border-radius: 9999px; background: #f3f4f6; overflow: hidden; }
+    html.dark .rc-barra { background: rgba(255, 255, 255, .12); }
+    .rc-barra > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #ff6b35, #f59e0b); }
+    .rc-barra-baixa > span { background: linear-gradient(90deg, #dc2626, #f97316); }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="min-h-screen bg-gray-50">
-    <!-- Header -->
-    <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
-        <div class="px-6 py-4">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                    <h1 class="text-2xl font-bold text-gray-900 flex items-center">
-                        <i class="fas fa-gift text-primary mr-3"></i>
-                        Gerenciar Prêmios
-                    </h1>
-                    <p class="text-gray-600 mt-1">Configure prêmios para troca por Confianças C$</p>
+{% csrf_token %}
+<div class="max-w-6xl mx-auto px-4 sm:px-0">
+    {% comment %}Topo no estilo da home e dos comunicados (26/11/2026): os números viram filtros.{% endcomment %}
+    <section class="rc-hero rc-surge relative overflow-hidden rounded-3xl text-white shadow-lg mb-5">
+        <span class="rc-forma rc-forma-1" aria-hidden="true"></span>
+        <span class="rc-forma rc-forma-2" aria-hidden="true"></span>
+        <div class="relative p-5 sm:p-7">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0">
+                    <h1 class="text-2xl sm:text-3xl font-bold flex items-center gap-3"><i class="fas fa-gift"></i> {% if ver_excluidos %}Prêmios excluídos{% else %}Gerenciar prêmios{% endif %}</h1>
+                    <p class="rc-hero-suave text-sm mt-1">{% if ver_excluidos %}Fora da gestão e do Mercadinho. Quem já resgatou continua vendo no próprio histórico.{% else %}Prêmios para troca por Confianças (C$).{% endif %}</p>
                 </div>
-                <div class="flex flex-wrap gap-3">
-                    <a href="{% url 'sugestoes_produto' %}" class="bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600"><i class="fas fa-lightbulb mr-2"></i>Sugestões</a>
-                    <a href="{% url 'manage_discounts' %}" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors flex items-center">
-                        <i class="fas fa-tags mr-2"></i>
-                        Descontos
+                <div class="flex flex-wrap gap-2">
+                    {% if ver_excluidos %}
+                    <a href="{% url 'manage_prizes' %}" data-rc-pop class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-orange-600 font-semibold text-sm shadow hover:shadow-md transition-shadow">
+                        <i class="fas fa-arrow-left"></i> Voltar aos prêmios
                     </a>
-                    <a href="{% url 'create_prize' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors flex items-center">
-                        <i class="fas fa-plus mr-2"></i>
-                        Novo Prêmio
+                    {% else %}
+                    <a href="{% url 'create_prize' %}" data-rc-pop class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-orange-600 font-semibold text-sm shadow hover:shadow-md transition-shadow">
+                        <i class="fas fa-plus"></i> Novo prêmio
                     </a>
-                    <a href="{% url 'admin_panel' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
-                        <i class="fas fa-arrow-left mr-2"></i>
-                        Voltar
-                    </a>
+                    {% endif %}
                 </div>
             </div>
-        </div>
-    </div>
-
-    <!-- Statistics Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <div class="bg-white rounded-xl shadow-sm p-6">
-            <div class="flex items-center">
-                <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-4">
-                    <i class="fas fa-gift text-blue-600 text-xl"></i>
-                </div>
-                <div>
-                    <p class="text-sm text-gray-600">Total de Prêmios</p>
-                    <p class="text-2xl font-bold text-gray-900">{{ total_prizes }}</p>
-                </div>
+            <div class="flex flex-wrap gap-2 mt-4">
+                <a href="{% url 'manage_redemptions' %}" class="rc-vidro inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold"><i class="fas fa-handshake"></i> Resgates{% if pending_redemptions %} · {{ pending_redemptions }} pendente{{ pending_redemptions|pluralize }}{% endif %}</a>
+                <a href="{% url 'sugestoes_produto' %}" class="rc-vidro inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold"><i class="fas fa-lightbulb"></i> Sugestões</a>
+                <a href="{% url 'manage_discounts' %}" class="rc-vidro inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold"><i class="fas fa-tags"></i> Descontos</a>
+                <a href="{% url 'marketplace' %}" class="rc-vidro inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold"><i class="fas fa-store"></i> Ver o Mercadinho</a>
+                {% if not ver_excluidos %}
+                <a href="?excluidos=1" class="rc-vidro inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold"><i class="fas fa-trash-can"></i> Excluídos ({{ total_excluidos }})</a>
+                {% endif %}
+                <span class="rc-vidro inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold" title="Soma dos saldos de todos"><i class="fas fa-coins"></i> {{ total_cs_circulation|floatformat:'0g' }} C$ em circulação</span>
             </div>
-        </div>
-        
-        <div class="bg-white rounded-xl shadow-sm p-6">
-            <div class="flex items-center">
-                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mr-4">
-                    <i class="fas fa-check-circle text-green-600 text-xl"></i>
-                </div>
-                <div>
-                    <p class="text-sm text-gray-600">Prêmios Ativos</p>
-                    <p class="text-2xl font-bold text-gray-900">{{ active_prizes }}</p>
-                </div>
-            </div>
-        </div>
-        
-        <div class="bg-white rounded-xl shadow-sm p-6">
-            <div class="flex items-center">
-                <div class="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center mr-4">
-                    <i class="fas fa-handshake text-yellow-600 text-xl"></i>
-                </div>
-                <div>
-                    <p class="text-sm text-gray-600">Resgates Pendentes</p>
-                    <p class="text-2xl font-bold text-gray-900">{{ pending_redemptions }}</p>
-                </div>
-            </div>
-        </div>
-        
-        <div class="bg-white rounded-xl shadow-sm p-6">
-            <div class="flex items-center">
-                <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mr-4">
-                    <i class="fas fa-coins text-purple-600 text-xl"></i>
-                </div>
-                <div>
-                    <p class="text-sm text-gray-600">C$ em Circulação</p>
-                    <p class="text-2xl font-bold text-gray-900">{{ total_cs_circulation }}</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Prizes Grid -->
-    <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div class="px-6 py-4 border-b border-gray-200">
-            <div class="flex items-center justify-between">
-                <h3 class="text-lg font-semibold text-gray-900">Prêmios Disponíveis</h3>
-                <div class="flex space-x-2">
-                    <button class="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
-                        <i class="fas fa-filter mr-1"></i>
-                        Filtrar
-                    </button>
-                    <button class="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
-                        <i class="fas fa-sort mr-1"></i>
-                        Ordenar
-                    </button>
-                </div>
-            </div>
-        </div>
-        
-        <div class="p-6">
-            {% if prizes %}
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {% for prize in prizes %}
-                <div class="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow">
-                    <div class="aspect-w-16 aspect-h-9 bg-gray-200">
-                        {% if prize.image %}
-                        <img src="{{ prize.image.url }}" alt="{{ prize.name }}" class="w-full h-48 object-cover">
-                        {% else %}
-                        <div class="w-full h-48 bg-gray-200 flex items-center justify-center">
-                            <i class="fas fa-gift text-gray-400 text-4xl"></i>
-                        </div>
-                        {% endif %}
-                    </div>
-                    
-                    <div class="p-4">
-                        <div class="flex items-start justify-between mb-2">
-                            <h4 class="text-lg font-semibold text-gray-900">{{ prize.name }}</h4>
-                            <div class="flex space-x-1">
-                                <a href="{% url 'edit_prize' prize.id %}" class="bg-blue-100 text-blue-600 p-2 rounded-lg hover:bg-blue-200 transition-colors" title="Editar">
-                                    <i class="fas fa-edit"></i>
-                                </a>
-                                <a href="{% url 'prize_redemptions' prize.id %}" class="bg-purple-100 text-purple-600 p-2 rounded-lg hover:bg-purple-200 transition-colors" title="Ver Resgates">
-                                    <i class="fas fa-list"></i>
-                                </a>
-                                <button onclick="togglePrizeStatus({{ prize.id }})" 
-                                        class="{% if prize.is_active %}bg-orange-100 text-orange-600{% else %}bg-green-100 text-green-600{% endif %} p-2 rounded-lg hover:{% if prize.is_active %}bg-orange-200{% else %}bg-green-200{% endif %} transition-colors" 
-                                        title="{% if prize.is_active %}Pausar{% else %}Ativar{% endif %}">
-                                    <i class="fas fa-{% if prize.is_active %}pause{% else %}play{% endif %}"></i>
-                                </button>
-                            </div>
-                        </div>
-                        
-                        <!-- Status do prêmio -->
-                        <div class="mb-3">
-                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full 
-                                       {% if prize.is_active %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
-                                {% if prize.is_active %}Ativo{% else %}Pausado{% endif %}
-                            </span>
-                        </div>
-                        
-                        <p class="text-gray-600 text-sm mb-3">{{ prize.description|truncatechars:100 }}</p>
-                        
-                        <div class="space-y-2 mb-4">
-                            <div class="flex items-center justify-between">
-                                <span class="text-sm text-gray-600">Valor:</span>
-                                <span class="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
-                                    C$ {{ prize.value_cs }}
-                                </span>
-                            </div>
-                            
-                            <div class="flex items-center justify-between">
-                                <span class="text-sm text-gray-600">Resgates:</span>
-                                <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-                                    {{ prize.total_redemptions|default:0 }} total
-                                </span>
-                            </div>
-                            
-                            {% if prize.pending_redemptions > 0 %}
-                            <div class="flex items-center justify-between">
-                                <span class="text-sm text-gray-600">Pendentes:</span>
-                                <span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium">
-                                    {{ prize.pending_redemptions }} aguardando
-                                </span>
-                            </div>
-                            {% endif %}
-                            
-                            <div class="flex items-center justify-between">
-                                <span class="text-sm text-gray-600">Estoque:</span>
-                                {% if prize.unlimited_stock %}
-                                    <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-                                        Ilimitado
-                                    </span>
-                                {% else %}
-                                    <span class="px-2 py-1 {% if prize.stock > 10 %}bg-green-100 text-green-800{% elif prize.stock > 0 %}bg-yellow-100 text-yellow-800{% else %}bg-red-100 text-red-800{% endif %} rounded-full text-sm font-medium">
-                                        {{ prize.stock }} unidades
-                                    </span>
-                                {% endif %}
-                            </div>
-                            
-                            <div class="flex items-center justify-between">
-                                <span class="text-sm text-gray-600">Status:</span>
-                                {% if prize.is_active %}
-                                    <span class="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
-                                        <i class="fas fa-check-circle mr-1"></i>Ativo
-                                    </span>
-                                {% else %}
-                                    <span class="px-2 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium">
-                                        <i class="fas fa-times-circle mr-1"></i>Inativo
-                                    </span>
-                                {% endif %}
-                            </div>
-                        </div>
-                        
-                        <div class="flex space-x-2">
-                            <button onclick="togglePrizeStatus({{ prize.id }})" 
-                                    class="flex-1 px-3 py-2 text-sm {% if prize.is_active %}bg-red-100 text-red-700 hover:bg-red-200{% else %}bg-green-100 text-green-700 hover:bg-green-200{% endif %} rounded-lg transition-colors">
-                                {% if prize.is_active %}
-                                    <i class="fas fa-pause mr-1"></i>Pausar
-                                {% else %}
-                                    <i class="fas fa-play mr-1"></i>Ativar
-                                {% endif %}
-                            </button>
-                            <button class="flex-1 px-3 py-2 text-sm bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg transition-colors">
-                                <i class="fas fa-eye mr-1"></i>Ver Resgates
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-            {% else %}
-            <div class="text-center py-12">
-                <div class="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <i class="fas fa-gift text-gray-400 text-3xl"></i>
-                </div>
-                <h3 class="text-lg font-semibold text-gray-900 mb-2">Nenhum prêmio cadastrado</h3>
-                <p class="text-gray-600 mb-4">Adicione prêmios para os usuários trocarem por Confianças C$</p>
-                <a href="{% url 'create_prize' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors inline-flex items-center">
-                    <i class="fas fa-plus mr-2"></i>
-                    Criar Primeiro Prêmio
-                </a>
+            {% if not ver_excluidos %}
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mt-5" role="group" aria-label="Filtrar prêmios">
+                <button type="button" data-rc-filtro="" aria-pressed="true" style="--i: 1" class="rc-filtro rc-hero-acao rc-sobe rounded-2xl px-4 py-3 text-left">
+                    <span class="block text-2xl font-bold" data-rc-conta="{{ total_prizes }}">{{ total_prizes }}</span>
+                    <span class="rc-hero-suave text-xs"><i class="fas fa-gift mr-1"></i>Todos</span>
+                </button>
+                <button type="button" data-rc-filtro="ativo" aria-pressed="false" style="--i: 2" class="rc-filtro rc-hero-acao rc-sobe rounded-2xl px-4 py-3 text-left">
+                    <span class="block text-2xl font-bold" data-rc-conta="{{ active_prizes }}">{{ active_prizes }}</span>
+                    <span class="rc-hero-suave text-xs"><i class="fas fa-check-circle mr-1"></i>Ativos</span>
+                </button>
+                <button type="button" data-rc-filtro="pausado" aria-pressed="false" style="--i: 3" class="rc-filtro rc-hero-acao rc-sobe rounded-2xl px-4 py-3 text-left">
+                    <span class="block text-2xl font-bold" data-rc-conta="{{ paused_prizes }}">{{ paused_prizes }}</span>
+                    <span class="rc-hero-suave text-xs"><i class="fas fa-pause-circle mr-1"></i>Pausados</span>
+                </button>
+                <button type="button" data-rc-filtro="esgotado" aria-pressed="false" style="--i: 4" class="rc-filtro rc-hero-acao rc-sobe rounded-2xl px-4 py-3 text-left">
+                    <span class="block text-2xl font-bold" data-rc-conta="{{ esgotados }}">{{ esgotados }}</span>
+                    <span class="rc-hero-suave text-xs"><i class="fas fa-box-open mr-1"></i>Esgotados</span>
+                </button>
             </div>
             {% endif %}
         </div>
-    </div>
+    </section>
 
-    <!-- Recent Redemptions -->
-    <div class="bg-white rounded-xl shadow-sm overflow-hidden mt-6">
-        <div class="px-6 py-4 border-b border-gray-200">
-            <div class="flex items-center justify-between">
-                <h3 class="text-lg font-semibold text-gray-900">Resgates Recentes</h3>
-                <a href="{% url 'manage_redemptions' %}" class="text-primary hover:text-orange-600 text-sm font-medium">Ver todos</a>
+    <div class="relative mb-3">
+        <i class="fas fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+        <input type="search" data-rc-busca placeholder="Buscar prêmio pelo nome ou categoria…"
+               class="w-full pl-10 pr-3 py-3 rounded-2xl border border-gray-200 bg-white text-sm focus:border-orange-400 focus:outline-none shadow-sm">
+    </div>
+    <p class="text-xs text-gray-500 mb-3" data-rc-resumo></p>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" data-rc-lista>
+        {% for prize in prizes %}
+        {% with restante=prize.estoque_restante resgates=prize.resgates_ativos %}
+        <article class="rc-post bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col {% if not prize.is_active %}rc-premio-pausado{% endif %} {% if forloop.counter <= 6 %}rc-sobe{% endif %}"
+                 {% if forloop.counter <= 6 %}style="--i: {{ forloop.counter }}"{% else %}data-rc-revela{% endif %}
+                 data-rc-premio="{{ prize.id }}"
+                 data-situacao="{% if prize.is_active %}ativo{% else %}pausado{% endif %}{% if prize.esgotado %} esgotado{% endif %}"
+                 data-busca="{{ prize.name|lower }} {{ prize.category.name|default:''|lower }}">
+            <div class="rc-premio-foto relative flex items-center justify-center p-3 border-b border-gray-100">
+                {% if prize.image %}
+                <img src="{{ prize.image.url }}" alt="{{ prize.name }}" loading="lazy">
+                {% else %}
+                <i class="fas fa-gift text-gray-300 text-5xl"></i>
+                {% endif %}
+                <div class="absolute top-2 left-2 flex flex-wrap gap-1">
+                    {% if ver_excluidos %}
+                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-red-700"><i class="fas fa-trash-can"></i>Excluído</span>
+                    {% elif prize.is_active %}
+                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-800"><i class="fas fa-check-circle"></i>Ativo</span>
+                    {% else %}
+                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-700"><i class="fas fa-pause"></i>Pausado</span>
+                    {% endif %}
+                    {% if prize.esgotado %}<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-800 text-white">Esgotado</span>{% endif %}
+                    {% if prize.priority == 'DESTAQUE' or prize.priority == 'ALTA' %}<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800"><i class="fas fa-star"></i>{{ prize.get_priority_display }}</span>{% endif %}
+                </div>
             </div>
-        </div>
-        
-        <div class="p-6">
-            {% if recent_redemptions %}
-            <div class="space-y-4">
-                {% for redemption in recent_redemptions %}
-                <div class="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                    <div class="flex items-center space-x-4">
-                        <!-- Foto do usuário -->
-                        {% if redemption.user.profile_picture %}
-                            <img src="{{ redemption.user.profile_picture.url }}" alt="{{ redemption.user.full_name }}" class="w-10 h-10 rounded-full object-cover">
-                        {% else %}
-                            <div class="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
-                                <span class="text-white font-medium text-sm">{{ redemption.user.first_name.0 }}{{ redemption.user.last_name.0 }}</span>
-                            </div>
-                        {% endif %}
-                        
-                        <!-- Imagem do prêmio (pequena) -->
-                        <div class="w-8 h-8">
-                            {% if redemption.prize.image %}
-                                <img src="{{ redemption.prize.image.url }}" alt="{{ redemption.prize.name }}" class="w-8 h-8 rounded object-cover">
-                            {% else %}
-                                <div class="w-8 h-8 bg-gray-200 rounded flex items-center justify-center">
-                                    <i class="fas fa-gift text-gray-400 text-xs"></i>
-                                </div>
-                            {% endif %}
-                        </div>
-                        
-                        <div>
-                            <p class="text-sm font-medium text-gray-900">{{ redemption.user.full_name }}</p>
-                            <p class="text-sm text-gray-500">{{ redemption.prize.name }} - C$ {{ redemption.prize.value_cs }}</p>
-                        </div>
+            <div class="p-4 flex flex-col flex-1">
+                <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                        <h3 class="font-bold text-gray-900 leading-snug">{{ prize.name }}</h3>
+                        {% if prize.category %}<p class="text-xs text-gray-500 mt-0.5"><i class="{{ prize.category.icon }} mr-0.5"></i>{{ prize.category.name }}</p>{% endif %}
                     </div>
-                    
-                    <div class="flex items-center space-x-4">
-                        <div class="text-right">
-                            <span class="px-2 py-1 {% if redemption.status == 'PENDENTE' %}bg-yellow-100 text-yellow-800{% elif redemption.status == 'APROVADO' %}bg-blue-100 text-blue-800{% elif redemption.status == 'ENTREGUE' %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %} rounded-full text-xs font-medium">
-                                {{ redemption.get_status_display }}
-                            </span>
-                            <p class="text-xs text-gray-500 mt-1">{{ redemption.redeemed_at|date:"d/m/Y H:i" }}</p>
-                        </div>
-                        
-                        {% if redemption.status == 'PENDENTE' %}
-                        <div class="flex space-x-2">
-                            <button onclick="updateRedemptionStatus({{ redemption.id }}, 'APROVADO')" 
-                                    class="bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700 transition-colors">
-                                Aprovar
-                            </button>
-                            <button onclick="updateRedemptionStatus({{ redemption.id }}, 'CANCELADO')" 
-                                    class="bg-red-600 text-white px-3 py-1 rounded text-xs hover:bg-red-700 transition-colors">
-                                Cancelar
-                            </button>
-                        </div>
+                    <div class="text-right flex-shrink-0">
+                        {% if prize.has_discount and prize.discounted_value %}
+                        <span class="text-[11px] text-gray-400 line-through block">{{ prize.value_cs|floatformat:'0g' }} C$</span>
+                        <span class="font-bold text-orange-600 whitespace-nowrap">{{ prize.discounted_value|floatformat:'0g' }} C$</span>
+                        {% else %}
+                        <span class="font-bold text-gray-900 whitespace-nowrap">{{ prize.value_cs|floatformat:'0g' }} C$</span>
                         {% endif %}
                     </div>
                 </div>
-                {% endfor %}
+
+                <div class="grid grid-cols-2 gap-2 mt-3">
+                    <div class="rounded-xl bg-gray-50 px-3 py-2">
+                        <span class="block text-[11px] text-gray-500 font-medium">Resgates</span>
+                        <span class="block text-xl font-bold text-gray-900" data-resgates="{{ resgates }}">{{ resgates }}</span>
+                    </div>
+                    <div class="rounded-xl bg-gray-50 px-3 py-2">
+                        <span class="block text-[11px] text-gray-500 font-medium">Estoque</span>
+                        {% if restante is None %}
+                        <span class="block text-xl font-bold text-gray-900"><i class="fas fa-infinity text-base"></i> <span class="text-xs font-semibold text-gray-500">ilimitado</span></span>
+                        {% else %}
+                        <span class="block text-xl font-bold {% if restante == 0 %}text-red-600{% elif restante <= 3 %}text-amber-600{% else %}text-gray-900{% endif %}" data-restante="{{ restante }}">{{ restante }} <span class="text-xs font-semibold text-gray-500">de {{ prize.stock }}</span></span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if restante is not None and prize.stock %}
+                <div class="rc-barra mt-2 {% if restante <= 3 %}rc-barra-baixa{% endif %}" title="{{ restante }} de {{ prize.stock }} disponíveis"><span style="width: {{ prize.availability_percentage|floatformat:'0u' }}%"></span></div>
+                {% endif %}
+                <p class="text-[11px] text-gray-500 mt-2 leading-relaxed">
+                    {% if prize.n_pendentes %}<span class="text-amber-700 font-semibold">{{ prize.n_pendentes }} pendente{{ prize.n_pendentes|pluralize }}</span> · {% endif %}{{ prize.n_aprovados }} aprovado{{ prize.n_aprovados|pluralize }} · {{ prize.n_entregues }} entregue{{ prize.n_entregues|pluralize }}{% if prize.n_cancelados %} · {{ prize.n_cancelados }} cancelado{{ prize.n_cancelados|pluralize }} (não contam){% endif %}
+                </p>
+                {% if ver_excluidos %}
+                <p class="text-[11px] text-red-600 mt-1"><i class="fas fa-trash-can mr-0.5"></i>Excluído em {{ prize.excluido_em|date:"d/m/Y H:i" }}{% if prize.excluido_por %} por {{ prize.excluido_por.full_name }}{% endif %}</p>
+                {% endif %}
+
+                <div class="mt-auto pt-3 flex flex-wrap gap-1.5">
+                    {% if ver_excluidos %}
+                    <button type="button" data-rc-pop onclick="restaurarPremio({{ prize.id }})" class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-green-50 text-green-700 text-sm font-semibold hover:bg-green-100"><i class="fas fa-rotate-left"></i> Restaurar</button>
+                    <a href="{% url 'prize_redemptions' prize.id %}" class="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-purple-50 text-purple-700 text-sm font-semibold hover:bg-purple-100" title="Ver resgates"><i class="fas fa-list"></i> Resgates</a>
+                    {% else %}
+                    <a href="{% url 'edit_prize' prize.id %}" data-rc-pop class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-orange-50 text-orange-700 text-sm font-semibold hover:bg-orange-100"><i class="fas fa-pen"></i> Editar</a>
+                    <a href="{% url 'prize_redemptions' prize.id %}" class="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100" title="Ver resgates" aria-label="Ver resgates"><i class="fas fa-list"></i></a>
+                    <button type="button" data-rc-pop onclick="alternarPremio({{ prize.id }})" class="inline-flex items-center justify-center w-10 h-10 rounded-xl {% if prize.is_active %}bg-amber-50 text-amber-700 hover:bg-amber-100{% else %}bg-green-50 text-green-700 hover:bg-green-100{% endif %}"
+                            title="{% if prize.is_active %}Pausar{% else %}Ativar{% endif %}" aria-label="{% if prize.is_active %}Pausar{% else %}Ativar{% endif %}"><i class="fas fa-{% if prize.is_active %}pause{% else %}play{% endif %}"></i></button>
+                    <button type="button" data-rc-pop onclick="pedirExclusao({{ prize.id }}, this)" data-nome="{{ prize.name }}" data-resgates="{{ resgates }}"
+                            class="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-red-50 text-red-600 hover:bg-red-100" title="Excluir" aria-label="Excluir"><i class="fas fa-trash-can"></i></button>
+                    {% endif %}
+                </div>
             </div>
+        </article>
+        {% endwith %}
+        {% empty %}
+        <div class="col-span-full bg-white rounded-2xl border border-gray-100 p-12 text-center">
+            <div class="w-20 h-20 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-gift text-orange-300 text-3xl"></i>
+            </div>
+            {% if ver_excluidos %}
+            <h3 class="text-lg font-semibold text-gray-900 mb-1">Nenhum prêmio excluído</h3>
             {% else %}
-            <div class="text-center py-8">
-                <i class="fas fa-handshake text-gray-400 text-3xl mb-2"></i>
-                <p class="text-gray-600">Nenhum resgate recente</p>
-            </div>
+            <h3 class="text-lg font-semibold text-gray-900 mb-1">Nenhum prêmio cadastrado</h3>
+            <p class="text-gray-500 text-sm mb-4">Adicione prêmios para a rede trocar por Confianças C$.</p>
+            <a href="{% url 'create_prize' %}" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-white font-semibold text-sm" style="background:linear-gradient(120deg,#ff6b35,#f59e0b)"><i class="fas fa-plus"></i> Criar o primeiro</a>
             {% endif %}
+        </div>
+        {% endfor %}
+        <div class="hidden col-span-full bg-white rounded-2xl border border-gray-100 p-10 text-center text-sm text-gray-500" data-rc-vazio>
+            <i class="fas fa-filter-circle-xmark text-2xl text-gray-300 mb-2 block"></i>Nenhum prêmio com esse filtro.
+        </div>
+    </div>
+
+    {% if not ver_excluidos %}
+    <section class="mt-8" data-rc-revela>
+        <div class="flex items-center justify-between gap-3 mb-3">
+            <div class="rc-secao-titulo">
+                <span class="rc-secao-icone" style="background:linear-gradient(135deg,#8b5cf6,#ec4899)"><i class="fas fa-handshake"></i></span>
+                <h2 class="text-lg font-bold text-gray-900">Resgates recentes</h2>
+            </div>
+            <a href="{% url 'manage_redemptions' %}" class="text-sm font-semibold text-orange-600 hover:underline">Ver todos <i class="fas fa-arrow-right text-xs"></i></a>
+        </div>
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm divide-y divide-gray-100">
+            {% for redemption in recent_redemptions %}
+            <div class="flex items-center gap-3 p-3 sm:p-4 flex-wrap sm:flex-nowrap">
+                {% if redemption.user.profile_picture %}
+                <img src="{{ redemption.user.profile_picture.url }}" alt="" class="w-10 h-10 rounded-full object-cover flex-shrink-0">
+                {% else %}
+                <span class="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0" style="background:linear-gradient(135deg,#ff6b35,#f59e0b)">{{ redemption.user.first_name.0 }}{{ redemption.user.last_name.0 }}</span>
+                {% endif %}
+                <div class="min-w-0 flex-1">
+                    <p class="text-sm font-semibold text-gray-900 truncate">{{ redemption.user.full_name }}</p>
+                    <p class="text-xs text-gray-500 truncate">{{ redemption.prize.name }} · {% if redemption.final_value is not None %}{{ redemption.final_value|floatformat:'0g' }}{% else %}{{ redemption.prize.value_cs|floatformat:'0g' }}{% endif %} C$ · {{ redemption.redeemed_at|date:"d/m/Y H:i" }}</p>
+                </div>
+                <span class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold flex-shrink-0 {% if redemption.status == 'PENDENTE' %}bg-yellow-100 text-yellow-800{% elif redemption.status == 'APROVADO' %}bg-blue-100 text-blue-800{% elif redemption.status == 'ENTREGUE' %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-700{% endif %}">{{ redemption.get_status_display }}</span>
+                {% if redemption.status == 'PENDENTE' %}
+                <div class="flex gap-1.5 flex-shrink-0">
+                    <button type="button" onclick="updateRedemptionStatus({{ redemption.id }}, 'APROVADO')" class="px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-semibold hover:bg-green-700">Aprovar</button>
+                    <button type="button" onclick="updateRedemptionStatus({{ redemption.id }}, 'CANCELADO')" class="px-3 py-1.5 rounded-lg bg-red-50 text-red-700 text-xs font-semibold hover:bg-red-100">Cancelar</button>
+                </div>
+                {% endif %}
+            </div>
+            {% empty %}
+            <div class="p-8 text-center text-sm text-gray-500"><i class="fas fa-handshake text-2xl text-gray-300 block mb-2"></i>Nenhum resgate nos últimos 15 dias.</div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+</div>
+
+<!-- Confirmação de exclusão -->
+<div id="excluirModal" class="fixed inset-0 rc-modal-fundo z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="excluirTitulo">
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <div class="rc-modal-cartao bg-white rounded-2xl p-6 max-w-md w-full shadow-xl">
+            <div class="w-12 h-12 rounded-2xl flex items-center justify-center bg-red-50 text-red-600 mb-3"><i class="fas fa-trash-can"></i></div>
+            <h3 id="excluirTitulo" class="text-lg font-bold text-gray-900">Excluir <span data-excluir-nome></span>?</h3>
+            <p class="text-sm text-gray-600 mt-2">Ele some desta lista e do Mercadinho. Os resgates ficam salvos (<strong data-excluir-resgates></strong>): quem resgatou continua vendo no próprio histórico, e eles seguem em Resgates. Dá para restaurar em "Excluídos".</p>
+            <div class="flex gap-3 mt-5">
+                <button type="button" onclick="fecharExclusao()" class="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold text-sm hover:bg-gray-200">Cancelar</button>
+                <button type="button" id="excluirConfirma" class="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-semibold text-sm hover:bg-red-700">Excluir</button>
+            </div>
         </div>
     </div>
 </div>
 
 <script>
-function togglePrizeStatus(prizeId) {
-    if (confirm('Tem certeza que deseja alterar o status deste prêmio?')) {
-        fetch(`/users/manage/prizes/${prizeId}/toggle-status/`, {
+(function () {
+    var csrf = function () { return document.querySelector('[name=csrfmiddlewaretoken]').value; };
+    function postar(url, corpo) {
+        return fetch(url, {
             method: 'POST',
-            headers: {
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
-                'Content-Type': 'application/json',
-            },
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                location.reload();
-            } else {
-                alert('Erro ao alterar status: ' + data.error);
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Erro ao alterar status do prêmio');
-        });
+            headers: { 'X-CSRFToken': csrf(), 'Content-Type': 'application/json' },
+            body: corpo ? JSON.stringify(corpo) : null,
+        }).then(function (r) { return r.json(); });
     }
-}
+    function falhou(msg) { return function (e) { alert(msg + (e && e.message ? ': ' + e.message : '')); }; }
 
-function updateRedemptionStatus(redemptionId, newStatus) {
-    const statusText = {
-        'APROVADO': 'aprovar',
-        'CANCELADO': 'cancelar'
+    window.alternarPremio = function (id) {
+        postar('/prizes/' + id + '/status/').then(function (d) {
+            if (d.success) { location.reload(); } else { alert('Não deu para mudar: ' + d.error); }
+        }).catch(falhou('Erro ao mudar o status'));
     };
-    
-    if (confirm(`Tem certeza que deseja ${statusText[newStatus]} este resgate?`)) {
-        fetch(`/prizes/redemptions/${redemptionId}/update-status/`, {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                status: newStatus
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                location.reload();
-            } else {
-                alert('Erro ao atualizar status: ' + data.error);
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Erro ao atualizar status');
-        });
-    }
-}
-</script>
 
-<!-- CSRF Token -->
-<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+    var modal = document.getElementById('excluirModal'), alvo = null;
+    window.pedirExclusao = function (id, botao) {
+        alvo = id;
+        var n = parseInt(botao.dataset.resgates, 10) || 0;
+        modal.querySelector('[data-excluir-nome]').textContent = '"' + botao.dataset.nome + '"';
+        modal.querySelector('[data-excluir-resgates]').textContent = n === 1 ? '1 resgate' : n + ' resgates';
+        modal.classList.remove('hidden');
+    };
+    window.fecharExclusao = function () { modal.classList.add('hidden'); alvo = null; };
+    modal.addEventListener('click', function (e) { if (e.target === modal || e.target === modal.firstElementChild) { fecharExclusao(); } });
+    document.getElementById('excluirConfirma').addEventListener('click', function () {
+        if (!alvo) { return; }
+        var botao = this;
+        botao.disabled = true;
+        postar('/prizes/' + alvo + '/excluir/').then(function (d) {
+            if (d.success) { location.reload(); } else { botao.disabled = false; alert('Não deu para excluir: ' + d.error); }
+        }).catch(function (e) { botao.disabled = false; falhou('Erro ao excluir')(e); });
+    });
+
+    window.restaurarPremio = function (id) {
+        postar('/prizes/' + id + '/restaurar/').then(function (d) {
+            if (d.success) { location.reload(); } else { alert('Não deu para restaurar: ' + d.error); }
+        }).catch(falhou('Erro ao restaurar'));
+    };
+
+    window.updateRedemptionStatus = function (redemptionId, newStatus) {
+        var texto = { APROVADO: 'aprovar', CANCELADO: 'cancelar' }[newStatus];
+        if (!confirm('Tem certeza que deseja ' + texto + ' este resgate?')) { return; }
+        postar('/prizes/redemptions/' + redemptionId + '/update-status/', { status: newStatus }).then(function (d) {
+            if (d.success) { location.reload(); } else { alert('Erro ao atualizar status: ' + d.error); }
+        }).catch(falhou('Erro ao atualizar status'));
+    };
+
+    // Filtros do topo + busca (como em /communications/).
+    var lista = document.querySelector('[data-rc-lista]');
+    if (!lista) { return; }
+    var cartoes = [].slice.call(lista.querySelectorAll('[data-rc-premio]'));
+    var filtros = [].slice.call(document.querySelectorAll('[data-rc-filtro]'));
+    var busca = document.querySelector('[data-rc-busca]');
+    var vazio = lista.querySelector('[data-rc-vazio]');
+    var resumo = document.querySelector('[data-rc-resumo]');
+    var atual = '';
+    function limpo(t) { return (t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+    cartoes.forEach(function (c) { c.dataset.busca = limpo(c.dataset.busca); });
+    function filtrar() {
+        var termo = limpo(busca ? busca.value : '').trim(), n = 0;
+        cartoes.forEach(function (c) {
+            var ok = (!atual || c.dataset.situacao.split(' ').indexOf(atual) !== -1) && (!termo || c.dataset.busca.indexOf(termo) !== -1);
+            c.classList.toggle('hidden', !ok);
+            if (ok) { n++; c.classList.remove('rc-espera'); }
+        });
+        if (vazio) { vazio.classList.toggle('hidden', n > 0 || !cartoes.length); }
+        if (resumo) { resumo.textContent = (atual || termo) ? n + (n === 1 ? ' prêmio' : ' prêmios') + ' no filtro' : ''; }
+    }
+    filtros.forEach(function (f) {
+        f.addEventListener('click', function () {
+            atual = f.dataset.rcFiltro;
+            filtros.forEach(function (g) { g.setAttribute('aria-pressed', String(g === f)); });
+            filtrar();
+        });
+    });
+    if (busca) { busca.addEventListener('input', filtrar); }
+})();
+</script>
+{% include '_rc_animacoes_script.html' %}
 {% endblock %}

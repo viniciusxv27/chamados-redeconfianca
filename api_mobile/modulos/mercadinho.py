@@ -32,7 +32,7 @@ from rest_framework.decorators import api_view, authentication_classes, permissi
 from rest_framework.response import Response
 
 from prizes import views as web
-from prizes.models import Prize, PrizeCategory, Redemption
+from prizes.models import STATUS_QUE_OCUPAM_ESTOQUE, Prize, PrizeCategory, Redemption
 
 from .. import dados
 from ..autenticacao import TokenMobileAuthentication
@@ -58,7 +58,8 @@ ORDENACAO = {
     'maior_valor': ('-value_cs', 'name'),
     'recentes': ('-created_at',),
 }
-STATUS_CONTA_ESTOQUE = ('APROVADO', 'ENTREGUE')       # Prize.available (prizes/models.py:91)
+# A mesma régua da web: pendente, aprovado e entregue ocupam o estoque (prizes/models.py).
+STATUS_CONTA_ESTOQUE = STATUS_QUE_OCUPAM_ESTOQUE
 
 
 # ── Apoio ─────────────────────────────────────────────────────────────────────
@@ -144,7 +145,7 @@ def _aprovados(premio_ids):
 
 def _premio_visivel(pk):
     # O resgate só acha prêmio ativo (prizes/views.py:69); o detalhe segue a mesma régua.
-    premio = Prize.objects.select_related('category').filter(pk=pk, is_active=True).first()
+    premio = Prize.objects.visiveis().select_related('category').filter(pk=pk, is_active=True).first()
     if premio is None:
         raise Http404('Prêmio não encontrado.')
     return premio
@@ -187,7 +188,7 @@ def _resgate(request, r):
 def vitrine(request):
     """?busca= &categoria=<id> &ordem=relevancia|menor_valor|maior_valor|recentes &pagina="""
     user = request.user
-    qs = Prize.objects.filter(is_active=True).select_related('category')
+    qs = Prize.objects.visiveis().filter(is_active=True).select_related('category')
     categoria = (request.query_params.get('categoria') or '').strip()
     if categoria.isdigit():
         qs = qs.filter(category_id=int(categoria))

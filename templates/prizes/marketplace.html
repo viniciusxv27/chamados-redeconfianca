@@ -4,325 +4,229 @@
 {% block title %}Mercadinho de Prêmios - Rede Confiança{% endblock %}
 
 {% block extra_css %}
+{% include '_rc_animacoes.html' %}
 <style>
-.prize-card {
-    transition: all 0.3s ease;
-    border: 2px solid transparent;
-}
-
-.prize-card:hover {
-    transform: translateY(-4px);
-    border-color: #3b82f6;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-}
-
-.priority-badge {
-    position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
-}
-
-.category-filter {
-    scroll-behavior: smooth;
-}
-
-.prize-unavailable {
-    opacity: 0.6;
-    filter: grayscale(50%);
-}
-
-.balance-display {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
+    /* Foto inteira (contain) numa vitrine clara: produto com fundo branco não vira um
+       retângulo solto no tema escuro. */
+    .rc-premio-foto { aspect-ratio: 16 / 10; background: #fff; }
+    .rc-premio-foto img { width: 100%; height: 100%; object-fit: contain; }
+    html.dark .rc-premio-foto { background: #f6f7f9; }
+    .rc-premio-esgotado .rc-premio-foto img { filter: grayscale(60%); opacity: .55; }
+    .rc-barra { height: .375rem; border-radius: 9999px; background: #f3f4f6; overflow: hidden; }
+    html.dark .rc-barra { background: rgba(255, 255, 255, .12); }
+    .rc-barra > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #ff6b35, #f59e0b); }
+    .rc-rolagem { scrollbar-width: none; }
+    .rc-rolagem::-webkit-scrollbar { display: none; }
+    .rc-categoria[aria-current="true"] { background: #ff6b35 !important; color: #fff !important; border-color: #ff6b35 !important; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-8">
-    {% include 'prizes/_sugerir_produto.html' %}
-    <!-- Header -->
-    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
-        <div>
-            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
-                <i class="fas fa-store mr-3 text-blue-600"></i>
-                Mercadinho Rede Confiança
-            </h1>
-            <p class="text-gray-600">Resgate prêmios incríveis com suas C$!</p>
-        </div>
-        
-        <!-- Saldo do usuário -->
-        <div class="flex flex-col items-end gap-2 mt-4 md:mt-0">
-            <div class="balance-display text-white px-6 py-4 rounded-lg shadow-lg">
-                <div class="text-sm opacity-90">Seu saldo</div>
-                <div class="text-2xl font-bold">
-                    <i class="fas fa-coins mr-2"></i>
-                    {{ user_balance|floatformat:0 }} C$
+<div class="max-w-6xl mx-auto px-4 sm:px-0">
+    {% comment %}Topo no estilo da home e dos comunicados (26/11/2026).{% endcomment %}
+    <section class="rc-hero rc-surge relative overflow-hidden rounded-3xl text-white shadow-lg mb-5">
+        <span class="rc-forma rc-forma-1" aria-hidden="true"></span>
+        <span class="rc-forma rc-forma-2" aria-hidden="true"></span>
+        <span class="rc-forma rc-forma-3" aria-hidden="true"></span>
+        <div class="relative p-5 sm:p-7">
+            <div class="flex items-start justify-between gap-4 flex-wrap">
+                <div class="min-w-0">
+                    <h1 class="text-2xl sm:text-3xl font-bold flex items-center gap-3"><i class="fas fa-store"></i> Mercadinho Rede Confiança</h1>
+                    <p class="rc-hero-suave text-sm mt-1">Troque suas Confianças (C$) por prêmios.</p>
+                </div>
+                <div class="rc-hero-saldo rounded-2xl px-5 py-3 text-right">
+                    <span class="rc-hero-suave text-xs block">Seu saldo</span>
+                    <span class="text-2xl sm:text-3xl font-bold whitespace-nowrap"><i class="fas fa-coins mr-1 text-xl"></i><span data-rc-conta="{{ user_balance|floatformat:'0u' }}">{{ user_balance|floatformat:'0g' }}</span> C$</span>
                 </div>
             </div>
-            <a href="{% url 'my_cs_statement' %}" class="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors">
-                <i class="fas fa-receipt"></i>
-                Ver meu extrato C$
-            </a>
-        </div>
-    </div>
-
-    <!-- Filtros -->
-    <div class="bg-white rounded-lg shadow-md p-6 mb-8">
-        <form method="GET" class="space-y-4">
-            <div class="flex flex-col md:flex-row gap-4">
-                <!-- Busca -->
-                <div class="flex-1">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">
-                        <i class="fas fa-search mr-1"></i>
-                        Buscar prêmios
-                    </label>
-                    <input type="text" name="search" value="{{ search }}" 
-                           placeholder="Digite o nome do prêmio..."
-                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                </div>
-                
-                <!-- Categoria -->
-                <div class="md:w-64">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">
-                        <i class="fas fa-tags mr-1"></i>
-                        Categoria
-                    </label>
-                    <select name="category" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                        <option value="">Todas as categorias</option>
-                        {% for category in categories %}
-                            <option value="{{ category.id }}" {% if current_category == category.id|stringformat:"s" %}selected{% endif %}>
-                                {{ category.name }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                
-                <!-- Ordenação -->
-                <div class="md:w-56">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">
-                        <i class="fas fa-sort mr-1"></i>
-                        Ordenar por
-                    </label>
-                    <select name="ordering" onchange="this.form.submit()" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                        <option value="relevance" {% if current_ordering == 'relevance' or not current_ordering %}selected{% endif %}>Mais Relevantes</option>
-                        <option value="recent" {% if current_ordering == 'recent' %}selected{% endif %}>Mais Recentes</option>
-                        <option value="value_asc" {% if current_ordering == 'value_asc' %}selected{% endif %}>Valor Crescente</option>
-                        <option value="value_desc" {% if current_ordering == 'value_desc' %}selected{% endif %}>Valor Decrescente</option>
-                    </select>
-                </div>
-                
-                <div class="flex items-end">
-                    <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-                        <i class="fas fa-filter mr-2"></i>
-                        Filtrar
-                    </button>
-                </div>
+            <div class="grid {% if user.can_manage_prizes %}grid-cols-3{% else %}grid-cols-2{% endif %} sm:flex sm:flex-wrap gap-2 mt-5">
+                <a href="{% url 'redemption_history' %}" data-rc-pop style="--i: 1" class="rc-hero-acao rc-sobe flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 rounded-xl px-2 sm:px-3.5 py-2 text-xs sm:text-sm font-semibold text-center">
+                    <i class="fas fa-history"></i> Meus resgates
+                </a>
+                <a href="{% url 'my_cs_statement' %}" data-rc-pop style="--i: 2" class="rc-hero-acao rc-sobe flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 rounded-xl px-2 sm:px-3.5 py-2 text-xs sm:text-sm font-semibold text-center">
+                    <i class="fas fa-receipt"></i> Meu extrato C$
+                </a>
+                {% if user.can_manage_prizes %}
+                <a href="{% url 'manage_prizes' %}" data-rc-pop style="--i: 3" class="rc-hero-acao rc-sobe flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 rounded-xl px-2 sm:px-3.5 py-2 text-xs sm:text-sm font-semibold text-center">
+                    <i class="fas fa-cog"></i> Gerenciar prêmios
+                </a>
+                {% endif %}
             </div>
-        </form>
-    </div>
+        </div>
+    </section>
 
-    <!-- Categorias rápidas -->
-    {% if categories %}
-    <div class="category-filter mb-8">
-        <h3 class="text-lg font-semibold mb-4">Categorias</h3>
-        <div class="flex gap-3 overflow-x-auto pb-2">
-            <a href="?{% if search %}search={{ search }}&{% endif %}{% if current_ordering %}ordering={{ current_ordering }}&{% endif %}" 
-               class="flex-shrink-0 bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-full text-sm transition-colors {% if not current_category %}bg-blue-100 text-blue-700{% endif %}">
-                <i class="fas fa-th-large mr-2"></i>
-                Todas
+    <form method="GET" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 sm:p-4 mb-4">
+        {% if current_category %}<input type="hidden" name="category" value="{{ current_category }}">{% endif %}
+        <div class="flex flex-col sm:flex-row gap-2 sm:gap-3">
+            <div class="relative flex-1">
+                <i class="fas fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                <input type="search" name="search" value="{{ search }}" placeholder="Buscar prêmio pelo nome…"
+                       class="w-full pl-10 pr-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm focus:border-orange-400 focus:outline-none">
+            </div>
+            <select name="ordering" onchange="this.form.submit()" aria-label="Ordenar"
+                    class="sm:w-52 px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm focus:border-orange-400 focus:outline-none">
+                <option value="relevance" {% if current_ordering == 'relevance' or not current_ordering %}selected{% endif %}>Mais relevantes</option>
+                <option value="recent" {% if current_ordering == 'recent' %}selected{% endif %}>Mais recentes</option>
+                <option value="value_asc" {% if current_ordering == 'value_asc' %}selected{% endif %}>Menor valor</option>
+                <option value="value_desc" {% if current_ordering == 'value_desc' %}selected{% endif %}>Maior valor</option>
+            </select>
+            <button type="submit" data-rc-pop class="px-5 py-2.5 rounded-xl text-white text-sm font-semibold shadow-sm" style="background:linear-gradient(120deg,#ff6b35,#f59e0b)">
+                <i class="fas fa-filter mr-1"></i> Filtrar
+            </button>
+        </div>
+        {% if categories %}
+        <div class="rc-rolagem flex sm:flex-wrap gap-2 overflow-x-auto sm:overflow-visible pt-3" aria-label="Categorias">
+            <a href="?{% if search %}search={{ search|urlencode }}&{% endif %}{% if current_ordering %}ordering={{ current_ordering }}{% endif %}"
+               {% if not current_category %}aria-current="true"{% endif %}
+               class="rc-categoria flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-gray-200 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50">
+                <i class="fas fa-th-large"></i> Todas
             </a>
             {% for category in categories %}
-            <a href="?category={{ category.id }}{% if search %}&search={{ search }}{% endif %}{% if current_ordering %}&ordering={{ current_ordering }}{% endif %}" 
-               class="flex-shrink-0 bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-full text-sm transition-colors {% if current_category == category.id|stringformat:"s" %}bg-{{ category.color }}-100 text-{{ category.color }}-700{% endif %}">
-                <i class="{{ category.icon }} mr-2"></i>
-                {{ category.name }}
+            <a href="?category={{ category.id }}{% if search %}&search={{ search|urlencode }}{% endif %}{% if current_ordering %}&ordering={{ current_ordering }}{% endif %}"
+               {% if current_category == category.id|stringformat:"s" %}aria-current="true"{% endif %}
+               class="rc-categoria flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-gray-200 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50">
+                <i class="{{ category.icon }}"></i> {{ category.name }}
             </a>
             {% endfor %}
         </div>
+        {% endif %}
+    </form>
+
+    <div class="mb-5">{% include 'prizes/_sugerir_produto.html' %}</div>
+
+    <div class="rc-secao-titulo mb-3">
+        <span class="rc-secao-icone" style="background:linear-gradient(135deg,#ff6b35,#f59e0b)"><i class="fas fa-gift"></i></span>
+        <h2 class="text-lg font-bold text-gray-900">Prêmios</h2>
+        <span class="text-xs text-gray-500">{{ prizes.paginator.count }} {% if prizes.paginator.count == 1 %}prêmio{% else %}prêmios{% endif %}</span>
     </div>
-    {% endif %}
 
-    <!-- Grid de prêmios -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-8">
         {% for prize in prizes %}
-        <div class="prize-card bg-white rounded-lg shadow-md overflow-hidden relative {% if not prize.available %}prize-unavailable{% endif %}">
-            <!-- Badge de prioridade -->
-            {% if prize.priority != 'NORMAL' %}
-            <div class="priority-badge">
-                {% if prize.priority == 'HIGH' %}
-                    <span class="bg-yellow-500 text-white px-2 py-1 rounded-full text-xs font-bold">
-                        <i class="fas fa-star"></i> Destaque
-                    </span>
-                {% elif prize.priority == 'URGENT' %}
-                    <span class="bg-red-500 text-white px-2 py-1 rounded-full text-xs font-bold">
-                        <i class="fas fa-fire"></i> Limitado
-                    </span>
-                {% endif %}
-            </div>
-            {% endif %}
-
-            <!-- Imagem do prêmio -->
-            <div class="h-48 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+        {% with restante=prize.estoque_restante %}
+        <article class="rc-post bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col {% if prize.esgotado or not prize.available %}rc-premio-esgotado{% endif %} {% if forloop.counter <= 8 %}rc-sobe{% endif %}"
+                 {% if forloop.counter <= 8 %}style="--i: {{ forloop.counter }}"{% else %}data-rc-revela{% endif %}
+                 data-premio="{{ prize.id }}">
+            <div class="rc-premio-foto relative flex items-center justify-center p-3 border-b border-gray-100">
                 {% if prize.image %}
-                    <img src="{{ prize.image.url }}" alt="{{ prize.name }}" class="w-full h-full object-cover">
+                <img src="{{ prize.image.url }}" alt="{{ prize.name }}" loading="lazy">
                 {% else %}
-                    <div class="text-gray-400 text-center">
-                        <i class="fas fa-gift text-4xl mb-2"></i>
-                        <p class="text-sm">Sem imagem</p>
-                    </div>
+                <div class="text-gray-300 text-center"><i class="fas fa-gift text-5xl"></i></div>
+                {% endif %}
+                <div class="absolute top-2 left-2 flex flex-col items-start gap-1">
+                    {% if prize.priority == 'DESTAQUE' %}
+                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold text-white shadow" style="background:linear-gradient(120deg,#ff6b35,#ec4899)"><i class="fas fa-star"></i>Destaque</span>
+                    {% elif prize.priority == 'ALTA' %}
+                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 shadow-sm"><i class="fas fa-fire"></i>Em alta</span>
+                    {% endif %}
+                    {% if prize.has_discount and prize.discounted_value %}
+                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-800 shadow-sm"><i class="fas fa-tag"></i>{{ prize.discount_percentage|floatformat:'-2' }}% OFF</span>
+                    {% endif %}
+                </div>
+                {% if prize.esgotado %}
+                <span class="absolute bottom-2 right-2 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-gray-800 text-white">Esgotado</span>
                 {% endif %}
             </div>
 
-            <!-- Conteúdo -->
-            <div class="p-4">
-                <!-- Categoria -->
+            <div class="p-4 flex flex-col flex-1">
                 {% if prize.category %}
-                <div class="mb-2">
-                    <span class="inline-flex items-center bg-{{ prize.category.color }}-100 text-{{ prize.category.color }}-800 px-2 py-1 rounded-full text-xs">
-                        <i class="{{ prize.category.icon }} mr-1"></i>
-                        {{ prize.category.name }}
-                    </span>
-                </div>
+                <span class="self-start inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-orange-50 text-orange-700 mb-2">
+                    <i class="{{ prize.category.icon }}"></i>{{ prize.category.name }}
+                </span>
                 {% endif %}
+                <h3 class="font-bold text-gray-900 leading-snug">{{ prize.name }}</h3>
+                {% if prize.description %}<p class="text-gray-500 text-sm mt-1 line-clamp-2">{{ prize.description }}</p>{% endif %}
 
-                <!-- Nome e descrição -->
-                <h3 class="font-bold text-lg mb-2 text-gray-900">{{ prize.name }}</h3>
-                <p class="text-gray-600 text-sm mb-4 line-clamp-2">{{ prize.description }}</p>
-
-                <!-- Preço e disponibilidade -->
-                <div class="flex flex-wrap justify-between items-center gap-2 mb-4">
-                    <div>
+                <div class="mt-auto pt-3">
+                    <div class="flex items-end justify-between gap-2 flex-wrap">
                         {% if prize.has_discount and prize.discounted_value %}
-                            <!-- Preço com desconto -->
-                            <div class="flex flex-wrap items-center gap-x-3">
-                                <div class="text-2xl font-bold text-orange-600 whitespace-nowrap">
-                                    <i class="fas fa-coins mr-1"></i>
-                                    {{ prize.discounted_value|floatformat:0 }} C$
-                                </div>
-                                <div class="text-lg text-gray-400 line-through whitespace-nowrap">
-                                    {{ prize.value_cs|floatformat:0 }} C$
-                                </div>
-                            </div>
-                            <div class="text-xs font-semibold text-orange-600 mt-1">
-                                <i class="fas fa-tag mr-1"></i>
-                                {{ prize.discount_percentage }}% OFF
-                            </div>
+                        <div>
+                            <span class="text-xs text-gray-400 line-through block">{{ prize.value_cs|floatformat:'0g' }} C$</span>
+                            <span class="text-2xl font-bold text-orange-600 whitespace-nowrap"><i class="fas fa-coins text-base mr-0.5"></i>{{ prize.discounted_value|floatformat:'0g' }} C$</span>
+                        </div>
                         {% else %}
-                            <!-- Preço normal -->
-                            <div class="text-2xl font-bold text-blue-600">
-                                <i class="fas fa-coins mr-1"></i>
-                                {{ prize.value_cs|floatformat:0 }} C$
-                            </div>
+                        <span class="text-2xl font-bold text-gray-900 whitespace-nowrap"><i class="fas fa-coins text-base text-orange-500 mr-0.5"></i>{{ prize.value_cs|floatformat:'0g' }} C$</span>
+                        {% endif %}
+                        {% if restante is not None %}
+                        <span class="text-xs font-semibold {% if restante == 0 %}text-gray-500{% elif restante <= 3 %}text-red-600{% else %}text-gray-600{% endif %}" data-restante="{{ restante }}">
+                            <i class="fas fa-box mr-0.5"></i>{% if restante == 0 %}Esgotado{% elif restante == 1 %}1 restante{% else %}{{ restante }} restantes{% endif %}
+                        </span>
+                        {% else %}
+                        <span class="text-xs font-semibold text-green-700"><i class="fas fa-infinity mr-0.5"></i>À vontade</span>
                         {% endif %}
                     </div>
-                    
-                    {% if not prize.unlimited_stock %}
-                    <div class="text-sm text-gray-500">
-                        <i class="fas fa-box mr-1"></i>
-                        {{ prize.stock_remaining }} restantes
+                    {% if restante is not None and prize.stock %}
+                    <div class="rc-barra mt-2" title="{{ restante }} de {{ prize.stock }} disponíveis"><span style="width: {{ prize.availability_percentage|floatformat:'0u' }}%"></span></div>
+                    {% endif %}
+                    {% if prize.valid_until %}
+                    <p class="text-[11px] text-gray-500 mt-2"><i class="fas fa-clock mr-0.5"></i>Válido até {{ prize.valid_until|date:"d/m/Y" }}</p>
+                    {% endif %}
+
+                    <div class="mt-3">
+                        {% if prize.available %}
+                            {% if user_balance >= prize.final_value %}
+                            <button type="button" data-rc-pop onclick="redeemPrize({{ prize.id }}, this)"
+                                    data-nome="{{ prize.name }}" data-valor="{{ prize.final_value|floatformat:'0g' }}"
+                                    class="w-full py-2.5 rounded-xl text-white font-semibold text-sm shadow-sm hover:shadow-md transition-shadow" style="background:linear-gradient(120deg,#16a34a,#22c55e)">
+                                <i class="fas fa-shopping-cart mr-1"></i> Resgatar
+                            </button>
+                            {% else %}
+                            <button type="button" disabled class="w-full py-2.5 rounded-xl bg-gray-100 text-gray-500 font-semibold text-sm cursor-not-allowed">
+                                <i class="fas fa-ban mr-1"></i> Saldo insuficiente
+                            </button>
+                            {% endif %}
+                        {% else %}
+                            <button type="button" disabled class="w-full py-2.5 rounded-xl bg-gray-100 text-gray-500 font-semibold text-sm cursor-not-allowed">
+                                <i class="fas fa-times mr-1"></i> {% if prize.esgotado %}Esgotado{% else %}Indisponível{% endif %}
+                            </button>
+                        {% endif %}
                     </div>
-                    {% endif %}
                 </div>
-
-                <!-- Status de validade -->
-                {% if prize.valid_until %}
-                <div class="text-xs text-gray-500 mb-3">
-                    <i class="fas fa-clock mr-1"></i>
-                    Válido até {{ prize.valid_until|date:"d/m/Y" }}
-                </div>
-                {% endif %}
-
-                <!-- Botão de resgate -->
-                {% if prize.available %}
-                    {% if user_balance >= prize.final_value %}
-                        <button onclick="redeemPrize({{ prize.id }})" 
-                                class="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors font-semibold">
-                            <i class="fas fa-shopping-cart mr-2"></i>
-                            Resgatar
-                        </button>
-                    {% else %}
-                        <button disabled class="w-full bg-gray-300 text-gray-500 py-2 px-4 rounded-lg cursor-not-allowed font-semibold">
-                            <i class="fas fa-ban mr-2"></i>
-                            Saldo insuficiente
-                        </button>
-                    {% endif %}
-                {% else %}
-                    <button disabled class="w-full bg-gray-300 text-gray-500 py-2 px-4 rounded-lg cursor-not-allowed font-semibold">
-                        <i class="fas fa-times mr-2"></i>
-                        Indisponível
-                    </button>
-                {% endif %}
             </div>
-        </div>
+        </article>
+        {% endwith %}
         {% empty %}
-        <div class="col-span-full text-center py-12">
-            <div class="text-gray-400 mb-4">
-                <i class="fas fa-search text-6xl"></i>
+        <div class="col-span-full bg-white rounded-2xl border border-gray-100 p-12 text-center">
+            <div class="w-20 h-20 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-search text-orange-300 text-3xl"></i>
             </div>
-            <h3 class="text-xl font-semibold text-gray-600 mb-2">Nenhum prêmio encontrado</h3>
-            <p class="text-gray-500">Tente ajustar os filtros ou volte mais tarde.</p>
+            <h3 class="text-lg font-semibold text-gray-900 mb-1">Nenhum prêmio encontrado</h3>
+            <p class="text-gray-500 text-sm">Tente ajustar os filtros ou volte mais tarde.</p>
         </div>
         {% endfor %}
     </div>
 
-    <!-- Paginação -->
     {% if prizes.has_other_pages %}
-    <div class="flex justify-center">
-        <nav class="flex flex-wrap justify-center gap-2">
-            {% if prizes.has_previous %}
-                <a href="?page={{ prizes.previous_page_number }}{% if current_category %}&category={{ current_category }}{% endif %}{% if search %}&search={{ search }}{% endif %}{% if current_ordering %}&ordering={{ current_ordering }}{% endif %}" 
-                   class="px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
-                    <i class="fas fa-chevron-left"></i>
-                </a>
-            {% endif %}
-            
-            {% for page_num in prizes.paginator.page_range %}
-                {% if page_num == prizes.number %}
-                    <span class="px-3 py-2 bg-blue-600 text-white rounded-lg">{{ page_num }}</span>
-                {% else %}
-                    <a href="?page={{ page_num }}{% if current_category %}&category={{ current_category }}{% endif %}{% if search %}&search={{ search }}{% endif %}{% if current_ordering %}&ordering={{ current_ordering }}{% endif %}" 
-                       class="px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">{{ page_num }}</a>
-                {% endif %}
-            {% endfor %}
-            
-            {% if prizes.has_next %}
-                <a href="?page={{ prizes.next_page_number }}{% if current_category %}&category={{ current_category }}{% endif %}{% if search %}&search={{ search }}{% endif %}{% if current_ordering %}&ordering={{ current_ordering }}{% endif %}" 
-                   class="px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
-                    <i class="fas fa-chevron-right"></i>
-                </a>
-            {% endif %}
-        </nav>
-    </div>
-    {% endif %}
-
-    <!-- Links rápidos -->
-    <div class="mt-8 flex flex-wrap justify-center gap-4">
-        <a href="{% url 'redemption_history' %}" class="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-200 transition-colors">
-            <i class="fas fa-history mr-2"></i>
-            Meus Resgates
-        </a>
-        {% if user.can_manage_users %}
-        <a href="{% url 'manage_prizes' %}" class="bg-green-100 text-green-700 px-4 py-2 rounded-lg hover:bg-green-200 transition-colors">
-            <i class="fas fa-cog mr-2"></i>
-            Gerenciar Prêmios
-        </a>
+    <nav class="flex flex-wrap justify-center gap-2 mb-6" aria-label="Páginas">
+        {% if prizes.has_previous %}
+        <a href="?page={{ prizes.previous_page_number }}{% if current_category %}&category={{ current_category }}{% endif %}{% if search %}&search={{ search|urlencode }}{% endif %}{% if current_ordering %}&ordering={{ current_ordering }}{% endif %}"
+           class="w-10 h-10 inline-flex items-center justify-center rounded-xl bg-white border border-gray-200 hover:bg-gray-50" aria-label="Anterior"><i class="fas fa-chevron-left text-sm"></i></a>
         {% endif %}
-    </div>
+        {% for page_num in prizes.paginator.page_range %}
+            {% if page_num == prizes.number %}
+            <span class="w-10 h-10 inline-flex items-center justify-center rounded-xl text-white font-semibold" style="background:linear-gradient(120deg,#ff6b35,#f59e0b)">{{ page_num }}</span>
+            {% else %}
+            <a href="?page={{ page_num }}{% if current_category %}&category={{ current_category }}{% endif %}{% if search %}&search={{ search|urlencode }}{% endif %}{% if current_ordering %}&ordering={{ current_ordering }}{% endif %}"
+               class="w-10 h-10 inline-flex items-center justify-center rounded-xl bg-white border border-gray-200 hover:bg-gray-50 text-sm">{{ page_num }}</a>
+            {% endif %}
+        {% endfor %}
+        {% if prizes.has_next %}
+        <a href="?page={{ prizes.next_page_number }}{% if current_category %}&category={{ current_category }}{% endif %}{% if search %}&search={{ search|urlencode }}{% endif %}{% if current_ordering %}&ordering={{ current_ordering }}{% endif %}"
+           class="w-10 h-10 inline-flex items-center justify-center rounded-xl bg-white border border-gray-200 hover:bg-gray-50" aria-label="Próxima"><i class="fas fa-chevron-right text-sm"></i></a>
+        {% endif %}
+    </nav>
+    {% endif %}
 </div>
 
-<!-- Modal de confirmação de resgate -->
-<div id="redeemModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden">
+<!-- Confirmação de resgate -->
+<div id="redeemModal" class="fixed inset-0 rc-modal-fundo z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="redeemTitulo">
     <div class="flex items-center justify-center min-h-screen p-4">
-        <div class="bg-white rounded-lg p-6 max-w-md w-full">
-            <h3 class="text-lg font-bold mb-4">Confirmar Resgate</h3>
-            <p class="text-gray-600 mb-6">Tem certeza que deseja resgatar este prêmio?</p>
+        <div class="rc-modal-cartao bg-white rounded-2xl p-6 max-w-md w-full shadow-xl">
+            <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-white mb-3" style="background:linear-gradient(135deg,#16a34a,#22c55e)"><i class="fas fa-shopping-cart"></i></div>
+            <h3 id="redeemTitulo" class="text-lg font-bold text-gray-900">Confirmar resgate</h3>
+            <p class="text-gray-600 text-sm mt-1 mb-5">Resgatar <strong id="redeemNome" class="text-gray-900"></strong> por <strong id="redeemValor" class="text-gray-900"></strong> C$?</p>
             <div class="flex gap-3">
-                <button onclick="closeRedeemModal()" class="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 transition-colors">
-                    Cancelar
-                </button>
-                <button id="confirmRedeem" class="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors">
-                    Confirmar
-                </button>
+                <button type="button" onclick="closeRedeemModal()" class="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold text-sm hover:bg-gray-200">Cancelar</button>
+                <button type="button" id="confirmRedeem" class="flex-1 py-2.5 rounded-xl text-white font-semibold text-sm" style="background:linear-gradient(120deg,#16a34a,#22c55e)">Confirmar</button>
             </div>
         </div>
     </div>
@@ -331,8 +235,10 @@
 <script>
 let currentPrizeId = null;
 
-function redeemPrize(prizeId) {
+function redeemPrize(prizeId, botao) {
     currentPrizeId = prizeId;
+    document.getElementById('redeemNome').textContent = botao ? botao.dataset.nome : '';
+    document.getElementById('redeemValor').textContent = botao ? botao.dataset.valor : '';
     document.getElementById('redeemModal').classList.remove('hidden');
 }
 
@@ -343,34 +249,30 @@ function closeRedeemModal() {
 
 document.getElementById('confirmRedeem').addEventListener('click', function() {
     if (!currentPrizeId) return;
-    
+    const botao = this;
+    botao.disabled = true;
+
     const formData = new FormData();
     formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-    
-    fetch(`/prizes/redeem/${currentPrizeId}/`, {
-        method: 'POST',
-        body: formData
-    })
+
+    fetch(`/prizes/redeem/${currentPrizeId}/`, { method: 'POST', body: formData })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
             location.reload();
         } else {
+            botao.disabled = false;
             alert(data.error || 'Erro ao resgatar prêmio');
         }
     })
-    .catch(error => {
-        alert('Erro na conexão');
-    });
-    
+    .catch(() => { botao.disabled = false; alert('Erro na conexão'); });
+
     closeRedeemModal();
 });
 
-// Fechar modal ao clicar fora
 document.getElementById('redeemModal').addEventListener('click', function(e) {
-    if (e.target === this) {
-        closeRedeemModal();
-    }
+    if (e.target === this || e.target === this.firstElementChild) { closeRedeemModal(); }
 });
 </script>
+{% include '_rc_animacoes_script.html' %}
 {% endblock %}

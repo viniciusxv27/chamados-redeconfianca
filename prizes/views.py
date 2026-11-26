@@ -1,4 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponse
@@ -28,7 +29,9 @@ def marketplace_view(request):
     search = request.GET.get('search', '')
     ordering = request.GET.get('ordering', 'relevance')
     
-    prizes = Prize.objects.filter(is_active=True)
+    # Excluído na gestão some daqui; a contagem de resgates vem anotada (estoque restante
+    # sem uma consulta por cartão).
+    prizes = Prize.objects.visiveis().filter(is_active=True).com_resgates().select_related('category')
     
     if category_filter:
         prizes = prizes.filter(category_id=category_filter)
@@ -66,7 +69,7 @@ def marketplace_view(request):
 @require_POST
 def redeem_prize(request, prize_id):
     """Resgatar um prêmio"""
-    prize = get_object_or_404(Prize, id=prize_id, is_active=True)
+    prize = get_object_or_404(Prize.objects.visiveis(), id=prize_id, is_active=True)
     
     if not prize.available:
         return JsonResponse({'success': False, 'error': 'Prêmio não disponível'})
@@ -79,6 +82,12 @@ def redeem_prize(request, prize_id):
     
     try:
         with transaction.atomic():
+            # Trava o prêmio e reconta o estoque: dois resgates ao mesmo tempo não levam a
+            # mesma última unidade.
+            prize = Prize.objects.select_for_update().get(pk=prize.pk)
+            if not prize.available:
+                return JsonResponse({'success': False, 'error': 'Prêmio não disponível'})
+
             # Criar resgate
             redemption = Redemption.objects.create(
                 user=request.user,
@@ -113,26 +122,100 @@ def redeem_prize(request, prize_id):
 
 @login_required
 def manage_prizes(request):
-    """Gerenciar prêmios (admin)"""
+    """Gerenciar prêmios (admin). ?excluidos=1 mostra os excluídos, com Restaurar."""
     if not request.user.can_manage_prizes():
         messages.error(request, 'Acesso negado.')
         return redirect('marketplace')
-    
-    prizes = Prize.objects.all().order_by('-created_at')
-    categories = PrizeCategory.objects.all()
-    
-    # Buscar resgates recentes (últimos 15 dias)
+
+    from django.db.models import Sum
+
+    ver_excluidos = request.GET.get('excluidos') == '1'
+    base = Prize.objects.select_related('category')
+    if ver_excluidos:
+        prizes = base.filter(excluido_em__isnull=False).com_resgates().select_related('excluido_por').order_by('-excluido_em')
+    else:
+        prizes = base.visiveis().com_resgates().order_by('-created_at')
+    prizes = list(prizes)
+
+    visiveis = Prize.objects.visiveis()
+    # Resgates recentes (últimos 15 dias)
     fifteen_days_ago = timezone.now() - timedelta(days=15)
     recent_redemptions = Redemption.objects.filter(
         redeemed_at__gte=fifteen_days_ago
     ).select_related('user', 'prize').order_by('-redeemed_at')[:10]
-    
+
     context = {
         'prizes': prizes,
-        'categories': categories,
+        'ver_excluidos': ver_excluidos,
         'recent_redemptions': recent_redemptions,
+        'total_prizes': visiveis.count(),
+        'active_prizes': visiveis.filter(is_active=True).count(),
+        'paused_prizes': visiveis.filter(is_active=False).count(),
+        'total_excluidos': Prize.objects.filter(excluido_em__isnull=False).count(),
+        'pending_redemptions': Redemption.objects.filter(status='PENDENTE').count(),
+        'total_cs_circulation': User.objects.aggregate(total=Sum('balance_cs'))['total'] or Decimal('0'),
+        'esgotados': sum(1 for p in prizes if p.esgotado),
     }
     return render(request, 'prizes/manage.html', context)
+
+
+@login_required
+@require_POST
+def delete_prize(request, prize_id):
+    """Exclusão lógica: some da gestão e do Mercadinho; resgates e histórico ficam."""
+    if not request.user.can_manage_prizes():
+        return JsonResponse({'success': False, 'error': 'Acesso negado'}, status=403)
+    prize = get_object_or_404(Prize.objects.visiveis(), id=prize_id)
+    prize.excluido_em = timezone.now()
+    prize.excluido_por = request.user
+    prize.is_active = False
+    prize.save(update_fields=['excluido_em', 'excluido_por', 'is_active', 'updated_at'])
+    from core.middleware import log_action
+    log_action(request.user, 'PRIZE_DELETED', f'Prêmio excluído da gestão: {prize.name} (#{prize.id})', request)
+    return JsonResponse({'success': True, 'message': f'Prêmio "{prize.name}" excluído. Os resgates continuam no histórico.'})
+
+
+@login_required
+@require_POST
+def restore_prize(request, prize_id):
+    """Volta um prêmio excluído para a gestão (pausado, para conferir antes de reativar)."""
+    if not request.user.can_manage_prizes():
+        return JsonResponse({'success': False, 'error': 'Acesso negado'}, status=403)
+    prize = get_object_or_404(Prize, id=prize_id, excluido_em__isnull=False)
+    prize.excluido_em = None
+    prize.excluido_por = None
+    prize.save(update_fields=['excluido_em', 'excluido_por', 'updated_at'])
+    from core.middleware import log_action
+    log_action(request.user, 'PRIZE_RESTORED', f'Prêmio restaurado: {prize.name} (#{prize.id})', request)
+    return JsonResponse({'success': True, 'message': f'Prêmio "{prize.name}" restaurado (pausado).'})
+
+
+@login_required
+@require_POST
+def toggle_prize(request, prize_id):
+    """Pausar/ativar com a mesma permissão da gestão (can_manage_prizes)."""
+    if not request.user.can_manage_prizes():
+        return JsonResponse({'success': False, 'error': 'Acesso negado'}, status=403)
+    prize = get_object_or_404(Prize.objects.visiveis(), id=prize_id)
+    prize.is_active = not prize.is_active
+    prize.save(update_fields=['is_active', 'updated_at'])
+    from core.middleware import log_action
+    log_action(request.user, 'PRIZE_STATUS_TOGGLE',
+               f'Prêmio {"ativado" if prize.is_active else "pausado"}: {prize.name}', request)
+    return JsonResponse({'success': True, 'is_active': prize.is_active})
+
+
+class _Recusa(ValueError):
+    """Dado do formulário recusado, com a mensagem para quem edita."""
+
+
+def _decimal(texto):
+    """Número digitado: aceita 1500, 1500.50 e 1.500,50 (o campo é type=number, mas o
+    valor pode chegar com vírgula de outro navegador)."""
+    t = (texto or '').strip().replace(' ', '')
+    if ',' in t:
+        t = t.replace('.', '').replace(',', '.')
+    return Decimal(t)
 
 
 @login_required
@@ -186,61 +269,99 @@ def create_prize(request):
 
 @login_required
 def edit_prize(request, prize_id):
-    """Editar prêmio existente"""
+    """Editar prêmio existente.
+
+    O valor não era gravado de verdade (26/11/2026): o template escrevia o Decimal
+    localizado ("8250,00") num <input type="number">, que o navegador descarta — o campo
+    abria vazio a cada edição. Agora sai com |unlocalize. O estoque da tela é o que ainda
+    dá para resgatar; o total gravado é esse número + os resgates que ocupam o estoque.
+    """
     if not request.user.can_manage_prizes():
         messages.error(request, 'Acesso negado.')
         return redirect('marketplace')
-    
-    prize = get_object_or_404(Prize, id=prize_id)
-    
+
+    from decimal import InvalidOperation
+
+    prize = get_object_or_404(Prize.objects.select_related('category'), id=prize_id)
+    if prize.excluido:
+        messages.error(request, f'O prêmio "{prize.name}" foi excluído. Restaure antes de editar.')
+        return redirect(f"{reverse('manage_prizes')}?excluidos=1")
+
+    erro = None
     if request.method == 'POST':
         try:
-            # Calcular desconto se aplicável
+            value_cs = _decimal(request.POST.get('value_cs'))
+            if value_cs <= 0:
+                raise _Recusa('O valor em C$ precisa ser maior que zero.')
             has_discount = request.POST.get('has_discount') == 'on'
-            discount_percentage = None
-            discounted_value = None
-            
-            if has_discount and request.POST.get('discount_percentage'):
-                discount_percentage = Decimal(request.POST['discount_percentage'])
-                value_cs = Decimal(request.POST['value_cs'])
-                discounted_value = value_cs - (value_cs * discount_percentage / 100)
-            
-            # Atualizar dados do prêmio
-            prize.name = request.POST['name']
-            prize.description = request.POST['description']
-            prize.category_id = request.POST.get('category') or None
-            prize.value_cs = Decimal(request.POST['value_cs'])
-            prize.has_discount = has_discount
-            prize.discount_percentage = discount_percentage
-            prize.discounted_value = discounted_value
-            prize.priority = request.POST.get('priority', 'NORMAL')
-            prize.stock = int(request.POST.get('stock', 0))
-            prize.unlimited_stock = request.POST.get('unlimited_stock') == 'on'
-            prize.terms = request.POST.get('terms', '')
-            prize.valid_until = request.POST.get('valid_until') or None
-            prize.is_active = request.POST.get('is_active') == 'on'
-            
-            # Gerenciar imagem
-            if request.FILES.get('image'):
-                prize.image = request.FILES['image']
-            elif request.POST.get('remove_image') == 'on':
-                prize.image = None
-            
-            prize.save()
-            
+            discount_percentage = discounted_value = None
+            if has_discount:
+                if not (request.POST.get('discount_percentage') or '').strip():
+                    raise _Recusa('Informe a porcentagem do desconto (ou desmarque o desconto).')
+                discount_percentage = _decimal(request.POST['discount_percentage'])
+                if not (0 < discount_percentage < 100):
+                    raise _Recusa('O desconto precisa ficar entre 0 e 100%.')
+                discounted_value = (value_cs - (value_cs * discount_percentage / 100)).quantize(Decimal('0.01'))
+
+            unlimited_stock = request.POST.get('unlimited_stock') == 'on'
+            disponivel = None
+            if not unlimited_stock:
+                texto = (request.POST.get('estoque_disponivel') or '').strip()
+                disponivel = int(texto) if texto else 0
+                if disponivel < 0:
+                    raise _Recusa('O estoque disponível não pode ser negativo.')
+
+            name = (request.POST.get('name') or '').strip()
+            if not name:
+                raise _Recusa('Informe o nome do prêmio.')
+
+            with transaction.atomic():
+                prize = Prize.objects.select_for_update().get(pk=prize.pk)
+                prize.name = name
+                prize.description = request.POST.get('description', '')
+                prize.category_id = request.POST.get('category') or None
+                prize.value_cs = value_cs
+                prize.has_discount = has_discount
+                prize.discount_percentage = discount_percentage
+                prize.discounted_value = discounted_value
+                prize.priority = request.POST.get('priority', 'NORMAL')
+                prize.unlimited_stock = unlimited_stock
+                if not unlimited_stock:
+                    # Recontado aqui dentro: um resgate feito com a tela aberta não come a unidade.
+                    prize.stock = disponivel + prize.resgates_ativos
+                prize.terms = request.POST.get('terms', '')
+                prize.valid_until = request.POST.get('valid_until') or None
+                prize.is_active = request.POST.get('is_active') == 'on'
+
+                if request.FILES.get('image'):
+                    prize.image = request.FILES['image']
+                elif request.POST.get('remove_image') == 'on':
+                    prize.image = None
+
+                prize.save()
+
             messages.success(request, f'Prêmio "{prize.name}" atualizado com sucesso!')
             return redirect('manage_prizes')
-            
+
+        except _Recusa as e:
+            erro = str(e)
+        except (ValueError, InvalidOperation):
+            erro = 'Confira os números: valor, desconto e estoque aceitam só números.'
         except Exception as e:
-            messages.error(request, f'Erro ao atualizar prêmio: {str(e)}')
-    
+            erro = f'Erro ao atualizar prêmio: {e}'
+        messages.error(request, erro)
+
+    prize = Prize.objects.com_resgates().select_related('category').get(pk=prize.pk) if erro is None else prize
     categories = PrizeCategory.objects.filter(active=True)
-    redemptions = Redemption.objects.filter(prize=prize).select_related('user').order_by('-redeemed_at')[:10]
-    
+    redemptions = Redemption.objects.filter(prize=prize).select_related('user').order_by('-redeemed_at')[:15]
+
     context = {
         'prize': prize,
         'categories': categories,
         'redemptions': redemptions,
+        'resgates_ativos': prize.resgates_ativos,
+        # Com erro, a tela volta com o que foi digitado.
+        'estoque_disponivel': (request.POST.get('estoque_disponivel') if erro else prize.estoque_restante),
     }
     return render(request, 'prizes/edit.html', context)
 
