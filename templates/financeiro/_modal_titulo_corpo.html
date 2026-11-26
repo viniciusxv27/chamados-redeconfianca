@@ -54,9 +54,33 @@
                     <select name="plano" class="fin-input"><option value="">—</option>
                         {% for p in planos %}<option value="{{ p.id }}" {% if t.plano_id == p.id %}selected{% endif %}>{{ p.codigo }} {{ p.nome }}</option>{% endfor %}</select>
                     {% if not planos %}<p class="text-[11px] text-gray-400 mt-1">O plano de contas está vazio — crie em "Plano de contas".</p>{% endif %}</div>
-                <div class="col-span-2"><label class="fin-label">Loja</label>
-                    <select name="loja" class="fin-input"><option value="">Escritório / sem loja</option>
+                <div class="col-span-2"><div class="flex items-center justify-between gap-2"><label class="fin-label">Loja</label>
+                    {% if not titulo and lojas|length > 1 %}<label class="text-xs text-gray-600 inline-flex items-center gap-1.5 mb-1 cursor-pointer"><input type="checkbox" name="ratear" value="1" class="accent-emerald-600" data-rateio-liga>Ratear entre lojas</label>{% endif %}</div>
+                    <select name="loja" class="fin-input" data-rateio-loja-unica><option value="">Escritório / sem loja</option>
                         {% for l in lojas %}<option value="{{ l.id }}" {% if t.loja_id == l.id %}selected{% endif %}>{{ l.name }}</option>{% endfor %}</select></div>
+                {% if not titulo and lojas|length > 1 %}
+                <div class="col-span-2 sm:col-span-4 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3" data-rateio hidden>
+                    <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+                        <p class="text-xs font-semibold text-emerald-900"><i class="fas fa-chart-pie mr-1"></i>Rateio entre lojas <span class="font-normal text-emerald-800/80">— cada loja vira um título com a sua parte de cada parcela</span></p>
+                        <div class="flex gap-3">
+                            <button type="button" class="fin-link" data-rateio-igual><i class="fas fa-equals"></i>Dividir igual</button>
+                            <button type="button" class="fin-link" data-rateio-mais><i class="fas fa-plus"></i>Loja</button>
+                        </div>
+                    </div>
+                    <div class="space-y-1.5" data-rateio-linhas>
+                        {% for linha_rateio in '12' %}
+                        <div class="grid grid-cols-[1fr_6.5rem_7rem_2rem] gap-2 items-center" data-rateio-linha>
+                            <select name="rateio_loja" class="fin-input" aria-label="Loja do rateio"><option value="">Escolha a loja…</option>
+                                {% for l in lojas %}<option value="{{ l.id }}">{{ l.name }}</option>{% endfor %}</select>
+                            <div class="relative"><input name="rateio_pct" inputmode="decimal" class="fin-input text-right tabular pr-7" placeholder="0" aria-label="Percentual da loja"><span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">%</span></div>
+                            <span class="text-sm text-right tabular text-gray-700" data-rateio-valor>—</span>
+                            <button type="button" class="fin-btn-icone w-8 h-8" data-rateio-tirar aria-label="Tirar a loja do rateio"><i class="fas fa-xmark"></i></button>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <p class="text-xs mt-2" data-rateio-soma aria-live="polite"></p>
+                </div>
+                {% endif %}
                 <div class="col-span-2"><label class="fin-label">Conta prevista</label>
                     <select name="conta_prevista" class="fin-input"><option value="">—</option>
                         {% for c in contas %}<option value="{{ c.id }}" {% if t.conta_prevista_id == c.id %}selected{% endif %}>{{ c.nome }}</option>{% endfor %}</select></div>

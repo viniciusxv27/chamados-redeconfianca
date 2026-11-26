@@ -858,6 +858,50 @@ try:
               == [('RECEBER', Decimal('100.00'), '2026-12-10'), ('RECEBER', Decimal('100.00'), '2027-01-10'),
                   ('RECEBER', Decimal('100.00'), '2027-02-10')], [(x.tipo, x.valor, x.vencimento) for x in tr])
 
+            print('\n== RATEIO ENTRE LOJAS ==')
+            loja_sp = Sector.objects.create(name='Loja ZZ NFe SP')
+            ch_r = chave_independente(f'321905{FORN}55001000000951112345678')
+            cobr3 = ('<cobr><dup><nDup>001</nDup><dVenc>2019-06-02</dVenc><vDup>100.00</vDup></dup>'
+                     '<dup><nDup>002</nDup><dVenc>2019-07-02</dVenc><vDup>50.01</vDup></dup></cobr></infNFe>')
+            subir(c, ('rateio.xml', autorizado(proc_nfe_fornecedor(ch_r), ch_r).replace('</infNFe>', cobr3)))
+            nr = NotaFiscalEmitida.objects.get(chave=ch_r)
+            corpo = c.get(f'/financeiro/notas/{nr.pk}/').content.decode()
+            t('modal tem "Ratear entre lojas"', 'name="ratear"' in corpo and 'name="rateio_loja"' in corpo and 'data-rateio-igual' in corpo)
+            base_r = dict(dados_lanc, descricao='NF 951 — ZZ DISTRIBUIDORA LTDA', numero_documento='951',
+                          parcela_vencimento=['2019-06-02', '2019-07-02'], parcela_valor=['100,00', '50,01'], ratear='1')
+            r = c.post(f'/financeiro/notas/{nr.pk}/lancar/', dict(base_r, rateio_loja=[str(loja_es.pk), str(loja_rj.pk)],
+                                                                   rateio_pct=['60', '30']))
+            t('rateio que não soma 100% é recusado', not Titulo.objects.filter(nota_fiscal=nr).exists()
+              and any('somam 30' in str(m) or 'somam 90' in str(m) for m in r.wsgi_request._messages), [str(m) for m in r.wsgi_request._messages])
+            c.post(f'/financeiro/notas/{nr.pk}/lancar/', dict(base_r, rateio_loja=[str(loja_es.pk), str(loja_es.pk)], rateio_pct=['50', '50']))
+            t('mesma loja duas vezes é recusado', not Titulo.objects.filter(nota_fiscal=nr).exists())
+            r = c.post(f'/financeiro/notas/{nr.pk}/lancar/', dict(base_r, rateio_loja=[str(loja_es.pk), str(loja_rj.pk), str(loja_sp.pk)],
+                                                                   rateio_pct=['50', '33,33', '16,67']))
+            tr = list(Titulo.objects.filter(nota_fiscal=nr).order_by('loja__name', 'parcela'))
+            por_loja = {}
+            for x in tr:
+                por_loja.setdefault(x.loja.name, []).append(x.valor)
+            t('um título por loja e parcela, com a parte de cada uma', len(tr) == 6 and por_loja == {
+                'Loja ZZ NFe Vitoria': [Decimal('50.00'), Decimal('25.01')], 'Loja ZZ NFe Rio': [Decimal('33.33'), Decimal('16.67')],
+                'Loja ZZ NFe SP': [Decimal('16.67'), Decimal('8.33')]}, por_loja)
+            t('cada parcela soma o valor da nota (centavos na última loja)',
+              sum(x.valor for x in tr if x.parcela == 1) == Decimal('100.00') and sum(x.valor for x in tr if x.parcela == 2) == Decimal('50.01'))
+            t('descrição e observação dizem o rateio; mesmo fornecedor, vencimentos e anexo', all(
+              'rateio' in x.descricao and 'Rateio de R$ 150,01 entre lojas' in x.observacao and x.pessoa_documento == FORN
+              and x.anexo_nome.endswith('.xml') for x in tr) and {x.vencimento.isoformat() for x in tr} == {'2019-06-02', '2019-07-02'}
+              and len({x.anexo.name for x in tr}) == 1, [(x.descricao, x.anexo.name) for x in tr][:2])
+            t('a nota mostra os 6 títulos e fica lançada', 'id="nfeLancar"' not in c.get(f'/financeiro/notas/{nr.pk}/').content.decode())
+            antes_t = Titulo.objects.count()
+            c.post('/financeiro/pagar/novo/', {'descricao': 'ZZ Aluguel compartilhado', 'vencimento': '2026-12-05', 'valor': '1000,00',
+                                                       'parcelas': '2', 'intervalo': 'MENSAL', 'valor_modo': 'total', 'ratear': '1',
+                                                       'rateio_loja': [str(loja_es.pk), str(loja_rj.pk)], 'rateio_pct': ['70', '30']})
+            al = list(Titulo.objects.filter(descricao__startswith='ZZ Aluguel compartilhado').order_by('loja__name', 'parcela'))
+            t('Contas a pagar também rateia (2 parcelas × 2 lojas)', Titulo.objects.count() == antes_t + 4
+              and [(x.loja.name, x.valor, x.vencimento.isoformat()) for x in al] == [
+                  ('Loja ZZ NFe Rio', Decimal('150.00'), '2026-12-05'), ('Loja ZZ NFe Rio', Decimal('150.00'), '2027-01-05'),
+                  ('Loja ZZ NFe Vitoria', Decimal('350.00'), '2026-12-05'), ('Loja ZZ NFe Vitoria', Decimal('350.00'), '2027-01-05')],
+              [(x.loja.name, x.valor, x.vencimento) for x in al])
+
             Titulo.objects.create(tipo='PAGAR', descricao='ZZ entrada pelo PIS/Cofins', vencimento=quando.date(),
                                   valor=Decimal('150'), nota=r_ok, origem='NFE')
             corpo = c.get(f'/financeiro/notas/{ok_n.pk}/').content.decode()

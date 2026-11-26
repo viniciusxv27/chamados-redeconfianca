@@ -6,7 +6,7 @@ pedido do formulário, do lote ou da entrada de nota fiscal.
 import calendar
 import uuid
 from datetime import date, timedelta
-from decimal import ROUND_DOWN, Decimal
+from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
 
 from django.db import transaction
 from django.db.models import Sum
@@ -89,6 +89,64 @@ def criar_titulos(dados, usuario=None, request=None, parcelas=1, intervalo='MENS
                             + (f' ({titulo.rotulo_parcela})' if titulo.rotulo_parcela else ''),
                             area=_area(titulo), obj=titulo, valor=titulo.valor, depois=auditoria.foto(titulo),
                             usuario=usuario)
+    return criados
+
+
+def _cronograma(valor, vencimento, parcelas=1, intervalo='MENSAL', vencimentos=None, valores=None):
+    """(vencimentos, valores) do título inteiro, com a mesma regra de criar_titulos."""
+    if valores:
+        return list(vencimentos), list(valores)
+    parcelas = max(1, min(int(parcelas or 1), 120))
+    valores = dividir(Decimal(valor), parcelas) if parcelas > 1 else [Decimal(valor)]
+    if intervalo == 'MENSAL':
+        datas = [somar_meses(vencimento, i) for i in range(parcelas)]
+    else:
+        datas = [vencimento + timedelta(days=int(intervalo) * i) for i in range(parcelas)]
+    return datas, valores
+
+
+@transaction.atomic
+def criar_titulos_rateados(dados, rateio, usuario=None, request=None, parcelas=1, intervalo='MENSAL',
+                           vencimentos=None, valores=None, anexo=None):
+    """Rateio da despesa (ou receita) entre lojas: um título por loja, com a parte de cada parcela.
+
+    `rateio` = [(loja, percentual)], somando 100. Cada parcela é dividida pelos percentuais (centavos
+    que sobram ficam com a última loja), então cada loja vê a sua parte em todas as telas por loja.
+    Todas ficam com o mesmo fornecedor, documento e linha digitável; a observação descreve o rateio.
+    """
+    datas, totais = _cronograma(dados['valor'], dados['vencimento'], parcelas, intervalo, vencimentos, valores)
+    if sum(totais) <= ZERO:
+        raise RegraFinanceira('O valor precisa ser maior que zero.')
+    partes = []                     # partes[i][j] = valor da loja i na parcela j
+    for i, (_loja, pct) in enumerate(rateio):
+        if i < len(rateio) - 1:
+            partes.append([(v * pct / 100).quantize(CENTAVO, rounding=ROUND_HALF_UP) for v in totais])
+        else:
+            partes.append([v - sum(p[j] for p in partes) for j, v in enumerate(totais)])
+    if any(v <= ZERO for linha in partes for v in linha):
+        raise RegraFinanceira('Com esse rateio alguma loja ficaria com parcela zerada: ajuste os percentuais.')
+    def brl(v):
+        return 'R$ ' + f'{v:,.2f}'.replace(',', '_').replace('.', ',').replace('_', '.')
+
+    def pct_txt(p):
+        return f'{p.normalize():f}'.replace('.', ',')
+    resumo = '; '.join(f'{loja.name} {pct_txt(pct)}% ({brl(sum(partes[i]))})' for i, (loja, pct) in enumerate(rateio))
+    observacao = (dados.get('observacao') or '').strip()
+    observacao = (observacao + '\n' if observacao else '') + f'Rateio de {brl(sum(totais))} entre lojas: {resumo}.'
+    criados, primeiro_anexo = [], None
+    for i, (loja, pct) in enumerate(rateio):
+        rotulo = f' (rateio {pct_txt(pct)}% — {loja.name})'
+        campos = dict(dados, loja=loja, valor=sum(partes[i]), vencimento=datas[0], observacao=observacao,
+                      descricao=(dados['descricao'][:200 - len(rotulo)] + rotulo)[:200])
+        da_loja = criar_titulos(campos, usuario=usuario, request=request, vencimentos=datas, valores=partes[i],
+                                anexo=anexo if primeiro_anexo is None else None)
+        if anexo is not None:
+            if primeiro_anexo is None:
+                primeiro_anexo = (da_loja[0].anexo.name, da_loja[0].anexo_nome)
+            else:
+                Titulo.objects.filter(pk__in=[t.pk for t in da_loja]).update(anexo=primeiro_anexo[0],
+                                                                              anexo_nome=primeiro_anexo[1])
+        criados.extend(da_loja)
     return criados
 
 

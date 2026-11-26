@@ -414,11 +414,38 @@ def _ler_titulo(request, tipo, titulo=None):
         campos['loja'] = lojas_do(request.user).filter(pk=int(loja_id)).first()
         if campos['loja'] is None:
             raise Invalido('Loja fora das suas lojas liberadas.')
-    elif lojas_permitidas(request.user) is not None:
+    elif lojas_permitidas(request.user) is not None and p.get('ratear') != '1':
         raise Invalido('Escolha a loja do título.')
     conta_id = p.get('conta_prevista') or ''
     campos['conta_prevista'] = ContaBancaria.objects.filter(pk=int(conta_id)).first() if conta_id.isdigit() else None
     return campos
+
+
+def ler_rateio(request):
+    """[(loja, percentual)] quando "Ratear entre lojas" vem marcado; None quando não. Levanta Invalido."""
+    p = request.POST
+    if p.get('ratear') != '1':
+        return None
+    permitidas = {l.pk: l for l in lojas_do(request.user)}
+    rateio, vistas = [], set()
+    for loja_id, pct in zip(p.getlist('rateio_loja'), p.getlist('rateio_pct')):
+        if not (loja_id or pct or '').strip():
+            continue
+        if not loja_id.isdigit() or int(loja_id) not in permitidas:
+            raise Invalido('Rateio: escolha lojas das suas lojas liberadas.')
+        if int(loja_id) in vistas:
+            raise Invalido(f'Rateio: a loja {permitidas[int(loja_id)].name} aparece duas vezes.')
+        vistas.add(int(loja_id))
+        valor = dinheiro(pct, obrigatorio=True, campo='percentual do rateio')
+        if valor <= 0:
+            raise Invalido('Rateio: todo percentual precisa ser maior que zero.')
+        rateio.append((permitidas[int(loja_id)], valor))
+    if len(rateio) < 2:
+        raise Invalido('Rateio: escolha ao menos duas lojas (com uma só, use o campo Loja).')
+    soma = sum(v for _l, v in rateio)
+    if abs(soma - 100) > Decimal('0.01'):
+        raise Invalido(f'Rateio: os percentuais somam {soma:.2f}%; precisam somar 100%.'.replace('.', ','))
+    return rateio
 
 
 @login_required
@@ -438,12 +465,20 @@ def titulo_novo(request, area):
         valor_e_da_parcela = request.POST.get('valor_modo') == 'parcela'
         if valor_e_da_parcela and parcelas > 1:
             campos['valor'] = campos['valor'] * parcelas
-        criados = servicos.criar_titulos(dict(campos, tipo=tipo), usuario=request.user, request=request,
-                                         parcelas=parcelas, intervalo=intervalo, anexo=anexo)
+        rateio = ler_rateio(request)
+        if rateio:
+            criados = servicos.criar_titulos_rateados(dict(campos, tipo=tipo), rateio, usuario=request.user,
+                                                      request=request, parcelas=parcelas, intervalo=intervalo,
+                                                      anexo=anexo)
+        else:
+            criados = servicos.criar_titulos(dict(campos, tipo=tipo), usuario=request.user, request=request,
+                                             parcelas=parcelas, intervalo=intervalo, anexo=anexo)
     except (Invalido, servicos.RegraFinanceira, ValueError) as exc:
         messages.error(request, str(exc))
         return _voltar(request, f'financeiro:{area}')
-    if len(criados) > 1:
+    if rateio:
+        messages.success(request, f'Lançado com rateio entre {len(rateio)} lojas: {len(criados)} título(s).')
+    elif len(criados) > 1:
         messages.success(request, f'{len(criados)} parcelas lançadas: {criados[0].descricao}.')
     else:
         messages.success(request, f'Título lançado: {criados[0].descricao}.')

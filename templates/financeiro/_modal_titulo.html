@@ -54,3 +54,71 @@ tem cobrança, `parcelas_nf` (as duplicatas: número, vencimento e valor, editá
 })();
 </script>
 {% endif %}
+{% if not titulo %}
+<script>
+(function () {
+    /* Rateio entre lojas: liga/desliga, linhas de loja e %, valor de cada uma e a soma (o servidor confere de novo). */
+    var modal = document.getElementById('finNovo');
+    if (!modal) return;
+    var liga = modal.querySelector('[data-rateio-liga]'), painel = modal.querySelector('[data-rateio]');
+    if (!liga || !painel) return;
+    var form = modal.querySelector('form'), linhas = painel.querySelector('[data-rateio-linhas]'), soma = painel.querySelector('[data-rateio-soma]');
+    var unica = modal.querySelector('[data-rateio-loja-unica]');
+    function num(v) { v = (v || '').trim().replace(/\s|R\$|%/g, ''); if (v.indexOf(',') >= 0) v = v.replace(/\./g, '').replace(',', '.'); return Number(v) || 0; }
+    function total() {
+        var parc = form.querySelectorAll('[name=parcela_valor]');
+        if (parc.length) { var t = 0; parc.forEach(function (i) { t += num(i.value); }); return t; }
+        var v = num((form.querySelector('[name=valor]') || {}).value), n = parseInt((form.querySelector('[name=parcelas]') || {}).value, 10) || 1;
+        var modo = (form.querySelector('[name=valor_modo]:checked') || {}).value;
+        return modo === 'parcela' && n > 1 ? v * n : v;
+    }
+    function pintar() {
+        var t = total(), s = 0, rows = linhas.querySelectorAll('[data-rateio-linha]');
+        rows.forEach(function (r) {
+            var p = num(r.querySelector('[name=rateio_pct]').value); s += p;
+            r.querySelector('[data-rateio-valor]').textContent = p && t ? window.Fin.brl(t * p / 100) : '—';
+            r.querySelector('[data-rateio-tirar]').hidden = rows.length <= 2;
+        });
+        s = Math.round(s * 100) / 100;
+        var ok = Math.abs(s - 100) < 0.01;
+        soma.className = 'text-xs mt-2 font-semibold ' + (ok ? 'text-emerald-700' : 'text-amber-700');
+        soma.textContent = 'Soma: ' + s.toLocaleString('pt-BR') + '%' + (ok ? ' ✓' : ' — precisa dar 100%') + (t ? ' · total ' + window.Fin.brl(t) : '');
+    }
+    function alternar() {
+        painel.hidden = !liga.checked;
+        unica.disabled = liga.checked;
+        unica.closest('div').classList.toggle('opacity-50', liga.checked);
+        painel.querySelectorAll('select, input').forEach(function (c) { c.disabled = !liga.checked; });
+        if (liga.checked) {
+            var primeira = linhas.querySelector('[name=rateio_loja]');
+            if (unica.value && !primeira.value) primeira.value = unica.value;
+            pintar();
+        }
+    }
+    painel.querySelector('[data-rateio-mais]').addEventListener('click', function () {
+        var nova = linhas.querySelector('[data-rateio-linha]').cloneNode(true);
+        nova.querySelector('select').value = ''; nova.querySelector('input').value = '';
+        linhas.appendChild(nova); pintar(); nova.querySelector('select').focus();
+    });
+    painel.querySelector('[data-rateio-igual]').addEventListener('click', function () {
+        var rows = linhas.querySelectorAll('[data-rateio-linha]'), n = rows.length, base = Math.floor(10000 / n) / 100;
+        rows.forEach(function (r, i) { var v = i === n - 1 ? Math.round((100 - base * (n - 1)) * 100) / 100 : base; r.querySelector('[name=rateio_pct]').value = String(v).replace('.', ','); });
+        pintar();
+    });
+    linhas.addEventListener('click', function (e) { var b = e.target.closest('[data-rateio-tirar]'); if (b && linhas.children.length > 2) { b.closest('[data-rateio-linha]').remove(); pintar(); } });
+    liga.addEventListener('change', alternar);
+    form.addEventListener('input', pintar);
+    form.addEventListener('change', function (e) { if (e.target !== liga) pintar(); });
+    form.addEventListener('submit', function (e) {
+        if (!liga.checked) return;
+        var s = 0, lojas = [];
+        linhas.querySelectorAll('[data-rateio-linha]').forEach(function (r) { s += num(r.querySelector('[name=rateio_pct]').value); lojas.push(r.querySelector('select').value); });
+        var erro = lojas.some(function (l) { return !l; }) ? 'Escolha a loja de cada linha do rateio.'
+            : new Set(lojas).size !== lojas.length ? 'A mesma loja aparece duas vezes no rateio.'
+            : Math.abs(Math.round(s * 100) / 100 - 100) >= 0.01 ? 'Os percentuais do rateio precisam somar 100%.' : '';
+        if (erro) { e.preventDefault(); e.stopImmediatePropagation(); window.Fin.toast(erro, 'error'); }
+    }, true);
+    alternar();
+})();
+</script>
+{% endif %}

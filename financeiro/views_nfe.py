@@ -20,7 +20,8 @@ from django.views.decorators.http import require_POST
 from . import auditoria, danfe, nfe
 from .models_nfe import ConfiguracaoNFe, EmitenteNFe, EventoNotaFiscal, ItemNotaFiscal, NotaFiscalEmitida
 from .permissoes import e_superadmin, exige, filtrar_por_loja, lojas_permitidas, pode
-from .views import Invalido, _contexto_base, _formulario_basico, _ler_titulo, arquivo_ok, dinheiro, lojas_do
+from .views import (Invalido, _contexto_base, _formulario_basico, _ler_titulo, arquivo_ok, dinheiro, ler_rateio,
+                    lojas_do)
 from .views import data as ler_data
 
 CAMPOS_NOTA = ('tipo_operacao', 'finalidade', 'natureza', 'chave_referenciada', 'dest_documento', 'dest_nome',
@@ -540,6 +541,7 @@ def nota_lancar(request, pk):
     try:
         campos = _ler_titulo(request, tipo)
         anexo = arquivo_ok(request.FILES.get('anexo'))
+        rateio = ler_rateio(request)
     except Invalido as exc:
         messages.error(request, str(exc))
         return voltar
@@ -555,17 +557,23 @@ def nota_lancar(request, pk):
         if not vencimentos and post.get('valor_modo') == 'parcela' and parcelas > 1:
             campos['valor'] = campos['valor'] * parcelas
         with transaction.atomic():
-            criados = servicos.criar_titulos(
-                dict(campos, tipo=tipo), usuario=request.user, request=request, parcelas=parcelas, intervalo=intervalo,
-                vencimentos=vencimentos or None, valores=valores or None, anexo=anexo)
+            criar = servicos.criar_titulos_rateados if rateio else servicos.criar_titulos
+            extra = {'rateio': rateio} if rateio else {}
+            criados = criar(dict(campos, tipo=tipo), usuario=request.user, request=request, parcelas=parcelas,
+                            intervalo=intervalo, vencimentos=vencimentos or None, valores=valores or None, anexo=anexo,
+                            **extra)
     except (servicos.RegraFinanceira, ValueError) as exc:
         messages.error(request, str(exc))
         return voltar
     _registrar(request, 'CRIAR', f'Lançou a NF-e {nota_obj.chave or nota_obj.pk} em contas a {area}: '
                                  f'{len(criados)} título(s)', nota_obj)
     rotulo = 'Contas a pagar' if tipo == 'PAGAR' else 'Contas a receber'
-    messages.success(request, f'NF nº {nota_obj.numero} lançada em {rotulo}: '
-                     + (f'{len(criados)} parcelas.' if len(criados) > 1 else f'vence em {criados[0].vencimento:%d/%m/%Y}.'))
+    if rateio:
+        messages.success(request, f'NF nº {nota_obj.numero} lançada em {rotulo} com rateio entre {len(rateio)} lojas: '
+                                  f'{len(criados)} título(s).')
+    else:
+        messages.success(request, f'NF nº {nota_obj.numero} lançada em {rotulo}: '
+                         + (f'{len(criados)} parcelas.' if len(criados) > 1 else f'vence em {criados[0].vencimento:%d/%m/%Y}.'))
     return voltar
 
 
