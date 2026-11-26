@@ -13,7 +13,7 @@
 {% if nova %}
 <form method="get" class="fin-card p-4 mb-4" id="nfePuxar" {% if nota.finalidade != '4' %}hidden{% endif %}>
     <p class="nfe-secao"><i class="fas fa-file-import"></i>Puxar da nota original</p>
-    <p class="text-xs text-gray-500 mb-2">Cole a chave da NF-e que está sendo devolvida (vale nota recebida de fornecedor que já tenha o XML completo em PIS/Cofins, ou nota emitida aqui) ou suba o arquivo XML dela. Destinatário, itens e CFOP de devolução vêm preenchidos.</p>
+    <p class="text-xs text-gray-500 mb-2">Cole a chave da NF-e que está sendo devolvida (vale nota recebida de fornecedor que já tenha o XML completo em PIS/Cofins, ou nota emitida aqui) ou suba o XML dela: a nota entra na lista e a devolução abre preenchida. Destinatário, itens e CFOP de devolução vêm preenchidos.</p>
     <div class="flex gap-2 flex-wrap">
         <input name="devolver" class="fin-input flex-1 min-w-[16rem] nfe-chave" inputmode="numeric" maxlength="54" placeholder="44 números da chave de acesso" value="{{ request.GET.devolver|default:'' }}" aria-label="Chave da nota original">
         <input type="hidden" name="tipo" value="devolucao">
@@ -21,16 +21,10 @@
         <button type="button" class="fin-btn fin-btn-claro" data-nfe-xml-abrir data-livre><i class="fas fa-file-code"></i>Subir o XML</button>
     </div>
     {% if original %}
-    <p class="text-xs text-emerald-700 mt-2"><i class="fas fa-check mr-1"></i>Nota original: nº {{ original.numero }} série {{ original.serie }} de {{ original.emissao }}, {{ original.emitente }}, R$ {{ original.valor }}{% if original.arquivo %} (do arquivo {{ original.arquivo }}){% endif %}.</p>
+    <p class="text-xs text-emerald-700 mt-2"><i class="fas fa-check mr-1"></i>Nota original: nº {{ original.numero }} série {{ original.serie }} de {{ original.emissao }}, {{ original.emitente }}, R$ {{ original.valor }}.</p>
     {% endif %}
 </form>
-{% if original.acao == 'copia' %}
-<div class="fin-card p-3 mb-4 flex items-start gap-3">
-    <span class="fin-kpi-icone" style="background:var(--fin-verde-bg);color:var(--fin-verde-texto)"><i class="fas fa-copy"></i></span>
-    <p class="text-sm min-w-0">Cópia da NF-e nº {{ original.numero }} série {{ original.serie }} de {{ original.emissao }} (R$ {{ original.valor }}){% if original.arquivo %}, do arquivo <span class="font-semibold break-all">{{ original.arquivo }}</span>{% endif %}. Destinatário, itens e impostos vieram do XML; a nota nova recebe número próprio ao enviar.</p>
-</div>
-{% endif %}
-{% if pode.notas_emitir %}{% include 'financeiro/_nfe_importar_xml.html' with nfe_xml_botao=True %}{% endif %}
+{% if pode.notas_emitir %}{% include 'financeiro/_nfe_importar_xml.html' with nfe_xml_botao=True nfe_xml_depois='devolver' %}{% endif %}
 {% endif %}
 
 <form method="post" id="nfeForm" novalidate>{% csrf_token %}

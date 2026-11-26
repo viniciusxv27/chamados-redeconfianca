@@ -2,7 +2,7 @@
 {% load caixa_tags %}
 {% block fin_titulo %}Notas fiscais{% endblock %}
 {% block fin_cabecalho %}Notas fiscais (NF-e){% endblock %}
-{% block fin_subtitulo %}Saída, entrada e devolução emitidas pelo portal direto na SEFAZ{% endblock %}
+{% block fin_subtitulo %}Emitidas pelo portal direto na SEFAZ e importadas do XML (nossas de outro sistema e de fornecedores){% endblock %}
 {% block fin_acoes %}
 {% if e_superadmin %}<a href="{% url 'financeiro:notas_configuracao' %}" class="fin-btn fin-btn-claro"><i class="fas fa-gear"></i>Configuração</a>{% endif %}
 {% if pode.notas_emitir and tem_emitente %}
@@ -33,6 +33,10 @@
             <input type="search" name="q" value="{{ busca }}" class="fin-input" placeholder="Destinatário, CNPJ/CPF, número ou chave…" aria-label="Buscar notas" data-fin-atalho-busca autocomplete="off">
             <span class="fin-kbd" aria-hidden="true">/</span>
         </label>
+        <select name="origem" class="fin-input w-auto" aria-label="Origem" onchange="this.form.submit()">
+            <option value="">Todas as origens</option>
+            {% for valor, rotulo in origens %}<option value="{{ valor }}" {% if filtro_origem == valor %}selected{% endif %}>{% if valor == 'PORTAL' %}Emitidas no portal{% elif valor == 'PROPRIA' %}Importadas (nossas){% else %}Recebidas{% endif %}</option>{% endfor %}
+        </select>
         <select name="tipo" class="fin-input w-auto" aria-label="Tipo" onchange="this.form.submit()">
             <option value="">Todos os tipos</option>
             <option value="saida" {% if filtro_tipo == 'saida' %}selected{% endif %}>Saída</option>
@@ -43,33 +47,34 @@
         <button class="fin-btn fin-btn-claro"><i class="fas fa-filter"></i><span class="hidden sm:inline">Filtrar</span></button>
     </form>
     <div class="fin-rolavel-x mt-2">
-        <a href="?{% if filtro_tipo %}tipo={{ filtro_tipo }}&{% endif %}{% if busca %}q={{ busca|urlencode }}{% endif %}" class="fin-pilula {% if not filtro_status %}fin-pilula-ativa{% endif %}">Todas <span class="opacity-70">{{ total }}</span></a>
+        <a href="?{% if filtro_tipo %}tipo={{ filtro_tipo }}&{% endif %}{% if filtro_origem %}origem={{ filtro_origem }}&{% endif %}{% if busca %}q={{ busca|urlencode }}{% endif %}" class="fin-pilula {% if not filtro_status %}fin-pilula-ativa{% endif %}">Todas <span class="opacity-70">{{ total }}</span></a>
         {% for valor, rotulo, n in status_opcoes %}{% if n or filtro_status == valor %}
-        <a href="?status={{ valor }}{% if filtro_tipo %}&tipo={{ filtro_tipo }}{% endif %}{% if busca %}&q={{ busca|urlencode }}{% endif %}" class="fin-pilula {% if filtro_status == valor %}fin-pilula-ativa{% endif %}">{{ rotulo }} <span class="opacity-70">{{ n }}</span></a>
+        <a href="?status={{ valor }}{% if filtro_tipo %}&tipo={{ filtro_tipo }}{% endif %}{% if filtro_origem %}&origem={{ filtro_origem }}{% endif %}{% if busca %}&q={{ busca|urlencode }}{% endif %}" class="fin-pilula {% if filtro_status == valor %}fin-pilula-ativa{% endif %}">{{ rotulo }} <span class="opacity-70">{{ n }}</span></a>
         {% endif %}{% endfor %}
     </div>
 </div>
 
 <div class="fin-card overflow-hidden">
     <table class="fin-tabela fin-empilha">
-        <thead><tr><th>Nota</th><th>Tipo</th><th>Destinatário / remetente</th><th>Emitente</th><th>Emissão</th><th class="text-right">Valor</th><th>Situação</th></tr></thead>
+        <thead><tr><th>Nota</th><th>Tipo</th><th>Destinatário / remetente</th><th>Nosso CNPJ</th><th>Emissão</th><th class="text-right">Valor</th><th>Situação</th></tr></thead>
         <tbody>
         {% for n in pagina %}
         <tr>
             <td class="fin-td-principal" data-label="Nota">
                 <a href="{% url 'financeiro:nota' n.pk %}" class="font-semibold text-gray-900 hover:underline">
                     {% if n.numero %}Nº {{ n.numero }} <span class="text-gray-400 font-normal">série {{ n.serie }}</span>{% else %}Rascunho #{{ n.pk }}{% endif %}</a>
+                {% if n.origem == 'PROPRIA' %}<span class="nfe-origem nfe-origem-propria">importada</span>{% elif n.origem == 'TERCEIRO' %}<span class="nfe-origem nfe-origem-recebida">recebida</span>{% endif %}
                 {% if n.ambiente == '2' and n.numero %}<span class="block text-[10.5px] text-amber-600 font-semibold">homologação</span>{% endif %}
             </td>
             <td data-label="Tipo"><span class="nfe-tipo {% if n.devolucao %}nfe-tipo-devolucao{% elif n.tipo_operacao == '0' %}nfe-tipo-entrada{% else %}nfe-tipo-saida{% endif %}">{{ n.rotulo_tipo }}</span></td>
             <td data-label="Destinatário"><span class="text-gray-900">{{ n.dest_nome|default:'—' }}</span><span class="block text-[11px] text-gray-500 tabular">{{ n.dest_documento_formatado }}</span></td>
-            <td data-label="Emitente"><span class="text-xs text-gray-700">{{ n.emitente.nome_fantasia|default:n.emitente.razao_social }}</span>{% if n.loja %}<span class="block text-[11px] text-gray-400">{{ n.loja.name }}</span>{% endif %}</td>
+            <td data-label="Nosso CNPJ"><span class="text-xs text-gray-700">{{ n.emitente.nome_fantasia|default:n.emitente.razao_social }}</span>{% if n.loja %}<span class="block text-[11px] text-gray-400">{{ n.loja.name }}</span>{% endif %}</td>
             <td data-label="Emissão" class="tabular text-xs text-gray-600 whitespace-nowrap">{% if n.emitida_em %}{{ n.emitida_em|date:'d/m/Y H:i' }}{% else %}—{% endif %}</td>
             <td data-label="Valor" class="text-right tabular font-semibold whitespace-nowrap">{{ n.valor_total|brl_zero }}</td>
             <td data-label="Situação"><span class="nfe-st nfe-{{ n.status }}" title="{{ n.cstat }} {{ n.motivo }}">{{ n.get_status_display }}</span></td>
         </tr>
         {% empty %}
-        <tr class="fin-linha-vazia"><td colspan="7" class="text-center text-gray-500 py-10"><i class="fas fa-file-invoice text-2xl text-gray-300 block mb-2"></i>Nenhuma nota {% if busca or filtro_status or filtro_tipo %}com esse filtro{% else %}emitida ainda{% endif %}.</td></tr>
+        <tr class="fin-linha-vazia"><td colspan="7" class="text-center text-gray-500 py-10"><i class="fas fa-file-invoice text-2xl text-gray-300 block mb-2"></i>Nenhuma nota {% if busca or filtro_status or filtro_tipo or filtro_origem %}com esse filtro{% else %}ainda: emita uma ou importe os XMLs{% endif %}.</td></tr>
         {% endfor %}
         </tbody>
     </table>
@@ -78,8 +83,8 @@
 <div class="flex items-center justify-between mt-3 text-sm">
     <span class="fin-contagem">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
     <div class="flex gap-2">
-        {% if pagina.has_previous %}<a class="fin-btn fin-btn-claro" href="?pagina={{ pagina.previous_page_number }}{% if filtro_status %}&status={{ filtro_status }}{% endif %}{% if filtro_tipo %}&tipo={{ filtro_tipo }}{% endif %}{% if busca %}&q={{ busca|urlencode }}{% endif %}">Anterior</a>{% endif %}
-        {% if pagina.has_next %}<a class="fin-btn fin-btn-claro" href="?pagina={{ pagina.next_page_number }}{% if filtro_status %}&status={{ filtro_status }}{% endif %}{% if filtro_tipo %}&tipo={{ filtro_tipo }}{% endif %}{% if busca %}&q={{ busca|urlencode }}{% endif %}">Próxima</a>{% endif %}
+        {% if pagina.has_previous %}<a class="fin-btn fin-btn-claro" href="?pagina={{ pagina.previous_page_number }}{% if filtro_status %}&status={{ filtro_status }}{% endif %}{% if filtro_tipo %}&tipo={{ filtro_tipo }}{% endif %}{% if filtro_origem %}&origem={{ filtro_origem }}{% endif %}{% if busca %}&q={{ busca|urlencode }}{% endif %}">Anterior</a>{% endif %}
+        {% if pagina.has_next %}<a class="fin-btn fin-btn-claro" href="?pagina={{ pagina.next_page_number }}{% if filtro_status %}&status={{ filtro_status }}{% endif %}{% if filtro_tipo %}&tipo={{ filtro_tipo }}{% endif %}{% if filtro_origem %}&origem={{ filtro_origem }}{% endif %}{% if busca %}&q={{ busca|urlencode }}{% endif %}">Próxima</a>{% endif %}
     </div>
 </div>
 {% endif %}

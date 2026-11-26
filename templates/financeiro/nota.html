@@ -7,7 +7,7 @@
 <a href="{% url 'financeiro:notas' %}" class="fin-btn fin-btn-claro"><i class="fas fa-arrow-left"></i>Notas</a>
 <a href="{% url 'financeiro:nota_danfe' nota.pk %}" target="_blank" rel="noopener" class="fin-btn fin-btn-claro"><i class="fas fa-file-pdf"></i>{% if nota.xml_autorizado %}DANFE{% else %}Prévia da DANFE{% endif %}</a>
 {% if nota.xml_autorizado or nota.xml_assinado %}<a href="{% url 'financeiro:nota_xml' nota.pk %}" class="fin-btn fin-btn-claro"><i class="fas fa-file-code"></i>XML</a>{% endif %}
-{% if pode.notas_emitir %}<a href="{% url 'financeiro:nota_nova' %}?copiar={{ nota.pk }}" class="fin-btn fin-btn-claro" title="Nova nota com os mesmos dados"><i class="fas fa-copy"></i><span class="hidden sm:inline">Copiar</span></a>{% endif %}
+{% if pode.notas_emitir and not nota.recebida %}<a href="{% url 'financeiro:nota_nova' %}?copiar={{ nota.pk }}" class="fin-btn fin-btn-claro" title="Nova nota com os mesmos dados"><i class="fas fa-copy"></i><span class="hidden sm:inline">Copiar</span></a>{% endif %}
 {% endblock %}
 {% block fin_css %}{% include 'financeiro/_nfe_css.html' %}{% endblock %}
 
@@ -22,6 +22,7 @@
                 <span class="nfe-st nfe-{{ nota.status }} text-xs">{{ nota.get_status_display }}</span>
                 <span class="nfe-tipo {% if nota.devolucao %}nfe-tipo-devolucao{% elif nota.tipo_operacao == '0' %}nfe-tipo-entrada{% else %}nfe-tipo-saida{% endif %}">{{ nota.rotulo_tipo }}</span>
                 {% if nota.ambiente == '2' %}<span class="fin-chip bg-amber-50 text-amber-700">homologação</span>{% endif %}
+                {% if nota.origem == 'PROPRIA' %}<span class="nfe-origem nfe-origem-propria" title="Emitida em outro sistema e importada pelo XML">importada</span>{% elif nota.origem == 'TERCEIRO' %}<span class="nfe-origem nfe-origem-recebida" title="Recebida de fornecedor/terceiro, importada pelo XML">recebida</span>{% endif %}
             </div>
             <p class="text-2xl font-extrabold tabular text-gray-900">{{ nota.valor_total|brl_zero }}</p>
         </div>
@@ -46,15 +47,18 @@
     </section>
     {% endif %}
 
-    <section class="fin-card p-4">
-        <p class="nfe-secao"><i class="fas fa-building"></i>Emitente</p>
+    <section class="fin-card p-4 flex flex-col">
+        <div {% if nota.recebida %}class="order-2 mt-4"{% endif %}>
+        <p class="nfe-secao"><i class="fas fa-building"></i>{% if nota.recebida %}Destinatário (nós){% else %}Emitente{% endif %}</p>
         <dl class="nfe-dl">
             <div><dt>Razão social</dt><dd>{{ nota.emitente.razao_social }}</dd></div>
             <div><dt>CNPJ · IE</dt><dd class="tabular">{{ nota.emitente.cnpj_formatado }} · {{ nota.emitente.ie }}</dd></div>
             <div><dt>Regime</dt><dd>{{ nota.emitente.get_crt_display }}</dd></div>
             <div><dt>Endereço</dt><dd>{{ nota.emitente.logradouro }}, {{ nota.emitente.numero }} · {{ nota.emitente.municipio }}/{{ nota.emitente.uf }}</dd></div>
         </dl>
-        <p class="nfe-secao mt-4"><i class="fas fa-user-tag"></i>{% if nota.tipo_operacao == '0' %}Remetente{% else %}Destinatário{% endif %}</p>
+        </div>
+        <div {% if nota.recebida %}class="order-1"{% else %}class="mt-4"{% endif %}>
+        <p class="nfe-secao"><i class="fas fa-user-tag"></i>{% if nota.recebida %}Emitente (fornecedor){% elif nota.tipo_operacao == '0' %}Remetente{% else %}Destinatário{% endif %}</p>
         <dl class="nfe-dl">
             <div><dt>Nome</dt><dd>{{ nota.dest_nome|default:'—' }}</dd></div>
             <div><dt>CNPJ/CPF · IE</dt><dd class="tabular">{{ nota.dest_documento_formatado|default:'—' }}{% if nota.dest_ie %} · {{ nota.dest_ie }}{% endif %} <span class="text-gray-400 text-xs">({{ nota.get_dest_ind_ie_display }})</span></dd></div>
@@ -63,6 +67,7 @@
             <div><dt>Operação</dt><dd>{{ nota.get_presenca_display }}{% if nota.consumidor_final %} · consumidor final{% endif %}</dd></div>
             <div><dt>Frete · pagamento</dt><dd>{{ nota.get_modalidade_frete_display }} · {% if nota.finalidade == '3' or nota.finalidade == '4' %}Sem pagamento{% else %}{{ nota.get_forma_pagamento_display }}{% endif %}</dd></div>
         </dl>
+        </div>
     </section>
 
     <section class="fin-card overflow-hidden">
@@ -76,7 +81,7 @@
                 <td data-label="#" class="tabular text-gray-400">{{ i.ordem }}</td>
                 <td class="fin-td-principal" data-label="Produto"><span class="font-semibold">{{ i.descricao }}</span><span class="block text-[11px] text-gray-500">cód. {{ i.codigo }}{% if i.ean %} · EAN {{ i.ean }}{% endif %}</span></td>
                 <td data-label="NCM · CFOP" class="tabular text-xs">{{ i.ncm }} · {{ i.cfop }}</td>
-                <td data-label="ICMS" class="text-xs">{% if nota.emitente.simples %}CSOSN{% else %}CST{% endif %} {{ i.origem }}{{ i.cst_icms }}{% if i.valor_icms %}<span class="block text-gray-500 tabular">{{ i.aliquota_icms|floatformat:'-2' }}% · {{ i.valor_icms|brl_zero }}</span>{% endif %}</td>
+                <td data-label="ICMS" class="text-xs">{% if i.cst_icms|length == 3 %}CSOSN{% else %}CST{% endif %} {{ i.origem }}{{ i.cst_icms }}{% if i.valor_icms %}<span class="block text-gray-500 tabular">{{ i.aliquota_icms|floatformat:'-2' }}% · {{ i.valor_icms|brl_zero }}</span>{% endif %}</td>
                 <td data-label="Qtd." class="text-right tabular">{{ i.quantidade|floatformat:'-4' }} {{ i.unidade }}</td>
                 <td data-label="Unitário" class="text-right tabular">{{ i.valor_unitario|floatformat:'-4' }}</td>
                 <td data-label="Total" class="text-right tabular font-semibold">{{ i.valor_total|brl_zero }}</td>
@@ -103,7 +108,7 @@
 
 <aside class="space-y-4 min-w-0">
     <section class="fin-card p-4">
-        <p class="nfe-secao"><i class="fas fa-paper-plane"></i>SEFAZ</p>
+        <p class="nfe-secao"><i class="fas fa-paper-plane"></i>{% if nota.importada %}Ações{% else %}SEFAZ{% endif %}</p>
         <div class="space-y-2">
         {% if nota.editavel and pode.notas_emitir %}
             <form method="post" action="{% url 'financeiro:nota_enviar' nota.pk %}" data-nfe-confirmar="{% if config.producao %}Enviar para a SEFAZ de PRODUÇÃO? A nota passa a valer como documento fiscal.{% else %}Enviar para a SEFAZ de homologação (teste)?{% endif %}">{% csrf_token %}
@@ -111,19 +116,28 @@
             </form>
             <a href="{% url 'financeiro:nota_editar' nota.pk %}" class="fin-btn fin-btn-claro w-full"><i class="fas fa-pen"></i>Editar</a>
         {% endif %}
-        {% if nota.chave and nota.status != 'RASCUNHO' %}
+        {% if nota.status == 'AUTORIZADA' and pode.notas_emitir and not nota.devolucao %}
+            <a href="{% url 'financeiro:nota_nova' %}?tipo=devolucao&devolver={{ nota.chave }}" class="fin-btn fin-btn-claro w-full"><i class="fas fa-rotate-left"></i>{% if nota.recebida %}Devolver ao fornecedor{% elif nota.tipo_operacao == '1' %}Receber devolução{% else %}Gerar devolução{% endif %}</a>
+        {% endif %}
+        {% if nota.chave and nota.status != 'RASCUNHO' and not nota.recebida %}
             <form method="post" action="{% url 'financeiro:nota_consultar' nota.pk %}">{% csrf_token %}
                 <button class="fin-btn fin-btn-claro w-full" {% if not config.ligado %}disabled title="Emissão desligada"{% endif %}><i class="fas fa-rotate"></i>Consultar na SEFAZ</button></form>
         {% endif %}
         {% if pode_excluir and pode.notas_emitir %}
+            {% if nota.importada %}
+            <form method="post" action="{% url 'financeiro:nota_excluir' nota.pk %}" data-nfe-confirmar="Tirar esta nota da lista? Na SEFAZ nada muda; dá para importar o XML de novo.">{% csrf_token %}
+                <button class="fin-btn fin-btn-claro w-full text-red-600"><i class="fas fa-trash-can"></i>Tirar da lista</button></form>
+            {% else %}
             <form method="post" action="{% url 'financeiro:nota_excluir' nota.pk %}" data-nfe-confirmar="Excluir este rascunho?">{% csrf_token %}
                 <button class="fin-btn fin-btn-claro w-full text-red-600"><i class="fas fa-trash-can"></i>Excluir rascunho</button></form>
+            {% endif %}
         {% endif %}
         </div>
+        {% if nota.importada %}<p class="text-[11px] text-gray-500 mt-2">{% if nota.recebida %}Recebida de {{ nota.dest_nome }} e importada pelo XML: cancelamento e correção são com quem emitiu.{% else %}Emitida em outro sistema e importada pelo XML: cancelamento e carta de correção se fazem lá. Se cancelar, importe aqui o XML do cancelamento.{% endif %}</p>{% endif %}
         {% if nota.status == 'REJEITADA' %}<p class="text-[11px] text-gray-500 mt-2">O número {{ nota.numero }} fica reservado para esta nota: corrija e envie de novo.</p>{% endif %}
     </section>
 
-    {% if nota.status == 'AUTORIZADA' %}
+    {% if nota.status == 'AUTORIZADA' and not nota.importada %}
     {% if pode.notas_emitir %}
     <section class="fin-card p-4">
         <p class="nfe-secao"><i class="fas fa-file-pen"></i>Carta de correção</p>

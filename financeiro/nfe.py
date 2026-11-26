@@ -887,6 +887,8 @@ def consultar(nota, transporte=None):
         raise NfeInvalida('A emissão de NF-e está desligada.')
     if not nota.chave:
         raise NfeInvalida('A nota ainda não foi enviada.')
+    if nota.origem == 'TERCEIRO':
+        raise NfeInvalida('Nota recebida de terceiro: a consulta é feita por quem emitiu.')
     if config.ambiente != nota.ambiente:
         config.ambiente = nota.ambiente   # pergunta no ambiente em que a nota foi emitida (não grava)
     uf = nota.emitente.uf
@@ -940,6 +942,9 @@ def _montar_evento(nota, tipo, seq, detalhes, ambiente, agora):
 
 def _registrar_evento(nota, tipo, texto_evento, detalhes, usuario, transporte, agora):
     from .models_nfe import ConfiguracaoNFe, EventoNotaFiscal
+    if nota.origem != 'PORTAL':
+        raise NfeInvalida('Nota importada do XML: cancelamento e carta de correção se fazem no sistema que emitiu '
+                          '(depois, importe o XML do cancelamento aqui).')
     config = ConfiguracaoNFe.atual()
     if not config.ligado:
         raise NfeInvalida('A emissão de NF-e está desligada.')
@@ -1094,37 +1099,6 @@ def _lados(inf, emitentes):
     return None, None
 
 
-def resumo_do_xml(bruto, emitentes):
-    """O que a tela mostra ao subir o XML: a nota, de quem para quem e o que dá para fazer com ela.
-
-    'opcoes' vem na ordem de recomendação; cada uma é (acao, título, explicação).
-    """
-    inf, chave = abrir_xml_nfe(bruto)
-    ide, emit, dest = inf.find(f'{{{NS}}}ide'), inf.find(f'{{{NS}}}emit'), inf.find(f'{{{NS}}}dest')
-    lado, nosso = _lados(inf, emitentes)
-    resumo = {
-        'chave': chave, 'numero': _t(ide, 'nNF'), 'serie': _t(ide, 'serie'), 'emissao': _t(ide, 'dhEmi')[:10],
-        'natureza': _t(ide, 'natOp'), 'entrada': _t(ide, 'tpNF') == '0', 'devolucao': _t(ide, 'finNFe') == '4',
-        'emitente_nome': _t(emit, 'xNome'), 'emitente_doc': _t(emit, 'CNPJ') or _t(emit, 'CPF'),
-        'dest_nome': _t(dest, 'xNome'), 'dest_doc': (_t(dest, 'CNPJ') or _t(dest, 'CPF')) if dest is not None else '',
-        'valor': _t(inf.find(f'.//{{{NS}}}ICMSTot'), 'vNF') or '0', 'itens': len(inf.findall(f'{{{NS}}}det')),
-        'autorizada': inf.getparent() is not None and inf.getparent().getparent() is not None
-                      and etree.QName(inf.getparent().getparent()).localname == 'nfeProc',
-        'lado': lado, 'nosso': nosso, 'opcoes': [],
-    }
-    if lado == 'compra':
-        resumo['opcoes'] = [('devolucao', 'Devolver ao fornecedor',
-                             f'Nota de saída de devolução (CFOP {"5202/5411" if _t(emit.find(f"{{{NS}}}enderEmit"), "UF") == nosso.uf else "6202/6411"}) '
-                             f'para {resumo["emitente_nome"] or "o fornecedor"}, com os itens desta compra.')]
-    elif lado == 'nossa':
-        resumo['opcoes'] = [('devolucao', 'Receber devolução do cliente',
-                             f'Nota de entrada de devolução (CFOP 1202/2202) de {resumo["dest_nome"] or "o cliente"}, '
-                             f'com os itens desta venda.'),
-                            ('copia', 'Emitir outra igual',
-                             'Nota nova com o mesmo destinatário, natureza, itens e impostos desta.')]
-    return resumo
-
-
 def dados_do_xml(bruto, emitentes, acao):
     """Rascunho a partir do XML de uma NF-e: 'devolucao' (nossa → entrada; compra → saída) ou 'copia' (nossa)."""
     inf, chave = abrir_xml_nfe(bruto)
@@ -1224,3 +1198,204 @@ def dados_do_xml(bruto, emitentes, acao):
     if not itens:
         raise NfeInvalida('A nota original não tem itens legíveis.')
     return {'nota': nota, 'itens': itens}
+
+
+# ── Importar a nota pronta (XML autorizado) para a lista ───────────────────
+TAMANHO_MAXIMO_ZIP = 50 * 1024 * 1024
+MAXIMO_ARQUIVOS_ZIP = 500
+
+
+def _data_hora(texto):
+    from datetime import datetime
+    try:
+        valor = datetime.fromisoformat((texto or '').strip())
+    except ValueError:
+        return None
+    return valor if timezone.is_aware(valor) else timezone.make_aware(valor)
+
+
+def _dec_ou_zero(texto):
+    try:
+        return dec(texto or '0')
+    except NfeInvalida:
+        return ZERO
+
+
+def xmls_do_arquivo(nome, conteudo):
+    """Um .xml → [(nome, bytes)]; um .zip → os .xml de dentro (com limites contra zip gigante)."""
+    import io
+    import zipfile
+    nome = nome or 'arquivo'
+    if nome.lower().endswith('.zip'):
+        if len(conteudo) > TAMANHO_MAXIMO_ZIP:
+            raise NfeInvalida('O ZIP passa de 50 MB.')
+        try:
+            pacote = zipfile.ZipFile(io.BytesIO(conteudo))
+        except zipfile.BadZipFile as exc:
+            raise NfeInvalida('O ZIP está corrompido.') from exc
+        dentro = [i for i in pacote.infolist() if not i.is_dir() and i.filename.lower().endswith('.xml')
+                  and '__MACOSX' not in i.filename]
+        if not dentro:
+            raise NfeInvalida('O ZIP não tem nenhum .xml.')
+        if len(dentro) > MAXIMO_ARQUIVOS_ZIP:
+            raise NfeInvalida(f'O ZIP tem {len(dentro)} XMLs; o limite é {MAXIMO_ARQUIVOS_ZIP} por vez.')
+        saida = []
+        for info in dentro:
+            rotulo = f'{nome} › {info.filename.rsplit("/", 1)[-1]}'
+            if info.file_size > TAMANHO_MAXIMO_XML:
+                saida.append((rotulo, None))
+                continue
+            saida.append((rotulo, pacote.read(info)))
+        return saida
+    if not nome.lower().endswith('.xml'):
+        raise NfeInvalida('Envie o XML da NF-e (.xml) ou um .zip com XMLs.')
+    return [(nome, conteudo)]
+
+
+def _cancelamento_importado(raiz, emitentes_ids):
+    """procEventoNFe de cancelamento (110111) registrado: marca a nota importada como cancelada."""
+    from .models_nfe import NotaFiscalEmitida
+    inf = raiz.find(f'.//{{{NS}}}infEvento')
+    if inf is None or _t(inf, 'tpEvento') != '110111':
+        raise NfeInvalida('Evento que não é cancelamento: só o XML da nota ou do cancelamento entra aqui.')
+    ret = raiz.find(f'.//{{{NS}}}retEvento/{{{NS}}}infEvento')
+    if ret is None or _t(ret, 'cStat') not in ('135', '136', '155'):
+        raise NfeInvalida('O XML do cancelamento não traz o registro da SEFAZ.')
+    chave = _t(inf, 'chNFe')
+    nota = NotaFiscalEmitida.objects.filter(chave=chave, emitente_id__in=emitentes_ids).first()
+    if nota is None:
+        raise NfeInvalida('Cancelamento de uma nota que não está na lista: importe antes o XML da nota.')
+    if nota.status == 'CANCELADA':
+        return 'repetida', nota, []
+    if nota.origem == 'PORTAL':
+        raise NfeInvalida('Esta nota foi emitida pelo portal: o cancelamento se faz (ou se consulta) na tela dela.')
+    nota.status = 'CANCELADA'
+    nota.cancelada_em = _data_hora(_t(ret, 'dhRegEvento')) or timezone.now()
+    nota.anotar('Cancelamento importado do XML', _t(ret, 'cStat'), _t(ret, 'xMotivo'))
+    nota.save(update_fields=['status', 'cancelada_em', 'historico', 'atualizado_em'])
+    return 'cancelada', nota, []
+
+
+def importar_nota(bruto, emitentes, usuario=None):
+    """Grava na lista uma NF-e já autorizada, a partir do XML (nfeProc com protocolo).
+
+    Nossa (emitida em outro sistema) → origem PROPRIA; de terceiro para um CNPJ nosso → TERCEIRO,
+    com o tipo do nosso ponto de vista (a venda do fornecedor é entrada para nós).
+    Devolve (situação, nota, avisos): 'importada', 'repetida' ou 'cancelada'. Levanta NfeInvalida.
+    """
+    from .models_nfe import ItemNotaFiscal, NotaFiscalEmitida
+    emitentes = list(emitentes)
+    if isinstance(bruto, str):
+        bruto = bruto.encode('utf-8')
+    try:
+        raiz = etree.fromstring((bruto or b'').lstrip(b'\xef\xbb\xbf').strip(), parser=etree.XMLParser(
+            resolve_entities=False, no_network=True, huge_tree=False))
+    except etree.XMLSyntaxError as exc:
+        raise NfeInvalida('O arquivo não é um XML válido.') from exc
+    if etree.QName(raiz).localname in ('procEventoNFe', 'evento'):
+        return _cancelamento_importado(raiz, [e.pk for e in emitentes])
+    inf, chave = abrir_xml_nfe(bruto)
+    prot = raiz.find(f'.//{{{NS}}}protNFe/{{{NS}}}infProt')
+    if prot is None or not _t(prot, 'cStat'):
+        raise NfeInvalida('O XML não tem o protocolo de autorização da SEFAZ (é só a nota assinada). '
+                          'Importe o XML de distribuição (nfeProc), que vem depois da autorização.')
+    cstat = _t(prot, 'cStat')
+    if cstat not in AUTORIZADA and cstat not in DENEGADA:
+        raise NfeInvalida(f'A SEFAZ não autorizou esta nota ({cstat} {_t(prot, "xMotivo")}).')
+    if _t(prot, 'chNFe') and _t(prot, 'chNFe') != chave:
+        raise NfeInvalida('O protocolo do XML é de outra chave.')
+    lado, nosso = _lados(inf, emitentes)
+    if lado is None:
+        raise NfeInvalida('Nenhum CNPJ emitente cadastrado (que você possa usar) aparece nesta nota, nem como emitente '
+                          'nem como destinatário. O SUPERADMIN cadastra os CNPJs em Notas fiscais → Configuração.')
+    ja = NotaFiscalEmitida.objects.filter(chave=chave).first()
+    if ja is not None:
+        return 'repetida', ja, []
+
+    ide, emit, dest = inf.find(f'{{{NS}}}ide'), inf.find(f'{{{NS}}}emit'), inf.find(f'{{{NS}}}dest')
+    tot = inf.find(f'{{{NS}}}total/{{{NS}}}ICMSTot')
+    if lado == 'nossa':
+        outro, outro_end = dest, 'enderDest'
+        tipo = '0' if _t(ide, 'tpNF') == '0' else '1'
+    else:
+        outro, outro_end = emit, 'enderEmit'
+        tipo = '1' if _t(ide, 'tpNF') == '0' else '0'     # a saída do fornecedor é a nossa entrada
+    end = outro.find(f'{{{NS}}}{outro_end}') if outro is not None else None
+    ie_outro = _t(outro, 'IE')
+    if lado == 'nossa':
+        ind_ie = _t(outro, 'indIEDest') or ('1' if ie_outro and ie_outro.upper() != 'ISENTO' else '9')
+    else:
+        ind_ie = '1' if ie_outro and ie_outro.upper() != 'ISENTO' else '9'
+    pag = inf.find(f'.//{{{NS}}}detPag')
+    forma = _t(pag, 'tPag')
+    status = 'AUTORIZADA' if cstat in AUTORIZADA else 'DENEGADA'
+    nota = NotaFiscalEmitida(
+        origem='PROPRIA' if lado == 'nossa' else 'TERCEIRO', emitente=nosso, loja=nosso.loja,
+        tipo_operacao=tipo, finalidade=_t(ide, 'finNFe') if _t(ide, 'finNFe') in ('1', '2', '3', '4') else '1',
+        natureza=_t(ide, 'natOp')[:60], chave_referenciada=_t(ide.find(f'{{{NS}}}NFref'), 'refNFe')[:44],
+        dest_documento=(_t(outro, 'CNPJ') or _t(outro, 'CPF') or _t(outro, 'idEstrangeiro'))[:14],
+        dest_nome=_t(outro, 'xNome')[:60], dest_ie=('' if ie_outro.upper() == 'ISENTO' else ie_outro)[:14],
+        dest_ind_ie=ind_ie if ind_ie in ('1', '2', '9') else '9', dest_email=_t(outro, 'email')[:60],
+        dest_telefone=_t(end, 'fone')[:14], dest_logradouro=_t(end, 'xLgr')[:60], dest_numero=_t(end, 'nro')[:60],
+        dest_complemento=_t(end, 'xCpl')[:60], dest_bairro=_t(end, 'xBairro')[:60],
+        dest_codigo_municipio=_t(end, 'cMun')[:7], dest_municipio=_t(end, 'xMun')[:60], dest_uf=_t(end, 'UF')[:2],
+        dest_cep=_t(end, 'CEP')[:8], consumidor_final=_t(ide, 'indFinal') == '1',
+        presenca=_t(ide, 'indPres') if _t(ide, 'indPres') in ('0', '1', '2', '3', '4', '9') else '9',
+        modalidade_frete=_t(inf.find(f'{{{NS}}}transp'), 'modFrete') or '9',
+        forma_pagamento=forma if forma in {'90', '01', '15', '17', '03', '04', '99'} else '99',
+        valor_frete=_dec_ou_zero(_t(tot, 'vFrete')), valor_seguro=_dec_ou_zero(_t(tot, 'vSeg')),
+        valor_outras=_dec_ou_zero(_t(tot, 'vOutro')), info_complementar=_t(inf.find(f'{{{NS}}}infAdic'), 'infCpl'),
+        valor_produtos=_dec_ou_zero(_t(tot, 'vProd')), valor_desconto=_dec_ou_zero(_t(tot, 'vDesc')),
+        base_icms=_dec_ou_zero(_t(tot, 'vBC')), valor_icms=_dec_ou_zero(_t(tot, 'vICMS')),
+        valor_pis=_dec_ou_zero(_t(tot, 'vPIS')), valor_cofins=_dec_ou_zero(_t(tot, 'vCOFINS')),
+        valor_total=_dec_ou_zero(_t(tot, 'vNF')),
+        ambiente='1' if _t(ide, 'tpAmb') == '1' else '2', serie=int(_t(ide, 'serie') or 0),
+        numero=int(_t(ide, 'nNF') or 0) or None, codigo_numerico=_t(ide, 'cNF')[:8], chave=chave, status=status,
+        cstat=cstat[:10], motivo=_t(prot, 'xMotivo')[:500], protocolo=_t(prot, 'nProt')[:20],
+        emitida_em=_data_hora(_t(ide, 'dhEmi')), autorizada_em=_data_hora(_t(prot, 'dhRecbto')),
+        xml_autorizado=bruto.decode('utf-8', 'replace').lstrip('﻿'), criado_por=usuario,
+    )
+    nota.anotar('Importada do XML', cstat, _t(prot, 'xMotivo'))
+    itens = []
+    for det in inf.findall(f'{{{NS}}}det'):
+        prod = det.find(f'{{{NS}}}prod')
+        imposto = det.find(f'{{{NS}}}imposto')
+        icms = imposto.find(f'{{{NS}}}ICMS') if imposto is not None else None
+        grupo = icms[0] if icms is not None and len(icms) else None
+        pis = imposto.find(f'{{{NS}}}PIS') if imposto is not None else None
+        cofins = imposto.find(f'{{{NS}}}COFINS') if imposto is not None else None
+        g_pis = pis[0] if pis is not None and len(pis) else None
+        g_cofins = cofins[0] if cofins is not None and len(cofins) else None
+        itens.append(ItemNotaFiscal(
+            ordem=len(itens) + 1, codigo=_t(prod, 'cProd')[:60], descricao=_t(prod, 'xProd')[:120],
+            ean=(_t(prod, 'cEAN') if _t(prod, 'cEAN') != 'SEM GTIN' else '')[:14], ncm=_t(prod, 'NCM')[:8],
+            cest=_t(prod, 'CEST')[:7], cfop=_t(prod, 'CFOP')[:4], unidade=_t(prod, 'uCom')[:6] or 'UN',
+            quantidade=_dec_ou_zero(_t(prod, 'qCom')), valor_unitario=_dec_ou_zero(_t(prod, 'vUnCom')),
+            valor_desconto=_dec_ou_zero(_t(prod, 'vDesc')), origem=(_t(grupo, 'orig') or '0')[:1],
+            cst_icms=(_t(grupo, 'CST') or _t(grupo, 'CSOSN'))[:3], reducao_bc_icms=_dec_ou_zero(_t(grupo, 'pRedBC')),
+            aliquota_icms=_dec_ou_zero(_t(grupo, 'pICMS')), cst_pis=_t(g_pis, 'CST')[:2] or '49',
+            aliquota_pis=_dec_ou_zero(_t(g_pis, 'pPIS')), cst_cofins=_t(g_cofins, 'CST')[:2] or '49',
+            aliquota_cofins=_dec_ou_zero(_t(g_cofins, 'pCOFINS')), info_adicional=_t(det, 'infAdProd')[:500],
+            valor_total=_dec_ou_zero(_t(prod, 'vProd')), base_icms=_dec_ou_zero(_t(grupo, 'vBC')),
+            valor_icms=_dec_ou_zero(_t(grupo, 'vICMS')), valor_pis=_dec_ou_zero(_t(g_pis, 'vPIS')),
+            valor_cofins=_dec_ou_zero(_t(g_cofins, 'vCOFINS'))))
+    avisos = []
+    if lado == 'nossa' and nota.numero:
+        campo = 'proximo_numero' if nota.ambiente == '1' else 'proximo_numero_homologacao'
+        if nota.serie == nosso.serie and nota.numero >= getattr(nosso, campo):
+            avisos.append(f'A nota nº {nota.numero} usa a série {nota.serie}, a mesma do portal, e o próximo número do '
+                          f'portal é {getattr(nosso, campo)}: acerte em Configuração para não repetir número.')
+    from django.db import IntegrityError
+    try:
+        with transaction.atomic():
+            nota.save()
+            for item in itens:
+                item.nota = nota
+            ItemNotaFiscal.objects.bulk_create(itens)
+    except IntegrityError as exc:
+        ja = NotaFiscalEmitida.objects.filter(chave=chave).first()
+        if ja is not None:
+            return 'repetida', ja, []
+        raise NfeInvalida(f'O número {nota.numero} série {nota.serie} já existe na lista para '
+                          f'{nosso.razao_social} com outra chave.') from exc
+    return 'importada', nota, avisos

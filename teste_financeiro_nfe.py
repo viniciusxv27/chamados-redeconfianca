@@ -583,74 +583,139 @@ try:
         t('barra de abas horizontal saiu', 'fin-abas-lista' not in corpo and 'fin-tab-ind' not in corpo)
         t('SUPERADMIN vê Acessos no menu', 'href="/financeiro/acessos/"' in corpo)
 
-        print('\n== IMPORTAR XML ==')
-        t('lista de notas tem a zona de importar XML', 'id="nfeXmlZona"' in corpo and '/financeiro/notas/importar-xml/' in corpo)
+        print('\n== IMPORTAR XML PARA A LISTA ==')
+        t('lista de notas tem a zona de importar XML', 'id="nfeXmlZona"' in corpo and '/financeiro/notas/importar-xml/' in corpo
+          and 'multiple' in corpo)
 
-        def subir(cliente, conteudo, nome='nota.xml', json=True):
+        def subir(cliente, *arquivos, json=True):
             extra = {'HTTP_ACCEPT': 'application/json'} if json else {}
-            if isinstance(conteudo, str):
-                conteudo = conteudo.encode()
-            return cliente.post('/financeiro/notas/importar-xml/', {'xml': SimpleUploadedFile(nome, conteudo, 'text/xml')}, **extra)
+            files = [SimpleUploadedFile(nome, conteudo.encode() if isinstance(conteudo, str) else conteudo, 'text/xml')
+                     for nome, conteudo in arquivos]
+            return cliente.post('/financeiro/notas/importar-xml/', {'xml': files}, **extra)
 
-        r = subir(c, proc_nfe_fornecedor(ch_forn), 'compra-801.xml')
-        j = r.json()
-        t('XML de compra lido: fornecedor, número e valor', r.status_code == 200 and j['resumo']['numero'] == '801'
-          and j['resumo']['emitente_doc'] == FORN and j['resumo']['lado'] == 'compra' and j['resumo']['valor'] == '150.00', j)
-        t('compra recebida → uma opção: devolver ao fornecedor', [o['acao'] for o in j['opcoes']] == ['devolucao'])
-        t('avisa que já existe devolução desta nota (e leva até ela)', any('Já existe devolução' in a for a in j['avisos'])
-          and j['ja_existe'].startswith('/financeiro/notas/'))
-        r = c.get(j['opcoes'][0]['url'])
-        corpo = r.content.decode()
-        t('rascunho de devolução vem preenchido do XML (CFOP 5202, item, fornecedor)', r.status_code == 200
-          and 'value="5202"' in corpo and 'ZZ CAPA SILICONE' in corpo and FORN in corpo and 'compra-801.xml' in corpo)
-        t('rascunho do XML não é gravado antes de salvar', not NotaFiscalEmitida.objects.filter(dest_nome='ZZ DISTRIBUIDORA LTDA', status='RASCUNHO').exists())
+        def autorizado(xml, ch, cstat='100'):
+            return xml.replace('<protNFe><infProt><nProt>132190000000001</nProt></infProt></protNFe>',
+                               f'<protNFe versao="4.00"><infProt><tpAmb>2</tpAmb><chNFe>{ch}</chNFe>'
+                               f'<dhRecbto>2019-05-03T09:01:00-03:00</dhRecbto><nProt>132190000000001</nProt>'
+                               f'<cStat>{cstat}</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe>')
 
-        r = subir(c, n2.xml_autorizado, 'venda.xml')
+        compra_xml = autorizado(proc_nfe_fornecedor(ch_forn), ch_forn).replace(
+            '<vICMS>25.50</vICMS></ICMS00></ICMS></imposto>',
+            '<vICMS>25.50</vICMS></ICMS00></ICMS><IPI><cEnq>999</cEnq><IPITrib><CST>50</CST><vBC>150.00</vBC>'
+            '<pIPI>5.00</pIPI><vIPI>7.50</vIPI></IPITrib></IPI><PIS><PISAliq><CST>01</CST><vBC>150.00</vBC><pPIS>1.65</pPIS>'
+            '<vPIS>2.48</vPIS></PISAliq></PIS></imposto>')
+        r = subir(c, ('compra-801.xml', compra_xml))
         j = r.json()
-        t('XML da nossa venda → devolução do cliente ou outra igual', r.status_code == 200 and j['resumo']['lado'] == 'nossa'
-          and [o['acao'] for o in j['opcoes']] == ['devolucao', 'copia'] and not j['avisos'], j)
-        r = c.get(j['opcoes'][1]['url'])
+        rec = NotaFiscalEmitida.objects.filter(chave=ch_forn).first()
+        t('XML de compra entra na lista como RECEBIDA e autorizada', r.status_code == 200 and j['conta']['importada'] == 1
+          and rec is not None and (rec.origem, rec.status, rec.protocolo) == ('TERCEIRO', 'AUTORIZADA', '132190000000001'), j)
+        t('do nosso ponto de vista é ENTRADA; o fornecedor fica como a outra parte', rec.tipo_operacao == '0'
+          and rec.dest_documento == FORN and rec.dest_nome == 'ZZ DISTRIBUIDORA LTDA' and rec.emitente_id == emit.pk
+          and rec.loja_id == emit.loja_id)
+        t('número, série, valores e itens do XML (sem recalcular)', (rec.numero, rec.serie, rec.valor_total, rec.valor_icms)
+          == (801, 1, Decimal('150.00'), Decimal('25.50')) and rec.itens.count() == 1
+          and rec.itens.first().valor_pis == Decimal('2.48') and rec.itens.first().cfop == '5102')
+        t('datas de emissão e autorização lidas', rec.emitida_em and rec.emitida_em.year == 2019 and rec.autorizada_em is not None)
+        t('o XML fica guardado e a importação na rastreabilidade', rec.xml_autorizado.startswith('<nfeProc')
+          and LogFinanceiro.objects.filter(area='notas', acao='CRIAR', objeto_id=str(rec.pk)).exists())
+        r = subir(c, ('de-novo.xml', compra_xml))
+        t('importar a mesma nota de novo não duplica', r.json()['conta'] == {'importada': 0, 'repetida': 1, 'cancelada': 0, 'erro': 0}
+          and NotaFiscalEmitida.objects.filter(chave=ch_forn).count() == 1)
+        r = c.get('/financeiro/notas/?origem=TERCEIRO')
         corpo = r.content.decode()
-        t('cópia: mesmo cliente, CFOP original e aviso de cópia', r.status_code == 200 and CLIENTE in corpo
-          and 'value="5102"' in corpo and 'Cópia da NF-e' in corpo)
+        t('lista mostra a recebida com o selo e filtra por origem', 'nfe-origem-recebida' in corpo and 'ZZ DISTRIBUIDORA' in corpo
+          and f'/financeiro/notas/{n2.pk}/' not in corpo)
+        r = c.get(f'/financeiro/notas/{rec.pk}/')
+        corpo = r.content.decode()
+        t('tela da recebida: fornecedor como emitente, sem cancelar/CC-e/consultar, com devolução',
+          r.status_code == 200 and 'Emitente (fornecedor)' in corpo and 'Devolver ao fornecedor' in corpo
+          and 'Cancelar na SEFAZ' not in corpo and 'Registrar correção' not in corpo and 'Consultar na SEFAZ' not in corpo
+          and 'Tirar da lista' in corpo and f'?copiar={rec.pk}' not in corpo)
+        r = c.get(f'/financeiro/notas/{rec.pk}/danfe/')
+        t('DANFE da nota recebida (com IPI no XML)', r.status_code == 200 and r.content[:5] == b'%PDF-')
+        r = c.get(f'/financeiro/notas/nova/?tipo=devolucao&devolver={ch_forn}')
+        t('devolução a partir da recebida já vem com CFOP 5202', r.status_code == 200 and 'value="5202"' in r.content.decode())
+        antes_chamadas = len(sefaz.chamadas)
+        c.post(f'/financeiro/notas/{rec.pk}/cancelar/', {'justificativa': 'Tentativa de cancelar nota importada'})
+        c.post(f'/financeiro/notas/{rec.pk}/consultar/')
+        rec.refresh_from_db()
+        t('nota importada não vai para a SEFAZ (cancelar, consultar)', rec.status == 'AUTORIZADA'
+          and len(sefaz.chamadas) == antes_chamadas and not rec.eventos.exists())
+
+        # Nota nossa emitida em outro sistema (mesmo CNPJ, outra chave, número alto na série do portal).
+        ch_fora = chave_independente(f'322611{MATRIZ}55001000000900187654321')
+        fora_xml = n2.xml_autorizado.replace(n2.chave, ch_fora).replace(f'<nNF>{n2.numero}</nNF>', '<nNF>900</nNF>')
+        r = subir(c, ('fora.xml', fora_xml), ('compra-de-novo.xml', compra_xml), ('lixo.xml', 'nao e xml'))
+        j = r.json()
+        fora = NotaFiscalEmitida.objects.filter(chave=ch_fora).first()
+        t('vários arquivos de uma vez: resultado por arquivo', [x['situacao'] for x in j['resultados']] == ['importada', 'repetida', 'erro'], j)
+        t('nota nossa de outro sistema entra como IMPORTADA, saída, com o cliente', fora is not None
+          and (fora.origem, fora.tipo_operacao, fora.numero, fora.dest_documento) == ('PROPRIA', '1', 900, CLIENTE))
+        t('avisa que o número usa a série do portal acima do próximo número', any('Configuração' in a for a in j['resultados'][0]['avisos']))
+        t('erro do arquivo ruim diz o motivo', 'não é um XML válido' in j['resultados'][2]['erro'])
+        r = c.get(f'/financeiro/notas/{fora.pk}/')
+        corpo = r.content.decode()
+        t('tela da importada: copiar e receber devolução; sem cancelar pela SEFAZ', 'nfe-origem-propria' in corpo
+          and f'?copiar={fora.pk}' in corpo and 'Receber devolução' in corpo and 'Cancelar na SEFAZ' not in corpo
+          and 'importe aqui o XML do cancelamento' in corpo)
+        repetido = n2.xml_autorizado.replace(n2.chave, chave_independente(f'322611{MATRIZ}55001{n2.numero:09d}112345678'))
+        r = subir(c, ('mesmo-numero.xml', repetido))
+        t('mesmo número da série com outra chave é recusado', 'já existe na lista' in r.json()['resultados'][0].get('erro', ''),
+          r.json())
+
+        cancel = (f'<procEventoNFe xmlns="{NS}" versao="1.00"><evento versao="1.00"><infEvento Id="ID110111{ch_fora}01">'
+                  f'<cOrgao>32</cOrgao><tpAmb>2</tpAmb><CNPJ>{MATRIZ}</CNPJ><chNFe>{ch_fora}</chNFe>'
+                  f'<dhEvento>2026-11-20T10:00:00-03:00</dhEvento><tpEvento>110111</tpEvento><nSeqEvento>1</nSeqEvento>'
+                  f'</infEvento></evento><retEvento versao="1.00"><infEvento><cStat>135</cStat>'
+                  f'<xMotivo>Evento registrado e vinculado a NF-e</xMotivo><chNFe>{ch_fora}</chNFe>'
+                  f'<dhRegEvento>2026-11-20T10:00:05-03:00</dhRegEvento></infEvento></retEvento></procEventoNFe>')
+        r = subir(c, ('cancelamento.xml', cancel))
+        fora.refresh_from_db()
+        t('XML do cancelamento marca a importada como cancelada', r.json()['conta']['cancelada'] == 1 and fora.status == 'CANCELADA'
+          and fora.cancelada_em is not None)
+        r = subir(c, ('cancel-portal.xml', cancel.replace(ch_fora, n2.chave)))
+        n2.refresh_from_db()
+        t('cancelamento importado não mexe em nota emitida pelo portal', n2.status == 'AUTORIZADA' and r.json()['conta']['erro'] == 1)
+
+        import io
+        import zipfile
+        pacote = io.BytesIO()
+        with zipfile.ZipFile(pacote, 'w') as z:
+            ch_z = chave_independente(f'321905{FORN}55001000000802112345678')
+            z.writestr('notas/802.xml', autorizado(proc_nfe_fornecedor(ch_z), ch_z))
+            z.writestr('leia-me.txt', 'nada')
+            z.writestr('notas/sem-protocolo.xml', proc_nfe_fornecedor(chave_independente(f'321905{FORN}55001000000803112345678')))
+        r = subir(c, ('lote.zip', pacote.getvalue()))
+        j = r.json()
+        t('ZIP: importa os XMLs de dentro e ignora o resto', [x['situacao'] for x in j['resultados']] == ['importada', 'erro']
+          and NotaFiscalEmitida.objects.filter(chave=ch_z, origem='TERCEIRO').exists(), j)
+        t('XML sem protocolo de autorização é recusado com explicação', 'protocolo de autorização' in j['resultados'][1]['erro'])
+        r = subir(c, ('nota.pdf', '<x/>'))
+        t('extensão errada recusada', r.json()['resultados'][0]['situacao'] == 'erro' and '.zip' in r.json()['resultados'][0]['erro'])
+        r = subir(c, ('ct.xml', '<cteProc xmlns="http://www.portalfiscal.inf.br/cte"><CTe><infCte Id="CTe1"/></CTe></cteProc>'))
+        t('XML de CT-e recusado', 'CT-e' in r.json()['resultados'][0]['erro'])
+        estranha = autorizado(proc_nfe_fornecedor(ch_z), ch_z).replace(f'<CNPJ>{MATRIZ}</CNPJ>', f'<CNPJ>{cnpj_de("777777770001")}</CNPJ>')
+        t('nota sem nenhum CNPJ nosso: explica', 'Nenhum CNPJ emitente' in subir(c, ('x.xml', estranha)).json()['resultados'][0]['erro'])
+        xxe = ('<?xml version="1.0"?><!DOCTYPE x [<!ENTITY e SYSTEM "file:///etc/passwd">]>'
+               + compra_xml.replace('<natOp>VENDA</natOp>', '<natOp>&e;</natOp>'))
+        r = subir(c, ('xxe.xml', xxe))
+        t('entidade externa no XML não é lida (XXE)', 'root:' not in r.content.decode()
+          and not NotaFiscalEmitida.objects.filter(natureza__contains='root:').exists())
+        ch_s = chave_independente(f'321905{FORN}55001000000804112345678')
+        r = subir(c, ('so-uma.xml', autorizado(proc_nfe_fornecedor(ch_s), ch_s)), json=False)
+        so = NotaFiscalEmitida.objects.get(chave=ch_s)
+        t('sem JavaScript, uma nota leva direto para a tela dela', r.status_code == 302 and r['Location'] == f'/financeiro/notas/{so.pk}/')
+        c.post(f'/financeiro/notas/{so.pk}/excluir/')
+        t('importada pode sair da lista (fica na rastreabilidade)', not NotaFiscalEmitida.objects.filter(pk=so.pk).exists()
+          and LogFinanceiro.objects.filter(area='notas', acao='EXCLUIR', objeto_id=str(so.pk)).exists())
+
         copia = nfe.dados_do_xml(n2.xml_autorizado, [emit], 'copia')
-        t('cópia mantém saída, finalidade normal, CST e PIS/Cofins da nota', (copia['nota']['tipo_operacao'], copia['nota']['finalidade'])
-          == ('1', '1') and copia['itens'][0]['cst_icms'] == n2.itens.first().cst_icms
-          and copia['itens'][0]['cst_pis'] == n2.itens.first().cst_pis and not copia['nota']['chave_referenciada'], copia['itens'][0])
+        t('dados_do_xml (cópia) mantém saída, CST e PIS/Cofins', (copia['nota']['tipo_operacao'], copia['nota']['finalidade'])
+          == ('1', '1') and copia['itens'][0]['cst_pis'] == n2.itens.first().cst_pis)
         dev_venda = nfe.dados_do_xml(n2.xml_autorizado, [emit], 'devolucao')
         t('devolução da venda pelo XML = entrada 1202 referenciando a chave', dev_venda['nota']['tipo_operacao'] == '0'
           and dev_venda['itens'][0]['cfop'] == '1202' and dev_venda['nota']['chave_referenciada'] == n2.chave)
-        r = c.get(j['opcoes'][0]['url'])
-        t('o mesmo XML serve para a outra opção (fica guardado)', r.status_code == 200 and 'value="1202"' in r.content.decode())
-
-        r = subir(c, proc_nfe_fornecedor(ch_forn), 'compra.xml', json=False)
-        t('sem JavaScript segue direto para o rascunho', r.status_code == 302 and '/financeiro/notas/nova/?xml=' in r['Location'])
-
-        r = subir(c, 'isto nao e xml', 'nota.xml')
-        t('arquivo que não é XML: erro claro', r.status_code == 400 and 'não é um XML válido' in r.json()['erro'])
-        r = subir(c, '<nota/>', 'nota.pdf')
-        t('extensão errada recusada', r.status_code == 400 and '.xml' in r.json()['erro'])
-        r = subir(c, f'<cteProc xmlns="http://www.portalfiscal.inf.br/cte"><CTe><infCte Id="CTe1"/></CTe></cteProc>')
-        t('XML de CT-e recusado', r.status_code == 400 and 'CT-e' in r.json()['erro'])
-        estranha = proc_nfe_fornecedor(ch_forn).replace(f'<CNPJ>{MATRIZ}</CNPJ>', f'<CNPJ>{cnpj_de("777777770001")}</CNPJ>')
-        r = subir(c, estranha)
-        t('nota sem nenhum CNPJ nosso: explica e mostra a nota', r.status_code == 422 and 'Nenhum CNPJ emitente' in r.json()['erro']
-          and r.json()['resumo']['numero'] == '801')
-        r = subir(c, proc_nfe_fornecedor(ch_forn).replace('<mod>55</mod>', '<mod>65</mod>'))
-        t('NFC-e recusada', r.status_code == 400 and 'NFC-e' in r.json()['erro'])
-        xxe = ('<?xml version="1.0"?><!DOCTYPE x [<!ENTITY e SYSTEM "file:///etc/passwd">]>'
-               + proc_nfe_fornecedor(ch_forn).replace('<natOp>VENDA</natOp>', '<natOp>&e;</natOp>'))
-        r = subir(c, xxe)
-        t('entidade externa no XML não é lida (XXE)', 'root:' not in r.content.decode())
-        r = c.get('/financeiro/notas/nova/?xml=nao-existe&acao=devolucao')
-        t('XML expirado avisa e abre o formulário vazio', r.status_code == 200 and 'expirou' in r.content.decode())
-        outro = User.objects.create_user(username='zzz.nfeoutro', email='zzz.nfeoutro@exemplo-teste.local',
-                                         password='S3nha!teste', first_name='ZZ', hierarchy='SUPERADMIN')
-        co = Client()
-        co.force_login(outro)
-        url_alheia = subir(c, proc_nfe_fornecedor(ch_forn)).json()['opcoes'][0]['url']
-        r = co.get(url_alheia)
-        t('XML subido por outra pessoa não abre', 'ZZ CAPA SILICONE' not in r.content.decode() and 'expirou' in r.content.decode())
+        t('formulário de devolução sobe o XML e abre a devolução', 'data-nfe-xml-abrir' in c.get('/financeiro/notas/nova/?tipo=devolucao').content.decode())
 
         print('\n== QUEM PODE ==')
         so_ver = User.objects.create_user(username='zzz.nfever', email='zzz.nfever@exemplo-teste.local',
@@ -671,7 +736,7 @@ try:
         r = cv.post(f'/financeiro/notas/{rj2.pk}/enviar/')
         rj2.refresh_from_db()
         t('sem notas.emitir não envia', rj2.status == 'RASCUNHO' and len(sefaz.chamadas) == antes_chamadas)
-        r = cv.post('/financeiro/notas/importar-xml/', {'xml': SimpleUploadedFile('a.xml', proc_nfe_fornecedor(ch_forn).encode())},
+        r = cv.post('/financeiro/notas/importar-xml/', {'xml': SimpleUploadedFile('a.xml', compra_xml.encode())},
                     HTTP_ACCEPT='application/json')
         t('sem notas.emitir não importa XML', r.status_code in (302, 403))
         t('sem notas.emitir não vê a zona de importar', 'id="nfeXmlZona"' not in cv.get('/financeiro/notas/').content.decode())

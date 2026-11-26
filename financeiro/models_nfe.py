@@ -126,7 +126,13 @@ class NotaFiscalEmitida(models.Model):
               ('2', 'Por conta de terceiros'), ('3', 'Próprio, do remetente'), ('4', 'Próprio, do destinatário')]
     PAGAMENTOS = [('90', 'Sem pagamento'), ('01', 'Dinheiro'), ('15', 'Boleto'), ('17', 'PIX'),
                   ('03', 'Cartão de crédito'), ('04', 'Cartão de débito'), ('99', 'Outros')]
+    # PORTAL: criada e enviada aqui. PROPRIA: nossa, emitida em outro sistema e importada pelo XML.
+    # TERCEIRO: recebida (fornecedor ou outro emitente para um CNPJ nosso), importada pelo XML.
+    ORIGENS = [('PORTAL', 'Emitida no portal'), ('PROPRIA', 'Importada (emitida em outro sistema)'),
+               ('TERCEIRO', 'Recebida (de fornecedor/terceiro)')]
 
+    origem = models.CharField(max_length=8, choices=ORIGENS, default='PORTAL', db_default='PORTAL', db_index=True,
+                              verbose_name='Origem')
     emitente = models.ForeignKey(EmitenteNFe, on_delete=models.PROTECT, related_name='notas', verbose_name='Emitente')
     loja = models.ForeignKey('users.Sector', on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
                              verbose_name='Loja')
@@ -196,8 +202,10 @@ class NotaFiscalEmitida(models.Model):
         verbose_name = 'NF-e emitida'
         verbose_name_plural = 'NF-e emitidas'
         constraints = [
+            # A numeração é nossa: nota recebida de terceiro tem a numeração do fornecedor e fica de fora.
             models.UniqueConstraint(fields=['emitente', 'ambiente', 'serie', 'numero'], name='fin_nfe_numero_unico',
-                                    condition=models.Q(numero__isnull=False)),
+                                    condition=models.Q(numero__isnull=False) & ~models.Q(origem='TERCEIRO')),
+            models.UniqueConstraint(fields=['chave'], name='fin_nfe_chave_unica', condition=~models.Q(chave='')),
         ]
 
     def __str__(self):
@@ -206,7 +214,15 @@ class NotaFiscalEmitida(models.Model):
 
     @property
     def editavel(self):
-        return self.status in ('RASCUNHO', 'REJEITADA')
+        return self.origem == 'PORTAL' and self.status in ('RASCUNHO', 'REJEITADA')
+
+    @property
+    def importada(self):
+        return self.origem != 'PORTAL'
+
+    @property
+    def recebida(self):
+        return self.origem == 'TERCEIRO'
 
     @property
     def devolucao(self):

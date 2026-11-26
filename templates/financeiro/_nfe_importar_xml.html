@@ -1,8 +1,10 @@
 {% comment %}
-Importar o XML de uma NF-e: zona de arrastar (lista de notas) ou só o botão (formulário de devolução).
-O arquivo vai para financeiro:nota_importar_xml, que diz o que a nota é e o que dá para fazer.
-Com uma opção só (e nenhum aviso) a tela segue direto para o rascunho preenchido; com mais, pergunta.
-Variável: nfe_xml_botao=True mostra só o botão (sem a zona).
+Importar XML de NF-e já autorizada para a lista (financeiro:nota_importar_xml): um, vários ou um .zip.
+Nota nossa emitida em outro sistema entra como "Importada"; de fornecedor para um CNPJ nosso, como "Recebida".
+O XML do cancelamento (procEventoNFe) de uma nota importada a marca como cancelada.
+Uma nota só → abre a nota; várias → resumo e a lista atualizada.
+Variáveis: nfe_xml_botao=True mostra só o botão (sem a zona); nfe_xml_depois="devolver" leva para a
+devolução da nota importada (formulário de devolução).
 {% endcomment %}
 <style>
     .nfe-xml-zona { display:flex; align-items:center; gap:.85rem; padding:.85rem 1rem; cursor:pointer; border-style:dashed; border-width:1.5px;
@@ -14,22 +16,18 @@ Variável: nfe_xml_botao=True mostra só o botão (sem a zona).
     .nfe-xml-zona.nfe-xml-em-cima .nfe-xml-icone { transform:translateY(-3px) scale(1.06); }
     .nfe-xml-zona[data-estado="lendo"] { cursor:progress; }
     .nfe-xml-erro { color:#B91C1C; } html.dark .nfe-xml-erro { color:#FCA5A5; }
-    .nfe-xml-opcao { display:flex; align-items:flex-start; gap:.75rem; padding:.8rem .9rem; border-radius:.85rem; border:1px solid var(--fin-borda);
-        background:var(--fin-sup); color:var(--fin-texto); transition:border-color .15s, background .15s, transform .1s; text-align:left; }
-    .nfe-xml-opcao:hover { border-color:#10B981; background:var(--fin-verde-bg); }
-    .nfe-xml-opcao:active { transform:translateY(1px); }
-    .nfe-xml-opcao.nfe-xml-recomendada { border-color:rgba(5,150,105,.5); box-shadow:0 0 0 3px var(--fin-verde-anel); }
-    .nfe-xml-opcao > i { margin-top:.15rem; width:1.9rem; height:1.9rem; border-radius:.6rem; display:inline-flex; align-items:center; justify-content:center;
-        background:var(--fin-verde-bg); color:var(--fin-verde-texto); flex-shrink:0; }
+    .nfe-xml-linha { display:flex; gap:.6rem; align-items:flex-start; padding:.55rem .1rem; border-bottom:1px solid var(--fin-borda-2); font-size:.8125rem; }
+    .nfe-xml-linha:last-child { border-bottom:0; }
+    .nfe-xml-linha > i { margin-top:.15rem; width:1.1rem; text-align:center; flex-shrink:0; }
 </style>
 
-<input type="file" id="nfeXmlArquivo" accept=".xml,text/xml,application/xml" class="sr-only" tabindex="-1" aria-hidden="true">
+<input type="file" id="nfeXmlArquivo" accept=".xml,.zip,text/xml,application/xml,application/zip" multiple class="sr-only" tabindex="-1" aria-hidden="true">
 {% if not nfe_xml_botao %}
 <div class="fin-card nfe-xml-zona mb-3" id="nfeXmlZona" role="button" tabindex="0" aria-describedby="nfeXmlAjuda" data-estado="pronto">
     <span class="nfe-xml-icone" aria-hidden="true"><i class="fas fa-file-code"></i></span>
     <div class="min-w-0 flex-1">
-        <p class="font-semibold text-sm" data-titulo>Importar XML da NF-e</p>
-        <p class="text-xs text-gray-500" id="nfeXmlAjuda" data-texto>Arraste o arquivo aqui (ou em qualquer lugar da tela) ou clique. Compra de fornecedor vira devolução; nota nossa vira devolução do cliente ou outra igual, já preenchida.</p>
+        <p class="font-semibold text-sm">Importar XML de NF-e</p>
+        <p class="text-xs text-gray-500" id="nfeXmlAjuda" data-texto>Arraste os arquivos aqui (ou em qualquer lugar da tela) ou clique. Vale um XML, vários ou um .zip. Notas emitidas em outro sistema entram como importadas; as de fornecedor, como recebidas.</p>
     </div>
     <span class="fin-btn fin-btn-claro hidden sm:inline-flex" aria-hidden="true"><i class="fas fa-upload"></i>Escolher XML</span>
 </div>
@@ -39,17 +37,14 @@ Variável: nfe_xml_botao=True mostra só o botão (sem a zona).
     <div class="sm:max-w-lg">
         <div class="px-5 pt-4 pb-3 flex items-start justify-between gap-3 border-b border-gray-100">
             <div class="min-w-0">
-                <p class="fin-migalha"><i class="fas fa-file-code mr-1"></i>XML importado</p>
-                <h3 id="nfeXmlModalTitulo" class="font-bold mt-0.5" data-titulo>NF-e</h3>
-                <p class="text-xs text-gray-500 mt-0.5 break-words" data-sub></p>
+                <p class="fin-migalha"><i class="fas fa-file-code mr-1"></i>Importação de XML</p>
+                <h3 id="nfeXmlModalTitulo" class="font-bold mt-0.5" data-titulo></h3>
             </div>
             <button type="button" class="fin-btn-icone" data-fechar aria-label="Fechar"><i class="fas fa-xmark"></i></button>
         </div>
-        <div class="px-5 py-4 space-y-3">
-            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm" data-partes></dl>
-            <div data-avisos class="space-y-2"></div>
-            <p class="text-xs font-bold uppercase tracking-wide text-gray-500" data-pergunta>O que fazer com esta nota?</p>
-            <div class="grid gap-2" data-opcoes></div>
+        <div class="px-5 py-2 max-h-[55vh] overflow-y-auto" data-linhas></div>
+        <div class="px-5 py-3 border-t border-gray-100 flex justify-end gap-2">
+            <button type="button" class="fin-btn fin-btn-verde" data-atualizar><i class="fas fa-rotate"></i>Ver a lista</button>
         </div>
     </div>
 </div>
@@ -57,6 +52,8 @@ Variável: nfe_xml_botao=True mostra só o botão (sem a zona).
 <script>
 (function () {
     var URL_IMPORTAR = '{% url "financeiro:nota_importar_xml" %}', CSRF = '{{ csrf_token }}';
+    var URL_DEVOLVER = '{% url "financeiro:nota_nova" %}?tipo=devolucao&devolver=';
+    var DEPOIS = '{{ nfe_xml_depois|default:""|escapejs }}';
     var arquivo = document.getElementById('nfeXmlArquivo');
     var zona = document.getElementById('nfeXmlZona');
     var modal = document.getElementById('nfeXmlModal');
@@ -78,76 +75,73 @@ Variável: nfe_xml_botao=True mostra só o botão (sem a zona).
         ic.className = 'fas ' + (tipo === 'lendo' ? 'fa-circle-notch fa-spin' : tipo === 'erro' ? 'fa-triangle-exclamation' : 'fa-file-code');
         zona.setAttribute('aria-busy', tipo === 'lendo' ? 'true' : 'false');
     }
-    function doc(d) {
-        d = String(d || '');
-        if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
-        if (d.length === 11) return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
-        return d;
-    }
-    function data(d) { var m = String(d || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[3] + '/' + m[2] + '/' + m[1] : ''; }
 
-    function mostrar(r) {
-        var s = r.resumo;
-        modal.querySelector('[data-titulo]').textContent = 'NF-e nº ' + (s.numero || '?') + (s.serie ? ' · série ' + s.serie : '');
-        modal.querySelector('[data-sub]').textContent = [data(s.emissao), s.natureza, s.devolucao ? 'nota de devolução' : (s.entrada ? 'nota de entrada' : 'nota de saída')].filter(Boolean).join(' · ');
-        var partes = [
-            ['Emitente', esc(s.emitente_nome) + '<span class="block text-xs text-gray-500 tabular">' + esc(doc(s.emitente_doc)) + '</span>'],
-            ['Destinatário', esc(s.dest_nome || '—') + '<span class="block text-xs text-gray-500 tabular">' + esc(doc(s.dest_doc)) + '</span>'],
-            ['Valor', '<span class="font-bold tabular">' + Fin.brl(s.valor) + '</span> <span class="text-xs text-gray-500">· ' + s.itens + (s.itens === 1 ? ' item' : ' itens') + '</span>'],
-            ['Nosso CNPJ nesta nota', esc(s.nosso || '—') + (s.lado ? '<span class="block text-xs text-gray-500">' + (s.lado === 'compra' ? 'somos o destinatário (compra)' : 'nós emitimos (venda)') + '</span>' : '')]
-        ];
-        modal.querySelector('[data-partes]').innerHTML = partes.map(function (p) {
-            return '<div class="min-w-0"><dt class="text-[11px] font-bold uppercase tracking-wide text-gray-500">' + p[0] + '</dt><dd class="break-words">' + p[1] + '</dd></div>';
-        }).join('');
-        var avisos = (r.avisos || []).map(function (a) {
-            return '<p class="text-xs rounded-lg px-3 py-2 bg-amber-50 text-amber-800 border border-amber-200"><i class="fas fa-triangle-exclamation mr-1"></i>' + esc(a) + '</p>';
-        });
-        if (r.erro) avisos.unshift('<p class="text-sm rounded-lg px-3 py-2 bg-red-50 text-red-700 border border-red-200"><i class="fas fa-circle-xmark mr-1"></i>' + esc(r.erro) + '</p>');
-        if (r.ja_existe) avisos.push('<a class="fin-link" href="' + esc(r.ja_existe) + '"><i class="fas fa-arrow-up-right-from-square"></i>Abrir a devolução que já existe</a>');
-        modal.querySelector('[data-avisos]').innerHTML = avisos.join('');
-        var opcoes = r.opcoes || [];
-        modal.querySelector('[data-pergunta]').hidden = !opcoes.length;
-        modal.querySelector('[data-opcoes]').innerHTML = opcoes.map(function (o, i) {
-            var icone = o.acao === 'copia' ? 'fa-copy' : 'fa-rotate-left';
-            return '<a href="' + esc(o.url) + '" class="nfe-xml-opcao' + (i === 0 ? ' nfe-xml-recomendada' : '') + '"' + (i === 0 ? ' autofocus' : '') + '>' +
-                '<i class="fas ' + icone + '" aria-hidden="true"></i><span class="min-w-0"><span class="font-semibold text-sm block">' + esc(o.titulo) +
-                (i === 0 && opcoes.length > 1 ? ' <span class="fin-chip st-QUITADO ml-1 align-middle">Recomendado</span>' : '') + '</span>' +
-                '<span class="text-xs text-gray-500 block mt-0.5">' + esc(o.texto) + '</span></span></a>';
+    var ICONES = {importada: ['fa-circle-check', 'text-emerald-600'], repetida: ['fa-equals', 'text-gray-400'],
+                  cancelada: ['fa-ban', 'text-red-500'], erro: ['fa-circle-xmark', 'text-red-600']};
+    function resumo(r) {
+        var c = r.conta, partes = [];
+        if (c.importada) partes.push(c.importada + (c.importada === 1 ? ' importada' : ' importadas'));
+        if (c.cancelada) partes.push(c.cancelada + (c.cancelada === 1 ? ' cancelamento' : ' cancelamentos'));
+        if (c.repetida) partes.push(c.repetida + ' já ' + (c.repetida === 1 ? 'estava' : 'estavam') + ' na lista');
+        if (c.erro) partes.push(c.erro + ' com problema');
+        modal.querySelector('[data-titulo]').textContent = partes.join(' · ') || 'Nada importado';
+        modal.querySelector('[data-linhas]').innerHTML = r.resultados.map(function (x) {
+            var ic = ICONES[x.situacao] || ICONES.erro;
+            var corpo = x.situacao === 'erro'
+                ? '<span class="nfe-xml-erro">' + esc(x.erro) + '</span>'
+                : '<a class="fin-link" href="' + esc(x.url) + '">' + esc(x.rotulo) + '</a> <span class="text-xs text-gray-500">· ' +
+                  esc(x.situacao === 'repetida' ? 'já estava na lista' : x.situacao === 'cancelada' ? 'marcada como cancelada' : x.origem.toLowerCase()) + '</span>' +
+                  (x.avisos || []).map(function (a) { return '<span class="block text-xs text-amber-700 mt-0.5"><i class="fas fa-triangle-exclamation mr-1"></i>' + esc(a) + '</span>'; }).join('');
+            return '<div class="nfe-xml-linha"><i class="fas ' + ic[0] + ' ' + ic[1] + '" aria-hidden="true"></i><div class="min-w-0 flex-1">' +
+                '<p class="text-[11px] text-gray-500 break-all">' + esc(x.arquivo) + '</p>' + corpo + '</div></div>';
         }).join('');
         Fin.abrir(modal);
     }
 
-    function enviar(f) {
-        if (!f || lendo) return;
-        if (!/\.xml$/i.test(f.name)) { estado('erro', '“' + f.name + '” não é XML. Escolha o arquivo .xml da NF-e.'); return; }
-        lendo = true; estado('lendo', 'Lendo ' + f.name + '…');
-        var dados = new FormData(); dados.append('xml', f);
+    function enviar(lista) {
+        lista = Array.prototype.slice.call(lista || []);
+        if (!lista.length || lendo) return;
+        var ruins = lista.filter(function (f) { return !/\.(xml|zip)$/i.test(f.name); });
+        if (ruins.length === lista.length) { estado('erro', 'Escolha o XML da NF-e (.xml) ou um .zip com XMLs.'); return; }
+        lista = lista.filter(function (f) { return /\.(xml|zip)$/i.test(f.name); });
+        lendo = true;
+        estado('lendo', lista.length === 1 ? 'Importando ' + lista[0].name + '…' : 'Importando ' + lista.length + ' arquivos…');
+        var dados = new FormData();
+        lista.forEach(function (f) { dados.append('xml', f); });
         fetch(URL_IMPORTAR, {method: 'POST', body: dados, credentials: 'same-origin',
                              headers: {'X-CSRFToken': CSRF, 'Accept': 'application/json'}})
             .then(function (resp) { return resp.json().catch(function () { throw new Error('O portal não respondeu direito. Tente de novo.'); }); })
             .then(function (r) {
                 lendo = false;
-                if (r.erro && !r.resumo) { estado('erro', r.erro); return; }
-                if (r.erro) { estado('pronto'); mostrar(r); return; }
-                var opcoes = r.opcoes || [];
-                if (opcoes.length === 1 && !(r.avisos || []).length) {
-                    estado('lendo', 'Nota nº ' + (r.resumo.numero || '') + ' lida. Abrindo o rascunho…');
-                    location.href = opcoes[0].url;
+                if (r.erro) { estado('erro', r.erro); return; }
+                if (ruins.length) r.resultados = r.resultados.concat(ruins.map(function (f) { r.conta.erro++; return {arquivo: f.name, situacao: 'erro', erro: 'Não é .xml nem .zip.'}; }));
+                var boas = r.resultados.filter(function (x) { return x.situacao !== 'erro'; });
+                var semAviso = boas.every(function (x) { return !(x.avisos || []).length; });
+                if (r.resultados.length === 1 && boas.length === 1 && semAviso) {
+                    var x = boas[0];
+                    if (DEPOIS === 'devolver' && x.chave) { estado('lendo', 'Nota lida. Abrindo a devolução…'); location.href = URL_DEVOLVER + encodeURIComponent(x.chave); return; }
+                    estado('lendo', x.situacao === 'repetida' ? 'Esta nota já estava na lista. Abrindo…' : 'Nota importada. Abrindo…');
+                    location.href = x.url;
                     return;
                 }
-                estado('pronto'); mostrar(r);
+                if (DEPOIS === 'devolver' && boas.length === 1 && boas[0].chave && r.resultados.length === 1) { location.href = URL_DEVOLVER + encodeURIComponent(boas[0].chave); return; }
+                estado('pronto');
+                resumo(r);
             })
             .catch(function (e) { lendo = false; estado('erro', (e && e.message && !/fetch/i.test(e.message)) ? e.message : 'Sem conexão com o portal. Tente de novo.'); })
             .finally(function () { arquivo.value = ''; });
     }
 
-    arquivo.addEventListener('change', function () { enviar(arquivo.files[0]); });
+    modal.querySelector('[data-atualizar]').addEventListener('click', function () {
+        location.href = '{% url "financeiro:notas" %}';
+    });
+    arquivo.addEventListener('change', function () { enviar(arquivo.files); });
     document.querySelectorAll('[data-nfe-xml-abrir]').forEach(function (b) { b.addEventListener('click', function (e) { e.preventDefault(); arquivo.click(); }); });
     if (!zona) return;
     zona.addEventListener('click', function () { if (!lendo) arquivo.click(); });
     zona.addEventListener('keydown', function (e) { if ((e.key === 'Enter' || e.key === ' ') && !lendo) { e.preventDefault(); arquivo.click(); } });
 
-    // Arrastar o arquivo para qualquer lugar da tela.
+    // Arrastar os arquivos para qualquer lugar da tela.
     var profundidade = 0;
     function temArquivo(e) { return e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], 'Files') >= 0; }
     window.addEventListener('dragenter', function (e) { if (!temArquivo(e)) return; profundidade++; zona.classList.add('nfe-xml-em-cima'); });
@@ -156,8 +150,7 @@ Variável: nfe_xml_botao=True mostra só o botão (sem a zona).
     window.addEventListener('drop', function (e) {
         if (!temArquivo(e)) return;
         e.preventDefault(); profundidade = 0; zona.classList.remove('nfe-xml-em-cima');
-        if (e.dataTransfer.files.length > 1) Fin.toast('Um XML por vez: usei o primeiro.', 'info');
-        enviar(e.dataTransfer.files[0]);
+        enviar(e.dataTransfer.files);
     });
 })();
 </script>

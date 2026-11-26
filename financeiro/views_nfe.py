@@ -4,7 +4,6 @@ cancelamento, carta de correção e a configuração (só SUPERADMIN).
 A regra fica em ``financeiro/nfe.py``; aqui só se lê o formulário, chama a
 regra e registra tudo no LogFinanceiro.
 """
-import secrets
 from decimal import Decimal
 
 from django.contrib import messages
@@ -12,7 +11,6 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q
-from django.core.cache import cache
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -186,6 +184,9 @@ def notas(request):
         qs = qs.filter(tipo_operacao='0').exclude(finalidade='4')
     elif tipo == 'devolucao':
         qs = qs.filter(finalidade='4')
+    origem = request.GET.get('origem', '')
+    if origem in dict(NotaFiscalEmitida.ORIGENS):
+        qs = qs.filter(origem=origem)
     busca = (request.GET.get('q') or '').strip()
     if busca:
         digitos = nfe.so_digitos(busca)
@@ -198,7 +199,7 @@ def notas(request):
     pagina = Paginator(qs, 50).get_page(request.GET.get('pagina'))
     return render(request, 'financeiro/notas.html', _contexto(
         request, pagina=pagina, contagem=contagem, total=sum(contagem.values()), filtro_status=status,
-        filtro_tipo=tipo, busca=busca,
+        filtro_tipo=tipo, busca=busca, filtro_origem=origem, origens=NotaFiscalEmitida.ORIGENS,
         status_opcoes=[(v, r, contagem.get(v, 0)) for v, r in NotaFiscalEmitida.STATUS],
         tem_emitente=_emitentes_do(request.user).exists()))
 
@@ -247,10 +248,6 @@ def _formulario(request, nota, nova):
             itens_form = [_item_dict(i) for i in dados['itens']]
             messages.info(request, 'Itens e destinatário vieram da nota original. Confira quantidades (devolução '
                                    'parcial), CFOP e impostos antes de salvar.')
-    elif nova and request.GET.get('xml'):
-        importado = _rascunho_do_xml(request, nota, emitentes)
-        if importado:
-            itens_form, original = importado
     elif nova and request.GET.get('copiar'):
         base = _notas_visiveis(request.user).filter(pk=request.GET['copiar']).first()
         if base:
@@ -261,92 +258,80 @@ def _formulario(request, nota, nova):
     return _tela_formulario(request, nota, nova, emitentes, itens_form or [_item_vazio()], original)
 
 
-def _rascunho_do_xml(request, nota, emitentes):
-    """Preenche a nota nova com o XML que a pessoa subiu (guardado no cache pelo importar_xml)."""
-    guardado = cache.get(_chave_cache_xml(request.GET['xml']))
-    if not guardado or guardado.get('usuario') != request.user.pk:
-        messages.error(request, 'O XML enviado expirou (fica guardado por 2 horas). Suba o arquivo de novo.')
-        return None
-    acao = request.GET.get('acao') or 'devolucao'
-    try:
-        dados = nfe.dados_do_xml(guardado['xml'], list(emitentes), acao)
-    except nfe.NfeInvalida as exc:
-        messages.error(request, str(exc))
-        return None
-    original = dados['nota'].pop('original')
-    original['acao'] = acao
-    original['arquivo'] = guardado.get('nome', '')
-    for campo, valor in dados['nota'].items():
-        if campo == 'emitente':
-            nota.emitente = emitentes.get(pk=valor)
-        else:
-            setattr(nota, campo, valor)
-    if acao == 'devolucao':
-        messages.info(request, 'Destinatário, itens e CFOP de devolução vieram do XML. Confira quantidades (devolução '
-                               'parcial) e impostos antes de salvar.')
-    else:
-        messages.info(request, 'Destinatário, itens e impostos vieram do XML. Confira tudo antes de salvar.')
-    return [_item_dict(i) for i in dados['itens']], original
-
-
-def _chave_cache_xml(token):
-    return f'financeiro:nfe-xml:{nfe.texto(token, 40)}'
+def _resultado_json(situacao, nota_obj, nome, avisos=()):
+    return {'arquivo': nome, 'situacao': situacao, 'id': nota_obj.pk, 'url': reverse('financeiro:nota', args=[nota_obj.pk]),
+            'chave': nota_obj.chave, 'numero': nota_obj.numero, 'serie': nota_obj.serie,
+            'rotulo': f'NF-e nº {nota_obj.numero} · {nota_obj.dest_nome}', 'origem': nota_obj.get_origem_display(),
+            'avisos': list(avisos)}
 
 
 @login_required
 @exige('notas.emitir')
 @require_POST
 def importar_xml(request):
-    """Recebe o XML de uma NF-e, diz o que ela é e o que dá para fazer; guarda o arquivo por 2 h.
+    """Grava na lista as NF-e já autorizadas dos XMLs enviados (um, vários ou .zip).
 
-    Com JavaScript a resposta é JSON (a tela mostra as opções ou vai direto quando só há uma);
-    sem, segue direto para a primeira opção.
+    Também aceita o XML do cancelamento (procEventoNFe 110111) de uma nota importada.
+    Com JavaScript responde JSON (resumo por arquivo); sem, volta para a lista com as mensagens.
     """
     quer_json = 'application/json' in request.headers.get('Accept', '')
-
-    def erro(texto, status=400, resumo=None):
+    arquivos = request.FILES.getlist('xml')
+    if not arquivos:
         if quer_json:
-            return JsonResponse({'erro': texto, 'resumo': resumo}, status=status)
-        messages.error(request, texto)
+            return JsonResponse({'erro': 'Escolha o XML da nota (ou um .zip com XMLs).'}, status=400)
+        messages.error(request, 'Escolha o XML da nota (ou um .zip com XMLs).')
         return redirect('financeiro:notas')
-
-    arquivo = request.FILES.get('xml')
-    if not arquivo:
-        return erro('Escolha o arquivo XML da nota.')
-    if not arquivo.name.lower().endswith('.xml'):
-        return erro('O arquivo precisa ser o XML da NF-e (.xml).')
-    if arquivo.size > nfe.TAMANHO_MAXIMO_XML:
-        return erro('O XML passa de 5 MB: não parece uma NF-e.')
-    bruto = arquivo.read()
     emitentes = list(_emitentes_do(request.user))
-    try:
-        resumo = nfe.resumo_do_xml(bruto, emitentes)
-    except nfe.NfeInvalida as exc:
-        return erro(str(exc))
-    tela = {c: resumo[c] for c in ('chave', 'numero', 'serie', 'emissao', 'natureza', 'entrada', 'devolucao',
-                                   'emitente_nome', 'emitente_doc', 'dest_nome', 'dest_doc', 'valor', 'itens',
-                                   'autorizada', 'lado')}
-    tela['nosso'] = str(resumo['nosso']) if resumo['nosso'] else ''
-    if not resumo['opcoes']:
-        return erro('Nenhum CNPJ emitente cadastrado (que você possa usar) aparece nesta nota, nem como emitente nem '
-                    'como destinatário. O SUPERADMIN cadastra os CNPJs em Notas fiscais → Configuração.', 422, tela)
-    token = secrets.token_urlsafe(18)
-    cache.set(_chave_cache_xml(token), {'xml': bruto, 'usuario': request.user.pk, 'nome': arquivo.name[:120]}, 7200)
-    base = reverse('financeiro:nota_nova')
-    opcoes = [{'acao': a, 'titulo': t, 'texto': x, 'url': f'{base}?xml={token}&acao={a}'} for a, t, x in resumo['opcoes']]
-    avisos = []
-    if not resumo['autorizada']:
-        avisos.append('Este XML não traz o protocolo de autorização da SEFAZ. Se a nota não foi autorizada, '
-                      'a devolução vai ser rejeitada.')
-    ja = (_notas_visiveis(request.user).filter(chave_referenciada=resumo['chave'], finalidade='4')
-          .exclude(status__in=('CANCELADA', 'REJEITADA')).order_by('-id').first())
-    if ja:
-        avisos.append(f'Já existe devolução desta nota: {"nº " + str(ja.numero) if ja.numero else "rascunho #" + str(ja.pk)} '
-                      f'({ja.get_status_display().lower()}).')
-    if not quer_json:
-        return redirect(opcoes[0]['url'])
-    return JsonResponse({'resumo': tela, 'opcoes': opcoes, 'avisos': avisos,
-                         'ja_existe': reverse('financeiro:nota', args=[ja.pk]) if ja else ''})
+    resultados = []
+    for arquivo in arquivos[:MAXIMO_ARQUIVOS_POR_VEZ]:
+        nome = arquivo.name[:150]
+        if arquivo.size > nfe.TAMANHO_MAXIMO_ZIP:
+            resultados.append({'arquivo': nome, 'situacao': 'erro', 'erro': 'Arquivo grande demais (máx. 50 MB).'})
+            continue
+        try:
+            xmls = nfe.xmls_do_arquivo(nome, arquivo.read())
+        except nfe.NfeInvalida as exc:
+            resultados.append({'arquivo': nome, 'situacao': 'erro', 'erro': str(exc)})
+            continue
+        for rotulo, conteudo in xmls:
+            if conteudo is None:
+                resultados.append({'arquivo': rotulo, 'situacao': 'erro', 'erro': 'XML acima de 5 MB.'})
+                continue
+            try:
+                situacao, nota_obj, avisos = nfe.importar_nota(conteudo, emitentes, request.user)
+            except nfe.NfeInvalida as exc:
+                resultados.append({'arquivo': rotulo, 'situacao': 'erro', 'erro': str(exc)})
+                continue
+            if situacao == 'importada':
+                _registrar(request, 'CRIAR', f'Importou do XML a NF-e {nota_obj.chave} '
+                                             f'({nota_obj.get_origem_display().lower()}, {nota_obj.dest_nome})', nota_obj)
+            elif situacao == 'cancelada':
+                _registrar(request, 'CANCELAR', f'Importou o cancelamento da NF-e {nota_obj.chave}', nota_obj)
+            resultados.append(_resultado_json(situacao, nota_obj, rotulo, avisos))
+    if len(arquivos) > MAXIMO_ARQUIVOS_POR_VEZ:
+        resultados.append({'arquivo': f'{len(arquivos) - MAXIMO_ARQUIVOS_POR_VEZ} arquivo(s)', 'situacao': 'erro',
+                           'erro': f'Máximo de {MAXIMO_ARQUIVOS_POR_VEZ} arquivos por vez (use um .zip para mais).'})
+    conta = {s: sum(1 for r in resultados if r['situacao'] == s) for s in ('importada', 'repetida', 'cancelada', 'erro')}
+    if quer_json:
+        return JsonResponse({'resultados': resultados, 'conta': conta})
+    if conta['importada']:
+        messages.success(request, f'{conta["importada"]} nota(s) importada(s) para a lista.')
+    if conta['cancelada']:
+        messages.success(request, f'{conta["cancelada"]} cancelamento(s) aplicado(s).')
+    if conta['repetida']:
+        messages.info(request, f'{conta["repetida"]} nota(s) já estavam na lista.')
+    for r in resultados:
+        if r['situacao'] == 'erro':
+            messages.error(request, f'{r["arquivo"]}: {r["erro"]}')
+        for aviso in r.get('avisos', ()):
+            messages.warning(request, aviso)
+    so_uma = [r for r in resultados if r['situacao'] != 'erro']
+    if len(resultados) == 1 and so_uma:
+        return redirect(so_uma[0]['url'])
+    return redirect('financeiro:notas')
+
+
+MAXIMO_ARQUIVOS_POR_VEZ = 200
 
 
 def _tela_formulario(request, nota, nova, emitentes, itens_form, original=None):
@@ -395,7 +380,7 @@ def nota(request, pk):
         request, nota=nota_obj, itens=itens, problemas=problemas, eventos=eventos,
         historico=_historico_para_tela(nota_obj),
         correcoes=[e for e in eventos if e.tipo == '110110' and e.sucesso],
-        pode_excluir=nota_obj.status == 'RASCUNHO' and nota_obj.numero is None,
+        pode_excluir=(nota_obj.status == 'RASCUNHO' and nota_obj.numero is None) or nota_obj.importada,
         id_dest=nfe.destino(nota_obj) if nota_obj.emitente.uf in nfe.CODIGOS_UF else ''))
 
 
@@ -508,6 +493,11 @@ def nota_correcao(request, pk):
 @require_POST
 def nota_excluir(request, pk):
     nota_obj = _nota_ou_404(request, pk)
+    if nota_obj.importada:
+        _registrar(request, 'EXCLUIR', f'Tirou da lista a NF-e importada {nota_obj.chave} ({nota_obj.dest_nome})', nota_obj)
+        nota_obj.delete()
+        messages.success(request, 'Nota tirada da lista. Para trazê-la de volta, importe o XML de novo.')
+        return redirect('financeiro:notas')
     if nota_obj.status != 'RASCUNHO' or nota_obj.numero is not None:
         messages.error(request, 'Só rascunho que nunca foi enviado pode ser excluído.')
         return redirect('financeiro:nota', pk=pk)
