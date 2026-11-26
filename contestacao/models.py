@@ -661,3 +661,35 @@ class ParteDoCN(models.Model):
 
     def __str__(self):
         return f'{self.vendedor} ({self.filial}) – lote {self.lote_id}'
+
+
+class DecisaoNoCarrinho(models.Model):
+    """Carrinho do gestor em /contestacao/gerenciar/: a decisão marcada numa contestação pendente.
+
+    Fica guardada (no servidor, por gestor) até ele aplicar; aplicar faz o mesmo que os botões
+    Aprovar / Aprovar e Contestar / Rejeitar de cada contestação e tira a linha do carrinho.
+    """
+    APROVAR, APROVAR_E_CONTESTAR, REJEITAR = 'approved', 'approved_and_contested', 'rejected'
+    DECISOES = [
+        (APROVAR, 'De acordo (aprovar)'),
+        (APROVAR_E_CONTESTAR, 'Aprovar e contestar'),
+        (REJEITAR, 'Negar (rejeitar)'),
+    ]
+
+    gestor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='+',
+                               verbose_name='Gestor')
+    contestation = models.ForeignKey(Contestation, on_delete=models.CASCADE, related_name='no_carrinho',
+                                     verbose_name='Contestação')
+    decisao = models.CharField(max_length=24, choices=DECISOES, verbose_name='Decisão')
+    observacao = models.TextField(blank=True, default='', verbose_name='Observação / parecer')
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['criado_em', 'id']
+        unique_together = [('gestor', 'contestation')]
+        verbose_name = 'Decisão no carrinho do gestor'
+        verbose_name_plural = 'Decisões no carrinho do gestor'
+
+    def __str__(self):
+        return f'#{self.contestation_id}: {self.get_decisao_display()}'

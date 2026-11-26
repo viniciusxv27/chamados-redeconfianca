@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views, views_resumo
+from . import views, views_carrinho_gestor, views_resumo
 
 app_name = 'contestacao'
 
@@ -35,6 +35,12 @@ urlpatterns = [
     path('venda/<int:exclusion_id>/nao/manter/', views.manter_nao, name='manter_nao'),
     path('minhas/', views.my_contestations, name='my_contestations'),
     path('gerenciar/', views.manage_contestations, name='manage_contestations'),
+    # Carrinho do gestor: marcar várias pendentes (de acordo / negar) e aplicar de uma vez.
+    path('gerenciar/carrinho/', views_carrinho_gestor.carrinho, name='carrinho_gestor'),
+    path('gerenciar/carrinho/salvar/', views_carrinho_gestor.carrinho_salvar, name='carrinho_gestor_salvar'),
+    path('gerenciar/carrinho/observacao/', views_carrinho_gestor.carrinho_observacao, name='carrinho_gestor_observacao'),
+    path('gerenciar/carrinho/remover/', views_carrinho_gestor.carrinho_remover, name='carrinho_gestor_remover'),
+    path('gerenciar/carrinho/aplicar/', views_carrinho_gestor.carrinho_aplicar, name='carrinho_gestor_aplicar'),
     path('liberar-setor/', views.liberar_setor, name='liberar_setor'),
     # Resumo do ciclo no WhatsApp (só SUPERADMIN; o PDF abre também para quem recebeu).
     path('resumo-whatsapp/', views_resumo.resumo_whatsapp, name='resumo_whatsapp'),

@@ -2576,6 +2576,8 @@ def manage_contestations(request):
         'old_contestations_count': old_contestations_count,
         'last_sync_at': last_sync_at,
     }
+    from .views_carrinho_gestor import _carrinho
+    context['carrinho_gestor'] = _carrinho(request.user)
     return render(request, 'contestacao/manage_contestations.html', context)
 
 
