@@ -1526,3 +1526,33 @@ def importar_da_sefaz(recebidas, emitentes, usuario=None):
         conta[situacao] = conta.get(situacao, 0) + 1
         notas.append(nota)
     return {'conta': conta, 'erros': erros, 'notas': notas}
+
+
+# ── Lançar a nota em contas a pagar / a receber ────────────────────────────
+FORMA_DO_TPAG = {'15': 'BOLETO', '17': 'PIX', '03': 'CARTAO', '04': 'CARTAO', '01': 'DINHEIRO', '02': 'CHEQUE'}
+
+
+def cobranca_do_xml(xml):
+    """(duplicatas [(número, vencimento, valor)], forma do Titulo pelo tPag) lidas do XML da nota."""
+    from datetime import date
+    if not xml:
+        return [], ''
+    try:
+        raiz = etree.fromstring(xml.encode('utf-8') if isinstance(xml, str) else xml, parser=etree.XMLParser(
+            resolve_entities=False, no_network=True))
+    except etree.XMLSyntaxError:
+        return [], ''
+    inf = raiz.find(f'.//{{{NS}}}infNFe')
+    if inf is None:
+        return [], ''
+    dups = []
+    for dup in inf.findall(f'{{{NS}}}cobr/{{{NS}}}dup'):
+        try:
+            venc = date.fromisoformat(_t(dup, 'dVenc')[:10])
+        except ValueError:
+            continue
+        valor = _dec_ou_zero(_t(dup, 'vDup'))
+        if valor > 0:
+            dups.append((_t(dup, 'nDup'), venc, valor))
+    tpag = _t(inf.find(f'.//{{{NS}}}detPag'), 'tPag')
+    return dups, FORMA_DO_TPAG.get(tpag, '')

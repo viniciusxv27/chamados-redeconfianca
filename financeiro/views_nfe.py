@@ -19,8 +19,9 @@ from django.views.decorators.http import require_POST
 
 from . import auditoria, danfe, nfe
 from .models_nfe import ConfiguracaoNFe, EmitenteNFe, EventoNotaFiscal, ItemNotaFiscal, NotaFiscalEmitida
-from .permissoes import e_superadmin, exige, filtrar_por_loja, lojas_permitidas
-from .views import _contexto_base, lojas_do
+from .permissoes import e_superadmin, exige, filtrar_por_loja, lojas_permitidas, pode
+from .views import Invalido, _contexto_base, _formulario_basico, _ler_titulo, arquivo_ok, dinheiro, lojas_do
+from .views import data as ler_data
 
 CAMPOS_NOTA = ('tipo_operacao', 'finalidade', 'natureza', 'chave_referenciada', 'dest_documento', 'dest_nome',
                'dest_ie', 'dest_ind_ie', 'dest_email', 'dest_telefone', 'dest_logradouro', 'dest_numero',
@@ -196,6 +197,11 @@ def notas(request):
             if len(digitos) <= 9:
                 filtro |= Q(numero=int(digitos))
         qs = qs.filter(filtro)
+    from django.db.models import Exists, OuterRef
+
+    from .models import Titulo
+    qs = qs.annotate(lancada=Exists(Titulo.objects.exclude(status='CANCELADO').filter(
+        Q(nota_fiscal=OuterRef('pk')) | Q(nota__chave=OuterRef('chave')))))
     pagina = Paginator(qs, 50).get_page(request.GET.get('pagina'))
     inicio, fim = _mes(request.GET.get('competencia'))
     # Fora da lista, ou na lista só com o resumo quando o XML completo já chegou (puxar de novo completa).
@@ -435,6 +441,134 @@ def nota_editar(request, pk):
     return _formulario(request, nota, nova=False)
 
 
+# ── Lançar em contas a pagar / a receber ───────────────────────────────────
+def _tipo_do_titulo(nota_obj):
+    """Entrada (compra recebida) vira conta a pagar; saída (venda nossa), conta a receber."""
+    return ('PAGAR', 'pagar') if nota_obj.tipo_operacao == '0' else ('RECEBER', 'receber')
+
+
+def _titulos_da_nota(nota_obj):
+    """Títulos já lançados desta nota (pela lista de notas ou pela entrada no PIS/Cofins, mesma chave)."""
+    from .models import Titulo
+    filtro = Q(nota_fiscal=nota_obj)
+    if nota_obj.chave:
+        filtro |= Q(nota__chave=nota_obj.chave)
+    return Titulo.objects.filter(filtro).order_by('parcela', 'vencimento', 'id')
+
+
+def _pode_lancar(user, nota_obj):
+    _tipo, area = _tipo_do_titulo(nota_obj)
+    return nota_obj.status == 'AUTORIZADA' and pode(user, f'{area}.editar')
+
+
+def _previa_do_lancamento(nota_obj):
+    """O título como o modal de Contas a Pagar abre: preenchido com a nota (e o que se usou da última vez)."""
+    from datetime import timedelta
+
+    from .models import Titulo
+    tipo, _area = _tipo_do_titulo(nota_obj)
+    duplicatas, forma = nfe.cobranca_do_xml(nota_obj.xml_autorizado)
+    emissao = timezone.localtime(nota_obj.emitida_em).date() if nota_obj.emitida_em else timezone.localdate()
+    anterior = (Titulo.objects.filter(tipo=tipo, pessoa_documento=nota_obj.dest_documento).exclude(status='CANCELADO')
+                .order_by('-criado_em').first()) if nota_obj.dest_documento else None
+    previa = Titulo(
+        tipo=tipo, descricao=f'NF {nota_obj.numero or ""} — {nota_obj.dest_nome}'.strip()[:200],
+        pessoa_nome=nota_obj.dest_nome[:200], pessoa_documento=nota_obj.dest_documento,
+        numero_documento=str(nota_obj.numero or ''), emissao=emissao, competencia=emissao.replace(day=1),
+        vencimento=duplicatas[0][1] if duplicatas else emissao + timedelta(days=30), valor=nota_obj.valor_total,
+        loja=nota_obj.loja, forma=forma or (anterior.forma if anterior else '') or ('BOLETO' if duplicatas else ''),
+        plano=anterior.plano if anterior else None, conta_prevista=anterior.conta_prevista if anterior else None)
+    parcelas = [{'numero': n, 'vencimento': v, 'valor': valor} for n, v, valor in duplicatas]
+    return previa, parcelas
+
+
+def _contexto_lancar(request, nota_obj):
+    tipo, area = _tipo_do_titulo(nota_obj)
+    titulos = list(_titulos_da_nota(nota_obj).select_related('loja'))
+    ativos = [t for t in titulos if t.status != 'CANCELADO']
+    contexto = {'titulos_da_nota': titulos, 'nota_lancada': bool(ativos), 'tipo': tipo, 'area': area,
+                'pode_lancar': _pode_lancar(request.user, nota_obj) and not ativos}
+    if contexto['pode_lancar']:
+        previa, parcelas = _previa_do_lancamento(nota_obj)
+        contexto.update(_formulario_basico(request, tipo))
+        contexto.update({'pre': previa, 'parcelas_nf': parcelas,
+                         'acao_lancar': reverse('financeiro:nota_lancar', args=[nota_obj.pk])})
+    return contexto
+
+
+@login_required
+@exige('notas.ver')
+@require_POST
+def nota_lancar(request, pk):
+    """Grava a nota como conta a pagar (entrada) ou a receber (saída), com as parcelas da cobrança."""
+    from django.core.files.base import ContentFile
+
+    from contagem_caixa.models import NotaRecebida
+
+    from . import servicos
+    nota_obj = _nota_ou_404(request, pk)
+    tipo, area = _tipo_do_titulo(nota_obj)
+    voltar = redirect('financeiro:nota', pk=pk)
+    if not pode(request.user, f'{area}.editar'):
+        messages.error(request, 'Lançar este tipo de título não está liberado para o seu usuário.')
+        return voltar
+    if nota_obj.status != 'AUTORIZADA':
+        messages.error(request, f'Nota "{nota_obj.get_status_display().lower()}" não se lança no financeiro.')
+        return voltar
+    if _titulos_da_nota(nota_obj).exclude(status='CANCELADO').exists():
+        messages.error(request, 'Esta nota já foi lançada no financeiro (veja os títulos na tela dela).')
+        return voltar
+    post = request.POST.copy()
+    vencimentos, valores = [], []
+    for venc, valor in zip(post.getlist('parcela_vencimento'), post.getlist('parcela_valor')):
+        if not (venc or valor).strip():
+            continue
+        try:
+            dia, quanto = ler_data(venc, campo='data de vencimento da parcela'), dinheiro(valor, obrigatorio=True)
+        except Invalido as exc:
+            messages.error(request, f'Parcela: {exc}')
+            return voltar
+        if quanto <= 0:
+            messages.error(request, 'Toda parcela precisa de valor maior que zero.')
+            return voltar
+        vencimentos.append(dia)
+        valores.append(quanto)
+    if vencimentos:
+        post['vencimento'] = vencimentos[0].isoformat()
+        post['valor'] = str(sum(valores))
+    request.POST = post
+    try:
+        campos = _ler_titulo(request, tipo)
+        anexo = arquivo_ok(request.FILES.get('anexo'))
+    except Invalido as exc:
+        messages.error(request, str(exc))
+        return voltar
+    if anexo is None and nota_obj.xml_autorizado:
+        anexo = ContentFile(nota_obj.xml_autorizado.encode('utf-8'), name=f'NFe{nota_obj.chave}.xml')
+    campos.update(origem='NFE', nota_fiscal=nota_obj,
+                  nota=NotaRecebida.objects.filter(chave=nota_obj.chave).first() if nota_obj.chave else None)
+    try:
+        parcelas = int(post.get('parcelas') or 1)
+        intervalo = post.get('intervalo') or 'MENSAL'
+        if intervalo not in ('MENSAL', '7', '14', '15', '21', '28', '30'):
+            intervalo = 'MENSAL'
+        if not vencimentos and post.get('valor_modo') == 'parcela' and parcelas > 1:
+            campos['valor'] = campos['valor'] * parcelas
+        with transaction.atomic():
+            criados = servicos.criar_titulos(
+                dict(campos, tipo=tipo), usuario=request.user, request=request, parcelas=parcelas, intervalo=intervalo,
+                vencimentos=vencimentos or None, valores=valores or None, anexo=anexo)
+    except (servicos.RegraFinanceira, ValueError) as exc:
+        messages.error(request, str(exc))
+        return voltar
+    _registrar(request, 'CRIAR', f'Lançou a NF-e {nota_obj.chave or nota_obj.pk} em contas a {area}: '
+                                 f'{len(criados)} título(s)', nota_obj)
+    rotulo = 'Contas a pagar' if tipo == 'PAGAR' else 'Contas a receber'
+    messages.success(request, f'NF nº {nota_obj.numero} lançada em {rotulo}: '
+                     + (f'{len(criados)} parcelas.' if len(criados) > 1 else f'vence em {criados[0].vencimento:%d/%m/%Y}.'))
+    return voltar
+
+
 # ── A nota ──────────────────────────────────────────────────────────────────
 @login_required
 @exige('notas.ver')
@@ -444,7 +578,7 @@ def nota(request, pk):
     problemas = nfe.validar(nota_obj, itens) if nota_obj.editavel else []
     eventos = list(nota_obj.eventos.select_related('enviado_por'))
     return render(request, 'financeiro/nota.html', _contexto(
-        request, nota=nota_obj, itens=itens, problemas=problemas, eventos=eventos,
+        request, nota=nota_obj, itens=itens, problemas=problemas, eventos=eventos, **_contexto_lancar(request, nota_obj),
         historico=_historico_para_tela(nota_obj),
         correcoes=[e for e in eventos if e.tipo == '110110' and e.sucesso],
         pode_excluir=(nota_obj.status == 'RASCUNHO' and nota_obj.numero is None) or nota_obj.importada,

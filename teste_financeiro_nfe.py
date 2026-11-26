@@ -799,6 +799,77 @@ try:
           and ('pcParaNotas' in corpo or 'pcBuscarSefaz' not in corpo))
         t('importações da SEFAZ na rastreabilidade', LogFinanceiro.objects.filter(area='notas', descricao__contains='Puxou da SEFAZ').exists())
 
+        print('\n== LANÇAR EM CONTAS A PAGAR / A RECEBER ==')
+        from django.core.files.storage import InMemoryStorage
+
+        from financeiro.models import PlanoConta, Titulo
+        campo_anexo = Titulo._meta.get_field('anexo')
+        anexo_antes = campo_anexo.storage
+        campo_anexo.storage = InMemoryStorage()
+        try:
+            plano = PlanoConta.objects.create(codigo='ZZ.9.1', nome='ZZ Mercadoria para revenda', tipo='DESPESA', analitica=True)
+            ch_l = chave_independente(f'321905{FORN}55001000000950112345678')
+            cobr = ('<cobr><dup><nDup>001</nDup><dVenc>2019-06-02</dVenc><vDup>75.00</vDup></dup>'
+                    '<dup><nDup>002</nDup><dVenc>2019-07-02</dVenc><vDup>75.00</vDup></dup></cobr>'
+                    '<pag><detPag><tPag>15</tPag><vPag>150.00</vPag></detPag></pag></infNFe>')
+            subir(c, ('com-boleto.xml', autorizado(proc_nfe_fornecedor(ch_l), ch_l).replace('</infNFe>', cobr)))
+            nl = NotaFiscalEmitida.objects.get(chave=ch_l)
+            r = c.get(f'/financeiro/notas/{nl.pk}/')
+            corpo = r.content.decode()
+            t('nota recebida tem "Lançar a pagar" com o modal de Contas a Pagar', 'id="nfeLancar"' in corpo
+              and f'/financeiro/notas/{nl.pk}/lancar/' in corpo and 'Lançar a NF nº 950 em Contas a pagar' in corpo)
+            t('modal já vem com fornecedor, CNPJ, número e as duplicatas da nota', f'value="{FORN}"' in corpo
+              and 'value="ZZ DISTRIBUIDORA LTDA"' in corpo and 'value="950"' in corpo and corpo.count('name="parcela_vencimento"') == 2
+              and 'value="2019-06-02"' in corpo and 'value="75.00"' in corpo)
+            t('forma de pagamento da nota (boleto) já escolhida', '<option value="BOLETO" selected>' in corpo)
+            dados_lanc = {'descricao': 'NF 950 — ZZ DISTRIBUIDORA LTDA', 'pessoa_nome': 'ZZ DISTRIBUIDORA LTDA',
+                          'pessoa_documento': FORN, 'numero_documento': '950', 'emissao': '2019-05-03', 'competencia': '2019-05',
+                          'parcela_vencimento': ['2019-06-02', '2019-07-02'], 'parcela_valor': ['75,00', '80,50'],
+                          'plano': str(plano.pk), 'loja': '', 'forma': 'BOLETO', 'observacao': ''}
+            r = c.post(f'/financeiro/notas/{nl.pk}/lancar/', dados_lanc)
+            ts = list(Titulo.objects.filter(nota_fiscal=nl).order_by('parcela'))
+            t('lançar grava as parcelas como contas a pagar ligadas à nota', r.status_code == 302 and len(ts) == 2
+              and [(x.tipo, x.parcela, x.parcelas, x.vencimento.isoformat(), x.valor) for x in ts]
+              == [('PAGAR', 1, 2, '2019-06-02', Decimal('75.00')), ('PAGAR', 2, 2, '2019-07-02', Decimal('80.50'))],
+              [(x.tipo, x.parcela, x.vencimento, x.valor) for x in ts])
+            t('origem NF-e, fornecedor, plano, competência e o XML anexado', all(x.origem == 'NFE' and x.pessoa_documento == FORN
+              and x.plano_id == plano.pk and x.competencia.isoformat() == '2019-05-01' and x.anexo_nome.endswith('.xml') for x in ts))
+            t('lançamento na rastreabilidade', LogFinanceiro.objects.filter(area='notas', descricao__contains=f'Lançou a NF-e {ch_l}').exists())
+            r = c.post(f'/financeiro/notas/{nl.pk}/lancar/', dados_lanc)
+            t('lançar de novo é recusado (não duplica)', Titulo.objects.filter(nota_fiscal=nl).count() == 2)
+            corpo = c.get(f'/financeiro/notas/{nl.pk}/').content.decode()
+            t('tela da nota lista os títulos e some o botão', 'id="nfeLancar"' not in corpo and f'/financeiro/titulo/{ts[0].pk}/' in corpo
+              or f'/financeiro/titulos/{ts[0].pk}/' in corpo)
+            corpo = c.get('/financeiro/notas/?origem=TERCEIRO').content.decode()
+            t('lista marca a nota como lançada e oferece "Lançar" nas outras', '>lançada</span>' in corpo and '?lancar=1' in corpo)
+            corpo = c.get('/financeiro/pagar/?situacao=todos&q=ZZ+DISTRIBUIDORA').content.decode()
+            t('os títulos aparecem em Contas a pagar', 'NF 950' in corpo)
+
+            n2.refresh_from_db()
+            corpo = c.get(f'/financeiro/notas/{n2.pk}/').content.decode()
+            t('nota de saída lança em Contas a receber (valor e parcelamento do modal)', 'Lançar a receber' in corpo
+              and 'Contas a receber' in corpo and 'name="parcelas"' in corpo and 'name="parcela_vencimento"' not in corpo)
+            plano_r = PlanoConta.objects.create(codigo='ZZ.8.1', nome='ZZ Venda', tipo='RECEITA', analitica=True)
+            c.post(f'/financeiro/notas/{n2.pk}/lancar/', {'descricao': 'Venda NF', 'vencimento': '2026-12-10', 'valor': '300,00',
+                                                          'parcelas': '3', 'intervalo': 'MENSAL', 'valor_modo': 'total',
+                                                          'plano': str(plano_r.pk)})
+            tr = list(Titulo.objects.filter(nota_fiscal=n2).order_by('parcela'))
+            t('venda em 3 parcelas mensais a receber', [(x.tipo, x.valor, x.vencimento.isoformat()) for x in tr]
+              == [('RECEBER', Decimal('100.00'), '2026-12-10'), ('RECEBER', Decimal('100.00'), '2027-01-10'),
+                  ('RECEBER', Decimal('100.00'), '2027-02-10')], [(x.tipo, x.valor, x.vencimento) for x in tr])
+
+            Titulo.objects.create(tipo='PAGAR', descricao='ZZ entrada pelo PIS/Cofins', vencimento=quando.date(),
+                                  valor=Decimal('150'), nota=r_ok, origem='NFE')
+            corpo = c.get(f'/financeiro/notas/{ok_n.pk}/').content.decode()
+            t('nota já lançada pela entrada do PIS/Cofins aparece lançada', 'id="nfeLancar"' not in corpo
+              and 'ZZ' in corpo and f'/financeiro/notas/{ok_n.pk}/lancar/' not in corpo)
+            antes = Titulo.objects.count()
+            c.post(f'/financeiro/notas/{can_n.pk}/lancar/', {'descricao': 'x', 'vencimento': '2019-06-01', 'valor': '1'})
+            t('nota cancelada não se lança', Titulo.objects.count() == antes
+              and 'id="nfeLancar"' not in c.get(f'/financeiro/notas/{can_n.pk}/').content.decode())
+        finally:
+            campo_anexo.storage = anexo_antes
+
         print('\n== QUEM PODE ==')
         so_ver = User.objects.create_user(username='zzz.nfever', email='zzz.nfever@exemplo-teste.local',
                                           password='S3nha!teste', first_name='ZZ', hierarchy='SUPERVISOR')
@@ -833,6 +904,12 @@ try:
         cv.force_login(so_ver)
         r = cv.get('/financeiro/notas/nova/')
         r_rj2, r_es2 = recebida(905, cnpj=FILIAL_RJ), recebida(906)
+        from financeiro.models import Titulo as _T
+        antes_t = _T.objects.count()
+        rec_rj = NotaFiscalEmitida.objects.filter(emitente=emit_rj, status='AUTORIZADA').first()
+        if rec_rj:
+            cv.post(f'/financeiro/notas/{rec_rj.pk}/lancar/', {'descricao': 'x', 'vencimento': '2019-06-01', 'valor': '1'})
+        t('sem pagar.editar/receber.editar não lança', _T.objects.count() == antes_t)
         cv.post('/financeiro/notas/importar-sefaz/', {'competencia': '2019-05'})
         t('quem só vê a loja RJ puxa da SEFAZ só as notas do CNPJ dela', NotaFiscalEmitida.objects.filter(
           chave=r_rj2.chave, emitente=emit_rj).exists() and not NotaFiscalEmitida.objects.filter(chave=r_es2.chave).exists())

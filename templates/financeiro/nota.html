@@ -5,6 +5,7 @@
 {% block fin_subtitulo %}{{ nota.rotulo_tipo }} · {{ nota.natureza|default:'sem natureza' }} · {{ nota.nosso_rotulo }}{% endblock %}
 {% block fin_acoes %}
 <a href="{% url 'financeiro:notas' %}" class="fin-btn fin-btn-claro"><i class="fas fa-arrow-left"></i>Notas</a>
+{% if pode_lancar %}<button type="button" data-abrir="#finNovo" class="fin-btn fin-btn-verde" id="nfeLancar"><i class="fas fa-file-invoice-dollar"></i>Lançar{% if tipo == 'PAGAR' %} a pagar{% else %} a receber{% endif %}</button>{% endif %}
 {% if nota.xml_autorizado or not nota.importada and nota.emitente_id %}<a href="{% url 'financeiro:nota_danfe' nota.pk %}" target="_blank" rel="noopener" class="fin-btn fin-btn-claro"><i class="fas fa-file-pdf"></i>{% if nota.xml_autorizado %}DANFE{% else %}Prévia da DANFE{% endif %}</a>{% endif %}
 {% if nota.xml_autorizado or nota.xml_assinado %}<a href="{% url 'financeiro:nota_xml' nota.pk %}" class="fin-btn fin-btn-claro"><i class="fas fa-file-code"></i>XML</a>{% endif %}
 {% if pode.notas_emitir and not nota.recebida and nota.emitente_id %}<a href="{% url 'financeiro:nota_nova' %}?copiar={{ nota.pk }}" class="fin-btn fin-btn-claro" title="Nova nota com os mesmos dados"><i class="fas fa-copy"></i><span class="hidden sm:inline">Copiar</span></a>{% endif %}
@@ -113,6 +114,26 @@
 </div>
 
 <aside class="space-y-4 min-w-0">
+    {% if titulos_da_nota or pode_lancar %}
+    <section class="fin-card p-4" id="nfeFinanceiro">
+        <p class="nfe-secao"><i class="fas fa-file-invoice-dollar"></i>{% if tipo == 'PAGAR' %}Contas a pagar{% else %}Contas a receber{% endif %}</p>
+        {% if titulos_da_nota %}
+        <ul class="space-y-1.5">
+            {% for tt in titulos_da_nota %}
+            <li class="flex items-center justify-between gap-2 text-sm">
+                <a href="{% url 'financeiro:titulo' tt.pk %}" class="fin-link min-w-0 truncate">{% if tt.rotulo_parcela %}Parcela {{ tt.rotulo_parcela }}{% else %}Título #{{ tt.pk }}{% endif %} · {{ tt.vencimento|date:'d/m/Y' }}</a>
+                <span class="tabular whitespace-nowrap {% if tt.status == 'CANCELADO' %}line-through text-gray-400{% endif %}">{{ tt.valor|brl_zero }}</span>
+                <span class="fin-chip st-{% if tt.vencido %}VENCIDO{% else %}{{ tt.status }}{% endif %}">{% if tt.vencido %}Vencido{% else %}{{ tt.get_status_display }}{% endif %}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% if not nota_lancada %}<p class="text-[11px] text-gray-500 mt-2">Os títulos desta nota foram cancelados: dá para lançar de novo.</p>{% endif %}
+        {% else %}
+        <p class="text-sm text-gray-600">Ainda não lançada no financeiro.</p>
+        {% endif %}
+        {% if pode_lancar %}<button type="button" data-abrir="#finNovo" class="fin-btn fin-btn-verde w-full mt-3"><i class="fas fa-file-invoice-dollar"></i>Lançar{% if tipo == 'PAGAR' %} em Contas a pagar{% else %} em Contas a receber{% endif %}</button>{% endif %}
+    </section>
+    {% endif %}
     <section class="fin-card p-4">
         <p class="nfe-secao"><i class="fas fa-paper-plane"></i>{% if nota.importada %}Ações{% else %}SEFAZ{% endif %}</p>
         <div class="space-y-2">
@@ -208,4 +229,12 @@ document.querySelectorAll('form[data-nfe-confirmar]').forEach(function (f) {
     });
 });
 </script>
+{% if pode_lancar %}
+{% include 'financeiro/_modal_titulo.html' %}
+<script>
+if (new URLSearchParams(location.search).get('lancar') === '1') {
+    document.addEventListener('DOMContentLoaded', function () { var b = document.getElementById('nfeLancar'); if (b) b.click(); });
+}
+</script>
+{% endif %}
 {% endblock %}

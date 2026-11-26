@@ -207,6 +207,9 @@ class Titulo(models.Model):
     origem = models.CharField(max_length=10, choices=ORIGENS, default='MANUAL', verbose_name='Origem')
     nota = models.ForeignKey('contagem_caixa.NotaRecebida', on_delete=models.SET_NULL, null=True, blank=True,
                              related_name='titulos', verbose_name='Nota fiscal')
+    # A nota da lista de Notas fiscais (/financeiro/notas/) que gerou o título ("Lançar").
+    nota_fiscal = models.ForeignKey('financeiro.NotaFiscalEmitida', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='titulos', verbose_name='Nota fiscal (lista de notas)')
 
     cancelado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
                                       blank=True, related_name='+', verbose_name='Cancelado por')

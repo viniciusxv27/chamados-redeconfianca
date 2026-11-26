@@ -91,7 +91,9 @@
             <td data-label="Nosso CNPJ"><span class="text-xs text-gray-700">{{ n.nosso_rotulo|default:'—' }}</span>{% if n.loja %}<span class="block text-[11px] text-gray-400">{{ n.loja.name }}</span>{% elif not n.emitente_id %}<span class="block text-[11px] text-gray-400 tabular">{% if n.nosso_nome %}{{ n.nosso_cnpj_formatado }} · {% endif %}sem loja</span>{% endif %}</td>
             <td data-label="Emissão" class="tabular text-xs text-gray-600 whitespace-nowrap">{% if n.emitida_em %}{{ n.emitida_em|date:'d/m/Y H:i' }}{% else %}—{% endif %}</td>
             <td data-label="Valor" class="text-right tabular font-semibold whitespace-nowrap">{{ n.valor_total|brl_zero }}</td>
-            <td data-label="Situação"><span class="nfe-st nfe-{{ n.status }}" title="{{ n.cstat }} {{ n.motivo }}">{{ n.get_status_display }}</span></td>
+            <td data-label="Situação"><span class="nfe-st nfe-{{ n.status }}" title="{{ n.cstat }} {{ n.motivo }}">{{ n.get_status_display }}</span>
+                {% if n.lancada %}<span class="block mt-1 text-[11px] font-semibold text-emerald-700"><i class="fas fa-check mr-0.5"></i>lançada</span>
+                {% elif n.status == 'AUTORIZADA' %}{% if n.tipo_operacao == '0' and pode.pagar_editar or n.tipo_operacao == '1' and pode.receber_editar %}<a href="{% url 'financeiro:nota' n.pk %}?lancar=1" class="fin-link mt-1"><i class="fas fa-file-invoice-dollar"></i>Lançar</a>{% endif %}{% endif %}</td>
         </tr>
         {% empty %}
         <tr class="fin-linha-vazia"><td colspan="7" class="text-center text-gray-500 py-10"><i class="fas fa-file-invoice text-2xl text-gray-300 block mb-2"></i>Nenhuma nota {% if busca or filtro_status or filtro_tipo or filtro_origem %}com esse filtro{% else %}ainda: emita uma ou importe os XMLs{% endif %}.</td></tr>

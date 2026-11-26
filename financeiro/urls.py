@@ -48,6 +48,7 @@ urlpatterns = [
     path('notas/<int:pk>/excluir/', views_nfe.nota_excluir, name='nota_excluir'),
     path('notas/<int:pk>/xml/', views_nfe.nota_xml, name='nota_xml'),
     path('notas/<int:pk>/danfe/', views_nfe.nota_danfe, name='nota_danfe'),
+    path('notas/<int:pk>/lancar/', views_nfe.nota_lancar, name='nota_lancar'),
     path('notas/evento/<int:pk>/xml/', views_nfe.evento_xml, name='nota_evento_xml'),
 
     # Títulos
