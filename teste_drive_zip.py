@@ -165,12 +165,17 @@ try:
     cv = Client(); cv.force_login(so_ver)
     cc = Client(); cc.force_login(chefe)
 
+    def lido(r):
+        # Como o navegador: o zip sai em pedaços e é lido até o fim (isso devolve a vez).
+        if getattr(r, 'streaming', False):
+            r.zip_bytes = b''.join(r.streaming_content)
+        return r
+
     def baixar(cliente, file_id):
-        return cliente.get(f'/drive/file/{file_id}/zip/')
+        return lido(cliente.get(f'/drive/file/{file_id}/zip/'))
 
     def abrir_zip(resposta):
-        dados = b''.join(resposta.streaming_content)
-        return zipfile.ZipFile(io.BytesIO(dados))
+        return zipfile.ZipFile(io.BytesIO(resposta.zip_bytes))
 
     with mock.patch.multiple(gdrive, **FALSOS):
         print('== O ZIP DA PASTA ==')
@@ -253,7 +258,7 @@ try:
 
         def selecao(cliente, pasta, ids, **extra):
             q = [('pasta', pasta)] + [('id', i) for i in ids] + [('volta', volta)] + list(extra.items())
-            return cliente.get('/drive/zip/selecao/', q)
+            return lido(cliente.get('/drive/zip/selecao/', q))
 
         html = c.get(f'/drive/s/{setor.id}/').content.decode()
         t('a pasta mostra a caixinha de seleção em cada item e o botão Selecionar',
@@ -292,8 +297,8 @@ try:
         print('  -- recusas voltam para a pasta com a mensagem --')
         r = selecao(c, 'SETOR', [], )
         t('nada marcado volta para a pasta', r.status_code == 302 and r['Location'] == volta, r.get('Location'))
-        r = c.get('/drive/zip/selecao/', [('pasta', 'SETOR'), ('id', 'CONTRATOS'), ('id', 'PROPOSTAS'),
-                                          ('volta', 'https://golpe.exemplo/x')])
+        r = lido(c.get('/drive/zip/selecao/', [('pasta', 'SETOR'), ('id', 'CONTRATOS'), ('id', 'PROPOSTAS'),
+                                               ('volta', 'https://golpe.exemplo/x')]))
         t('volta para fora do portal é ignorada', r.status_code == 200
           or (r.status_code == 302 and r['Location'].startswith('/drive/')), r.get('Location'))
         with mock.patch.object(zip_copia, 'LIMITE_ARQUIVOS', 2):
@@ -309,7 +314,8 @@ try:
         r = c.get('/drive/zip/selecao/', [('pasta', 'SETOR'), ('id', '../etc'), ('volta', volta)])
         t('id inválido é recusado', r.status_code == 302)
         lo = zip_copia._vez
-        lo.acquire()
+        pegas = sum(lo.acquire(timeout=5) for _ in range(zip_copia.ZIPS_AO_MESMO_TEMPO))
+        t('nenhum zip anterior ficou segurando a vez', pegas == zip_copia.ZIPS_AO_MESMO_TEMPO, pegas)
         try:
             with mock.patch.object(zip_copia, 'ESPERA_PELA_VEZ', 0.05):
                 r = selecao(c, 'SETOR', ['CONTRATOS', 'PROPOSTAS'])
@@ -317,7 +323,57 @@ try:
             t('outro zip montando: espera a vez e, passou do tempo, pede para tentar de novo',
               r.status_code == 302 and any('Outro ZIP' in m for m in msgs), (r.status_code, msgs))
         finally:
-            lo.release()
+            for _ in range(pegas):
+                lo.release()
+
+        print('\n== 5 GB E O ZIP SAINDO EM PEDAÇOS (26/11/2026) ==')
+        t('o limite é de 5 GB', zip_copia.LIMITE_BYTES == 5 * 1024 ** 3, zip_copia.LIMITE_BYTES)
+        t('e de 3000 arquivos', zip_copia.LIMITE_ARQUIVOS == 3000, zip_copia.LIMITE_ARQUIVOS)
+        with mock.patch.object(zip_copia, 'LIMITE_BYTES', 10):
+            r = selecao(c, 'SETOR', ['CONTRATOS', 'PROPOSTAS'])
+            msgs = [str(m) for m in r.wsgi_request._messages] if r.status_code == 302 else []
+        t('a mensagem do limite fala em GB quando passa de 1 GB', zip_copia._tamanho_h(5 * 1024 ** 3) == '5 GB'
+          and zip_copia._tamanho_h(500 * 1024 ** 2) == '500 MB', zip_copia._tamanho_h(5 * 1024 ** 3))
+        grande = dict(falso.itens['A1'], size=str(4 * 1024 ** 3))
+        with mock.patch.dict(falso.itens, {'A1': grande}):
+            r = baixar(c, 'CONTRATOS')
+        t('pasta de 4 GB passa do limite antigo e baixa', r.status_code == 200
+          and sorted(abrir_zip(r).namelist()) == ['Assinados/assinado.pdf', 'contrato.pdf', 'foto.jpg'],
+          (r.status_code, r.content[:120] if not r.streaming else ''))
+        grande = dict(falso.itens['A1'], size=str(6 * 1024 ** 3))
+        with mock.patch.dict(falso.itens, {'A1': grande}):
+            r = baixar(c, 'CONTRATOS')
+        t('passando de 5 GB, recusa e diz o limite', r.status_code == 400 and '5 GB' in r.json()['msg'],
+          r.content[:200])
+
+        r = baixar(c, 'CONTRATOS')
+        t('o download começa sem esperar o zip ficar pronto (sai em pedaços, sem tamanho)',
+          r.streaming and 'Content-Length' not in r and r['Content-Type'] == 'application/zip')
+        t('e o proxy é avisado para não segurar', r.get('X-Accel-Buffering') == 'no')
+
+        # O navegador desiste no meio: o servidor fecha a resposta, que fecha a transmissão.
+        transmissao, nome_zip, _resumo = zip_copia.preparar_zip(['CONTRATOS'])
+        resposta = zip_copia.resposta_zip(transmissao, nome_zip)
+        t('a resposta fecha a transmissão quando o servidor a fecha',
+          transmissao.close in resposta._resource_closers)
+        livres = zip_copia._vez._value
+        t('enquanto sai, o zip segura uma vez', livres == zip_copia.ZIPS_AO_MESMO_TEMPO - 1, livres)
+        primeiro = next(iter(transmissao))
+        t('o primeiro pedaço já é o começo do zip', primeiro[:2] == b'PK', primeiro[:4])
+        transmissao.close()
+        t('desistiu no meio: a vez volta', zip_copia._vez._value == zip_copia.ZIPS_AO_MESMO_TEMPO,
+          zip_copia._vez._value)
+        transmissao.close()
+        t('fechar de novo não devolve a vez duas vezes', zip_copia._vez._value == zip_copia.ZIPS_AO_MESMO_TEMPO)
+        r = baixar(c, 'CONTRATOS')
+        t('e o próximo zip baixa normalmente', r.status_code == 200 and abrir_zip(r).testzip() is None)
+        t('lido até o fim, a vez também volta', zip_copia._vez._value == zip_copia.ZIPS_AO_MESMO_TEMPO)
+
+        with mock.patch.object(zip_copia, 'ZIP64_A_PARTIR_DE', 1):
+            r = baixar(c, 'CONTRATOS')
+        pacote = abrir_zip(r)
+        t('arquivo grande entra em ZIP64 e o zip abre certo', pacote.testzip() is None
+          and pacote.read('contrato.pdf') == b'zz-contrato' * 10, pacote.namelist())
 
         print('  -- pasta liberada --')
         from drive.models import PastaLiberada

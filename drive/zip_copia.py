@@ -7,19 +7,19 @@ arquivo.
 
 O manifesto é o mesmo do "usar localmente" (``uso_local.montar``): ele já sabe
 descer a pasta, montar o caminho de cada arquivo e deixar de fora o que é
-nativo do Google (Documentos/Planilhas não têm bytes para copiar).
+nativo do Google (Documentos/Planilhas não têm bytes para copiar) — só que com
+os limites daqui.
 
-O zip é montado num arquivo temporário e devolvido como download. O limite é
-menor que o do "usar localmente" de propósito: aqui o servidor é quem baixa
-tudo do Google e comprime, e são só três workers — uma pasta de 2 GB seguraria
-um deles por vários minutos, e o portal inteiro sentiria. Passou do limite, a
-tela manda abrir uma subpasta.
+O zip vai saindo para o navegador enquanto é montado (26/11/2026, quando o
+limite subiu de 500 MB para 5 GB): antes ele ficava pronto inteiro no disco e só
+então o download começava — com 5 GB seriam minutos sem resposta (o proxy corta)
+e 5 GB a mais no disco do servidor. Agora o primeiro byte sai assim que o
+primeiro arquivo desce do Google, e no disco fica só o arquivo da vez.
 
 Os arquivos descem do Google ``EM_PARALELO`` de cada vez (cada thread com o seu cliente
 da API, ver ``gdrive.service``) e entram no zip na ordem do manifesto.
 """
 import logging
-import tempfile
 import threading
 import zipfile
 from collections import deque
@@ -31,10 +31,10 @@ import re
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import FileResponse, JsonResponse
+from django.http import JsonResponse, StreamingHttpResponse
 from django.shortcuts import redirect
 from django.urls import reverse
-from django.utils.http import url_has_allowed_host_and_scheme
+from django.utils.http import content_disposition_header, url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET
 
 from . import audit, gdrive, uso_local
@@ -43,18 +43,24 @@ from .permissions import ORDEM
 
 logger = logging.getLogger('drive.zip')
 
-# Cabe uma pasta de trabalho inteira, não o setor inteiro.
-LIMITE_ARQUIVOS = 300
-LIMITE_BYTES = 500 * 1024 ** 2
+# 26/11/2026: "O máx. permitido é 500mb, deve aumentar para pelo menos 5gb". O de
+# arquivos subiu junto (era 300): numa pasta de 5 GB de fotos ele travava antes.
+LIMITE_ARQUIVOS = 3000
+LIMITE_BYTES = 5 * 1024 ** 3
 # Memória sob controle (25/11/2026): cada arquivo desce do Google em pedaços para um
 # temporário (até 8 MB na memória, o resto no disco — ``gdrive._baixar_em_pedacos``) e entra
-# no zip aos poucos; o zip também é montado no disco. Dois arquivos descem ao mesmo tempo e
-# cada processo monta UM zip por vez — o próximo espera a vez (até ``ESPERA_PELA_VEZ``).
-# Demora mais numa pasta grande, mas o portal não cai.
+# no zip aos poucos, que já vai saindo para o navegador. Dois arquivos descem ao mesmo tempo
+# e cada processo monta até ``ZIPS_AO_MESMO_TEMPO`` zips — o próximo espera a vez (até
+# ``ESPERA_PELA_VEZ``). A vez dura o download inteiro (a montagem anda no ritmo de quem
+# baixa), por isso são dois e não um: um ZIP de 5 GB não prende os outros do processo.
 EM_PARALELO = 2
-ZIPS_AO_MESMO_TEMPO = 1
+ZIPS_AO_MESMO_TEMPO = 2
 ESPERA_PELA_VEZ = 120          # segundos
 _vez = threading.BoundedSemaphore(ZIPS_AO_MESMO_TEMPO)
+PEDACO = 1024 * 1024
+# Acima disto o arquivo entra no zip já no formato ZIP64 (o tamanho só se sabe no fim,
+# e o zip saindo direto não volta para corrigir o cabeçalho).
+ZIP64_A_PARTIR_DE = 1024 ** 3
 
 
 class ZipGrandeDemais(Exception):
@@ -71,17 +77,26 @@ def _nome_do_arquivo(nome):
     return (limpo or 'drive')[:80] + '.zip'
 
 
+def _tamanho_h(n):
+    gb = n / 1024 ** 3
+    if gb >= 1:
+        return f'{gb:g} GB'
+    return f'{n // 1024 ** 2} MB'
+
+
 def _manifesto_de(ids, incluir_google):
     """Junta o manifesto de vários itens num só, cada pasta com o nome dela na frente.
 
     Um item só fica como sempre foi (o zip da pasta abre direto no conteúdo
     dela). Vários: cada pasta vira uma pasta dentro do zip.
     """
+    limites = {'incluir_google': incluir_google, 'limite_arquivos': LIMITE_ARQUIVOS,
+               'limite_bytes': LIMITE_BYTES}
     if len(ids) == 1:
-        return uso_local.montar(ids[0], incluir_google=incluir_google)
+        return uso_local.montar(ids[0], **limites)
     junto = {'nome': '', 'arquivos': [], 'ignorados': [], 'bytes': 0, 'excedeu': False}
     for file_id in ids:
-        parte = uso_local.montar(file_id, incluir_google=incluir_google)
+        parte = uso_local.montar(file_id, **limites)
         prefixo = f"{parte['nome']}/" if parte['pasta'] else ''
         for arquivo in parte['arquivos']:
             junto['arquivos'].append(dict(arquivo, caminho=prefixo + (arquivo['caminho'] or arquivo['nome'])))
@@ -95,13 +110,12 @@ def _manifesto_de(ids, incluir_google):
     return junto
 
 
-def montar_zip(file_id, incluir_google=False):
-    """(arquivo temporário do zip, nome sugerido, resumo). Fecha por conta de quem chama."""
-    return montar_zip_de([file_id], incluir_google=incluir_google)
+def preparar_zip(ids, nome='', incluir_google=False):
+    """(transmissão, nome do .zip, resumo) de um ou mais itens (pastas e arquivos misturados).
 
-
-def montar_zip_de(ids, nome='', incluir_google=False):
-    """O zip de um ou mais itens (pastas e arquivos misturados).
+    Confere os limites e pega a vez aqui, antes de qualquer byte sair — assim a
+    recusa ainda volta como mensagem na tela. A transmissão devolve a vez quando
+    termina ou quando o navegador desiste (``close``).
 
     `incluir_google`: Documento/Planilha/Apresentação entram convertidos para
     Word/Excel/PowerPoint, como no "Baixar" de um arquivo só.
@@ -110,12 +124,10 @@ def montar_zip_de(ids, nome='', incluir_google=False):
     arquivos = manifesto['arquivos']
 
     if manifesto['excedeu'] or len(arquivos) > LIMITE_ARQUIVOS or manifesto['bytes'] > LIMITE_BYTES:
+        onde = 'Esta seleção' if len(ids) > 1 else 'Esta pasta'
         raise ZipGrandeDemais(
-            f'Esta seleção passa do limite do ZIP ({LIMITE_ARQUIVOS} arquivos ou '
-            f'{LIMITE_BYTES // (1024 ** 2)} MB). Abra uma subpasta e baixe em partes.'
-            if len(ids) > 1 else
-            f'Esta pasta passa do limite do ZIP ({LIMITE_ARQUIVOS} arquivos ou '
-            f'{LIMITE_BYTES // (1024 ** 2)} MB). Abra uma subpasta e baixe em partes.')
+            f'{onde} passa do limite do ZIP ({LIMITE_ARQUIVOS} arquivos ou '
+            f'{_tamanho_h(LIMITE_BYTES)}). Abra uma subpasta e baixe em partes.')
     if not arquivos:
         vazio = ('Só há arquivos do Google (Documentos, Planilhas) aqui — eles não têm '
                  'bytes para zipar.' if manifesto['ignorados'] else 'Não há arquivos para zipar aqui.')
@@ -123,78 +135,172 @@ def montar_zip_de(ids, nome='', incluir_google=False):
 
     if not _vez.acquire(timeout=ESPERA_PELA_VEZ):
         raise ZipOcupado('Outro ZIP está sendo montado agora. Tente de novo em um ou dois minutos.')
-    try:
-        return _montar(arquivos, manifesto, nome)
-    finally:
-        _vez.release()
-
-
-def _montar(arquivos, manifesto, nome):
-    temporario = tempfile.NamedTemporaryFile(suffix='.zip')
-    dentro = set()
-    com_erro = []
-    def _baixar(arquivo):
-        try:
-            return gdrive.baixar(arquivo['id'])
-        finally:
-            connections.close_all()          # a conexão desta thread do pool não fica aberta
-
-    # compresslevel=1: foto e PDF quase não comprimem; o que interessa aqui é
-    # juntar tudo num arquivo só, sem fazer o servidor suar.
-    with zipfile.ZipFile(temporario, 'w', zipfile.ZIP_DEFLATED, allowZip64=True,
-                         compresslevel=1) as pacote, ThreadPoolExecutor(EM_PARALELO, 'drive-zip') as pool:
-        # Baixa em paralelo, grava em ordem: a janela anda um arquivo por vez.
-        pendentes = deque()
-        fila = iter(arquivos)
-        for arquivo in fila:
-            pendentes.append((arquivo, pool.submit(_baixar, arquivo)))
-            if len(pendentes) >= EM_PARALELO:
-                break
-        while pendentes:
-            arquivo, futuro = pendentes.popleft()
-            proximo = next(fila, None)
-            if proximo is not None:
-                pendentes.append((proximo, pool.submit(_baixar, proximo)))
-            try:
-                conteudo, nome_baixado, _mime = futuro.result()
-            except gdrive.DriveError as exc:
-                com_erro.append(arquivo['nome'])
-                logger.warning('ZIP: %s não entrou (%s)', arquivo['nome'], exc)
-                continue
-            caminho = arquivo['caminho'] or arquivo['nome']
-            if arquivo.get('google') and nome_baixado:
-                # Doc do Google vem convertido: o nome ganha a extensão (.docx, .xlsx…).
-                pasta = caminho.rsplit('/', 1)[0] + '/' if '/' in caminho else ''
-                caminho = pasta + nome_baixado
-            # Dois arquivos com o mesmo nome na mesma pasta: o segundo ganha sufixo.
-            base, n = caminho, 2
-            while caminho in dentro:
-                pedaco = base.rsplit('.', 1)
-                caminho = f'{pedaco[0]} ({n}).{pedaco[1]}' if len(pedaco) == 2 else f'{base} ({n})'
-                n += 1
-            dentro.add(caminho)
-            with pacote.open(caminho, 'w') as destino:
-                for pedaco_bytes in iter(lambda: conteudo.read(1024 * 256), b''):
-                    destino.write(pedaco_bytes)
-            conteudo.close()
-        if com_erro:
-            pacote.writestr(
-                'ARQUIVOS-QUE-NAO-ENTRARAM.txt',
-                'O Google não devolveu estes arquivos na hora de zipar:\n\n'
-                + '\n'.join(f'- {nome}' for nome in com_erro)
-                + '\n\nTente baixá-los direto pelo portal.\n')
-
-    temporario.flush()
-    temporario.seek(0)
     nome = nome or manifesto['nome']
     resumo = {
-        'arquivos': len(arquivos) - len(com_erro),
+        'arquivos': len(arquivos),
         'bytes': manifesto['bytes'],
         'ignorados': manifesto['ignorados'],
-        'com_erro': com_erro,
         'nome': nome,
     }
-    return temporario, _nome_do_arquivo(nome), resumo
+    return _Transmissao(arquivos), _nome_do_arquivo(nome), resumo
+
+
+def resposta_zip(transmissao, nome_zip):
+    """O download: sai em pedaços, sem tamanho total (o zip ainda está sendo montado)."""
+    resposta = StreamingHttpResponse(transmissao, content_type='application/zip')
+    resposta['Content-Disposition'] = content_disposition_header(True, nome_zip)
+    resposta['Cache-Control'] = 'no-store'
+    # Proxy (nginx) na frente: passa direto, sem juntar o zip inteiro antes.
+    resposta['X-Accel-Buffering'] = 'no'
+    return resposta
+
+
+class _Saida:
+    """Onde o ``zipfile`` escreve: guarda os bytes até a transmissão mandar adiante.
+
+    Sem ``seek``: o ``zipfile`` percebe que não dá para voltar e escreve o
+    tamanho de cada arquivo depois dele (descritor de dados), como precisa um
+    zip que sai direto para a rede.
+    """
+
+    def __init__(self):
+        self._partes = []
+        self._pos = 0
+
+    def write(self, dados):
+        if dados:
+            self._partes.append(bytes(dados))
+            self._pos += len(dados)
+        return len(dados)
+
+    def tell(self):
+        return self._pos
+
+    def flush(self):
+        pass
+
+    def tirar(self):
+        dados = b''.join(self._partes)
+        self._partes.clear()
+        return dados
+
+
+class _Transmissao:
+    """O zip saindo aos pedaços; devolve a vez uma vez só, no fim ou na desistência."""
+
+    def __init__(self, arquivos):
+        self.arquivos = arquivos
+        self.com_erro = []
+        self._gerador = None
+        self._solta = False
+
+    def __iter__(self):
+        if self._gerador is None:
+            self._gerador = self._gerar()
+        return self._gerador
+
+    def _soltar(self):
+        if not self._solta:
+            self._solta = True
+            _vez.release()
+
+    def close(self):
+        try:
+            if self._gerador is not None:
+                self._gerador.close()
+        finally:
+            self._soltar()
+
+    def __del__(self):
+        # Resposta descartada sem ninguém ler (não deveria acontecer no servidor,
+        # que sempre chama close): a vez não fica presa.
+        try:
+            self._soltar()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _gerar(self):
+        saida = _Saida()
+        dentro = set()
+        pool = ThreadPoolExecutor(EM_PARALELO, 'drive-zip')
+        pendentes = deque()
+
+        def _baixar(arquivo):
+            try:
+                return gdrive.baixar(arquivo['id'])
+            finally:
+                connections.close_all()          # a conexão desta thread do pool não fica aberta
+
+        try:
+            # compresslevel=1: foto e PDF quase não comprimem; o que interessa aqui é
+            # juntar tudo num arquivo só, sem fazer o servidor suar.
+            with zipfile.ZipFile(saida, 'w', zipfile.ZIP_DEFLATED, allowZip64=True,
+                                 compresslevel=1) as pacote:
+                # Baixa em paralelo, grava em ordem: a janela anda um arquivo por vez.
+                fila = iter(self.arquivos)
+                for arquivo in fila:
+                    pendentes.append((arquivo, pool.submit(_baixar, arquivo)))
+                    if len(pendentes) >= EM_PARALELO:
+                        break
+                while pendentes:
+                    arquivo, futuro = pendentes.popleft()
+                    proximo = next(fila, None)
+                    if proximo is not None:
+                        pendentes.append((proximo, pool.submit(_baixar, proximo)))
+                    try:
+                        conteudo, nome_baixado, _mime = futuro.result()
+                    except gdrive.DriveError as exc:
+                        self.com_erro.append(arquivo['nome'])
+                        logger.warning('ZIP: %s não entrou (%s)', arquivo['nome'], exc)
+                        continue
+                    try:
+                        caminho = self._caminho(arquivo, nome_baixado, dentro)
+                        grande = int(arquivo.get('tamanho') or 0) >= ZIP64_A_PARTIR_DE
+                        with pacote.open(caminho, 'w', force_zip64=grande) as destino:
+                            for pedaco_bytes in iter(lambda: conteudo.read(PEDACO), b''):
+                                destino.write(pedaco_bytes)
+                                dados = saida.tirar()
+                                if dados:
+                                    yield dados
+                    finally:
+                        conteudo.close()
+                    dados = saida.tirar()
+                    if dados:
+                        yield dados
+                if self.com_erro:
+                    pacote.writestr(
+                        'ARQUIVOS-QUE-NAO-ENTRARAM.txt',
+                        'O Google não devolveu estes arquivos na hora de zipar:\n\n'
+                        + '\n'.join(f'- {nome}' for nome in self.com_erro)
+                        + '\n\nTente baixá-los direto pelo portal.\n')
+            yield saida.tirar()                 # o índice do zip, escrito no fechamento
+        finally:
+            # Navegador desistiu no meio: o que já desceu do Google é jogado fora.
+            for _arquivo, futuro in pendentes:
+                futuro.cancel()
+            pool.shutdown(wait=True)
+            for _arquivo, futuro in pendentes:
+                if futuro.done() and not futuro.cancelled() and futuro.exception() is None:
+                    futuro.result()[0].close()
+            if self.com_erro:
+                logger.warning('ZIP: %d arquivo(s) ficaram de fora', len(self.com_erro))
+            self._soltar()
+
+    @staticmethod
+    def _caminho(arquivo, nome_baixado, dentro):
+        caminho = arquivo['caminho'] or arquivo['nome']
+        if arquivo.get('google') and nome_baixado:
+            # Doc do Google vem convertido: o nome ganha a extensão (.docx, .xlsx…).
+            pasta = caminho.rsplit('/', 1)[0] + '/' if '/' in caminho else ''
+            caminho = pasta + nome_baixado
+        # Dois arquivos com o mesmo nome na mesma pasta: o segundo ganha sufixo.
+        base, n = caminho, 2
+        while caminho in dentro:
+            pedaco = base.rsplit('.', 1)
+            caminho = f'{pedaco[0]} ({n}).{pedaco[1]}' if len(pedaco) == 2 else f'{base} ({n})'
+            n += 1
+        dentro.add(caminho)
+        return caminho
 
 
 @login_required
@@ -207,7 +313,7 @@ def baixar_zip(request, file_id):
         _deny(request, file_id=file_id, detalhe='zip')
 
     try:
-        temporario, nome, resumo = montar_zip(file_id)
+        transmissao, nome, resumo = preparar_zip([file_id])
     except ZipGrandeDemais as exc:
         return JsonResponse({'ok': False, 'msg': str(exc)}, status=400)
     except gdrive.DriveNaoConfigurado as exc:
@@ -218,15 +324,9 @@ def baixar_zip(request, file_id):
     detalhe = f"zip · {resumo['arquivos']} arquivo(s)"
     if resumo['ignorados']:
         detalhe += f" · {len(resumo['ignorados'])} do Google fora"
-    if resumo['com_erro']:
-        detalhe += f" · {len(resumo['com_erro'])} sem resposta"
     audit.registrar(request.user, 'DOWNLOAD', request=request, file_id=file_id,
                     file_name=resumo['nome'], sector=raiz.sector, detalhe=detalhe)
-
-    resposta = FileResponse(temporario, as_attachment=True, filename=nome,
-                            content_type='application/zip')
-    resposta['Cache-Control'] = 'no-store'
-    return resposta
+    return resposta_zip(transmissao, nome)
 
 
 # ── Baixar só o que foi selecionado (26/11/2026) ─────────────────────────────
@@ -297,7 +397,7 @@ def baixar_zip_selecao(request):
             nome = ''
         nome = f'{nome or "Drive"} - {len(ids)} itens'
     try:
-        temporario, nome_zip, resumo = montar_zip_de(ids, nome=nome)
+        transmissao, nome_zip, resumo = preparar_zip(ids, nome=nome)
     except ZipGrandeDemais as exc:
         return recusa(str(exc))
     except gdrive.DriveNaoConfigurado as exc:
@@ -308,13 +408,10 @@ def baixar_zip_selecao(request):
     detalhe = f"zip seleção · {len(ids)} item(ns) · {resumo['arquivos']} arquivo(s)"
     if resumo['ignorados']:
         detalhe += f" · {len(resumo['ignorados'])} do Google fora"
-    if resumo['com_erro']:
-        detalhe += f" · {len(resumo['com_erro'])} sem resposta"
     audit.registrar(request.user, 'DOWNLOAD', request=request, file_id=ids[0] if len(ids) == 1 else '',
                     folder_id=pasta, file_name=resumo['nome'], sector=raiz.sector, detalhe=detalhe)
 
-    resposta = FileResponse(temporario, as_attachment=True, filename=nome_zip, content_type='application/zip')
-    resposta['Cache-Control'] = 'no-store'
+    resposta = resposta_zip(transmissao, nome_zip)
     marca = request.GET.get('t', '')
     if re.fullmatch(r'[A-Za-z0-9]{6,40}', marca):
         resposta.set_cookie('dv_zip_pronto', marca, max_age=120, samesite='Lax')

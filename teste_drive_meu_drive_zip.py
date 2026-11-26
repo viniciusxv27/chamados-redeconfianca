@@ -155,10 +155,13 @@ try:
 
     def baixar(cliente, *ids, pasta='', extra=''):
         q = '&'.join(f'id={i}' for i in ids)
-        return cliente.get(f'/drive/meu-drive/zip/?{q}&pasta={pasta}{extra}')
+        r = cliente.get(f'/drive/meu-drive/zip/?{q}&pasta={pasta}{extra}')
+        if getattr(r, 'streaming', False):       # lido até o fim, como o navegador (devolve a vez)
+            r.zip_bytes = b''.join(r.streaming_content)
+        return r
 
     def abrir_zip(resposta):
-        return zipfile.ZipFile(io.BytesIO(b''.join(resposta.streaming_content)))
+        return zipfile.ZipFile(io.BytesIO(resposta.zip_bytes))
 
     with mock.patch.multiple(gdrive, **FALSOS):
         print('== A PASTA EM ZIP ==')

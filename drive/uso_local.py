@@ -97,7 +97,7 @@ def _varrer(folder_id, prefixo, profundidade, estado):
             if e_nativo_do_google(meta) and not _entra_convertido(meta, estado):
                 estado['ignorados'].append(meta.get('name') or '')
                 continue
-            if len(estado['arquivos']) >= LIMITE_ARQUIVOS or estado['bytes'] > LIMITE_BYTES:
+            if len(estado['arquivos']) >= estado['limite_arquivos'] or estado['bytes'] > estado['limite_bytes']:
                 estado['excedeu'] = True
                 return
             arquivo = _arquivo(meta, f"{prefixo}{meta.get('name')}", folder_id)
@@ -107,15 +107,19 @@ def _varrer(folder_id, prefixo, profundidade, estado):
             return
 
 
-def montar(file_id, incluir_google=False):
+def montar(file_id, incluir_google=False, limite_arquivos=None, limite_bytes=None):
     """O que vai para a cópia de trabalho de um arquivo ou de uma pasta.
 
     `incluir_google`: Documento/Planilha/Apresentação entram (o ZIP do Meu
     Drive os baixa convertidos para Office); o "usar localmente" não usa.
+    `limite_arquivos`/`limite_bytes`: o ZIP tem os dele (``zip_copia``); sem
+    eles, valem os do "usar localmente".
     """
     meta = gdrive.obter(file_id, fields=CAMPOS)
     estado = {'arquivos': [], 'pastas': [], 'ignorados': [], 'fundo_demais': [],
-              'bytes': 0, 'excedeu': False, 'incluir_google': incluir_google}
+              'bytes': 0, 'excedeu': False, 'incluir_google': incluir_google,
+              'limite_arquivos': limite_arquivos or LIMITE_ARQUIVOS,
+              'limite_bytes': limite_bytes or LIMITE_BYTES}
 
     if e_pasta(meta):
         _varrer(file_id, '', 1, estado)
@@ -138,7 +142,7 @@ def montar(file_id, incluir_google=False):
         'fundo_demais': estado['fundo_demais'],
         'bytes': estado['bytes'],
         'excedeu': estado['excedeu'],
-        'limites': {'arquivos': LIMITE_ARQUIVOS, 'bytes': LIMITE_BYTES,
+        'limites': {'arquivos': estado['limite_arquivos'], 'bytes': estado['limite_bytes'],
                     'profundidade': LIMITE_PROFUNDIDADE},
     }
 

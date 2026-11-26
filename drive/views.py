@@ -1879,7 +1879,7 @@ def meu_drive_zip(request):
             nome = ''
         nome = f'{nome or "Meu Drive"} - {len(ids)} itens'
     try:
-        temporario, nome_zip, resumo = zip_copia.montar_zip_de(ids, nome=nome, incluir_google=True)
+        transmissao, nome_zip, resumo = zip_copia.preparar_zip(ids, nome=nome, incluir_google=True)
     except zip_copia.ZipGrandeDemais as exc:
         return recusa(str(exc))
     except gdrive.DriveNaoConfigurado as exc:
@@ -1890,14 +1890,10 @@ def meu_drive_zip(request):
     detalhe = f"Meu Drive · zip · {len(ids)} item(ns) · {resumo['arquivos']} arquivo(s)"
     if resumo['ignorados']:
         detalhe += f" · {len(resumo['ignorados'])} fora"
-    if resumo['com_erro']:
-        detalhe += f" · {len(resumo['com_erro'])} sem resposta"
     audit.registrar(request.user, 'DOWNLOAD', request=request, file_id=ids[0] if len(ids) == 1 else '',
                     folder_id=pasta, file_name=resumo['nome'], detalhe=detalhe)
 
-    resposta = FileResponse(temporario, as_attachment=True, filename=nome_zip,
-                            content_type='application/zip')
-    resposta['Cache-Control'] = 'no-store'
+    resposta = zip_copia.resposta_zip(transmissao, nome_zip)
     marca = request.GET.get('t', '')
     if re.fullmatch(r'[A-Za-z0-9]{6,40}', marca):
         resposta.set_cookie('md_zip_pronto', marca, max_age=120, samesite='Lax')
