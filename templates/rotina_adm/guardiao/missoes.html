@@ -1,0 +1,86 @@
+{% extends 'rotina_adm/guardiao/_base.html' %}
+{% block mg_conteudo %}
+<section class="mg-card mg-card-pad mg-placar rc-sobe">
+    <div class="mg-pontuacao" style="margin:0">
+        <div class="mg-anel" style="--p:{{ total|stringformat:'.2f' }}"><div><strong>{{ total_txt }}%</strong><small>do ciclo</small></div></div>
+        <div>
+            <span class="mg-nivel {{ nivel.classe }}"><i class="fas {{ nivel.icone }}"></i>{{ nivel.nome }}</span>
+            <div class="mg-total">{{ total_txt }}<small>/ 100 pts</small></div>
+            <div style="font-size:12px;color:var(--mg-texto-3)">Ciclo de {{ mes_extenso }}{% if aberto %} · pontos até hoje{% endif %}</div>
+        </div>
+    </div>
+    <div class="mg-pilares-mini">
+        {% for p in pilares %}
+        <div class="mg-pilar-mini {{ p.chave }}"><b>{{ p.chave }}</b><div>{{ p.pontos_txt }} <small>/{{ p.maximo }}</small></div><div class="mg-trilho"><i style="--w:{{ p.pct|stringformat:'.1f' }}%"></i></div></div>
+        {% endfor %}
+    </div>
+</section>
+
+{% for p in pilares %}
+<section class="mg-secao {{ p.chave }}" data-rc-revela>
+    <div class="mg-secao-cab"><h2>{{ p.chave }}</h2><p>{{ p.lema }} · <b>{{ p.pontos_txt }}</b>/{{ p.maximo }} pts</p></div>
+    <div class="mg-missoes">
+        {% for m in p.missoes %}
+        <article class="mg-card mg-missao" id="{{ m.chave }}">
+            <div class="mg-missao-cab">
+                <div class="mg-missao-icone"><i class="fas {{ m.icone }}"></i></div>
+                <div style="min-width:0">
+                    <h3>{{ m.numero|stringformat:'02d' }}. {{ m.nome }}</h3>
+                    <p>{{ m.descricao }}</p>
+                </div>
+                <div class="mg-missao-pts">{{ m.pontos_txt }}<small>/{{ m.maximo }}</small></div>
+            </div>
+            <div class="mg-trilho"><i style="--w:{{ m.pct_barra|stringformat:'.1f' }}%"></i></div>
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap">
+                <span class="mg-resumo">{{ m.resumo }}</span>
+                <span class="mg-selo {{ m.status }}">{% if m.status == 'cumprida' %}Cumprida{% elif m.status == 'parcial' %}Em andamento{% elif m.status == 'perdida' %}Não cumprida{% else %}Pendente{% endif %}</span>
+            </div>
+            {% if m.aviso %}<div class="mg-aviso"><i class="fas fa-info-circle"></i><div>{{ m.aviso }}</div></div>{% endif %}
+
+            {% if m.chave == 'checklojas' and loja %}
+                {% if m.lancamento %}
+                <div class="mg-resumo">{% if m.lancamento.observacao %}“{{ m.lancamento.observacao }}”{% endif %}</div>
+                {% if gestor %}<form method="post" action="{% url 'rotina_adm:guardiao_lancar' %}">{% csrf_token %}<input type="hidden" name="acao" value="remover_checklojas"><input type="hidden" name="pessoa" value="{{ pessoa.id }}"><input type="hidden" name="mes" value="{{ mes }}"><input type="hidden" name="ancora" value="checklojas"><button class="mg-botao pequeno" onclick="return confirm('Remover o registro do CheckLojas deste mês?')"><i class="fas fa-undo"></i>Desfazer registro</button></form>{% endif %}
+                {% elif pode_marcar and mes_atual or gestor %}
+                <form method="post" action="{% url 'rotina_adm:guardiao_lancar' %}" class="mg-form">{% csrf_token %}
+                    <input type="hidden" name="acao" value="checklojas"><input type="hidden" name="pessoa" value="{{ pessoa.id }}"><input type="hidden" name="mes" value="{{ mes }}"><input type="hidden" name="ancora" value="checklojas">
+                    {% if gestor and not mes_atual %}<label>Feito em<input type="date" name="data" class="mg-input" value="{{ fim|date:'Y-m-d' }}" max="{{ fim|date:'Y-m-d' }}" min="{{ inicio|date:'Y-m-d' }}"></label>{% endif %}
+                    <label style="flex:3 1 220px">Observação (opcional)<input type="text" name="observacao" class="mg-input" maxlength="2000" placeholder="O que a inspeção encontrou"></label>
+                    <button class="mg-botao primario"><i class="fas fa-clipboard-check"></i>Registrar CheckLojas</button>
+                </form>
+                {% endif %}
+            {% elif m.chave == 'estoque_total' and loja %}
+                {% if m.lancamento %}<div class="mg-resumo">Lançado por {{ m.lancamento.lancado_por.get_full_name|default:'—' }} em {{ m.lancamento.data|date:'d/m/Y' }}{% if m.lancamento.observacao %} · “{{ m.lancamento.observacao }}”{% endif %}</div>{% endif %}
+                {% if gestor %}
+                <form method="post" action="{% url 'rotina_adm:guardiao_lancar' %}" class="mg-form">{% csrf_token %}
+                    <input type="hidden" name="acao" value="estoque_total"><input type="hidden" name="pessoa" value="{{ pessoa.id }}"><input type="hidden" name="mes" value="{{ mes }}"><input type="hidden" name="ancora" value="estoque_total">
+                    <label>Conformidade (%)<input type="number" name="valor" class="mg-input" min="0" max="100" step="0.01" required value="{% if m.lancamento %}{{ m.lancamento.valor|stringformat:'s' }}{% endif %}"></label>
+                    <label>Data do inventário<input type="date" name="data" class="mg-input" value="{% if m.lancamento %}{{ m.lancamento.data|date:'Y-m-d' }}{% else %}{{ hoje|date:'Y-m-d' }}{% endif %}"></label>
+                    <label style="flex:2 1 200px">Observação<input type="text" name="observacao" class="mg-input" maxlength="2000" value="{{ m.lancamento.observacao|default:'' }}"></label>
+                    <button class="mg-botao primario"><i class="fas fa-save"></i>{% if m.lancamento %}Atualizar{% else %}Lançar{% endif %}</button>
+                </form>
+                {% if m.lancamento %}<form method="post" action="{% url 'rotina_adm:guardiao_lancar' %}">{% csrf_token %}<input type="hidden" name="acao" value="remover_estoque_total"><input type="hidden" name="pessoa" value="{{ pessoa.id }}"><input type="hidden" name="mes" value="{{ mes }}"><input type="hidden" name="ancora" value="estoque_total"><button class="mg-botao pequeno" onclick="return confirm('Remover o resultado do inventário deste mês?')"><i class="fas fa-trash-alt"></i>Remover lançamento</button></form>{% endif %}
+                {% endif %}
+            {% elif m.chave == 'evolucao' and m.cursos %}
+                <ul class="mg-mini-lista">{% for c in m.cursos %}<li><span>{{ c.curso.titulo }} <span style="color:var(--mg-texto-3)">· prazo {{ c.curso.prazo|date:'d/m' }}</span></span><span class="mg-selo {% if c.situacao == 'no_prazo' %}cumprida{% elif c.situacao == 'pendente' %}{% elif c.situacao == 'recusado' %}parcial{% else %}perdida{% endif %}">{{ c.rotulo }}</span></li>{% endfor %}</ul>
+            {% elif m.chave == 'lvut' and loja %}
+                <a class="mg-link" href="{% url 'rotina_adm:guardiao_lvut' %}{% if q %}?{{ q }}{% endif %}">Explorar os quatro pilares de proteção <i class="fas fa-chevron-right"></i></a>
+            {% elif m.chave == 'recuperacao' and m.abertas %}
+                <ul class="mg-mini-lista">{% for c in m.abertas %}<li><span>{{ c.get_categoria_display }} · {{ c.data|date:'d/m' }}</span><span class="mg-selo bloqueada">{{ c.divergencias }} divergência{{ c.divergencias|pluralize }}</span></li>{% endfor %}</ul>
+                <a class="mg-link" href="{% url 'rotina_adm:guardiao_lvut' %}{% if q %}?{{ q }}{% endif %}#divergencias">Regularizar <i class="fas fa-chevron-right"></i></a>
+            {% elif m.chave == 'agenda' and m.detalhe %}
+                <ul class="mg-mini-lista">
+                    <li><span>Check-list diário da loja (até o horário)</span><span>{{ m.detalhe.check_ok }} de {{ m.detalhe.check_prev }}</span></li>
+                    <li><span>Rotina Gerencial (concluída no dia){% if not m.detalhe.tem_rotina %} · sem rotina ativa{% endif %}</span><span>{{ m.detalhe.rot_ok }} de {{ m.detalhe.rot_prev }}</span></li>
+                </ul>
+            {% elif m.chave == 'melhoria' %}
+                <a class="mg-link" href="/impulso/inovar/nova/">Enviar uma ideia no Inovar <i class="fas fa-chevron-right"></i></a>
+            {% elif m.link %}
+                <a class="mg-link" href="{{ m.link }}">Ver a origem <i class="fas fa-chevron-right"></i></a>
+            {% endif %}
+        </article>
+        {% endfor %}
+    </div>
+</section>
+{% endfor %}
+{% endblock %}

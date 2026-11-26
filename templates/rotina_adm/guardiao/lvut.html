@@ -1,0 +1,80 @@
+{% extends 'rotina_adm/guardiao/_base.html' %}
+{% block mg_conteudo %}
+{% with m=por_chave.lvut r=por_chave.recuperacao %}
+{% if loja %}
+<section class="mg-card mg-central rc-sobe">
+    <div class="mg-central-cab">
+        <h2 class="mg-h2"><i class="fas fa-shield-alt" style="color:var(--mg-teal)"></i>Central de Proteção <span style="font-weight:500;color:var(--mg-texto-3);font-size:12.5px">· Missão 05 — Contagem LVUT</span></h2>
+        <strong class="grande">{{ m.pontos_txt }}/20</strong>
+    </div>
+    <div class="mg-trilho" style="--tom:var(--mg-teal);margin-top:12px;height:8px"><i style="--w:{{ m.pct_barra|stringformat:'.1f' }}%"></i></div>
+    <div class="mg-central-nums">
+        <div class="v">Conquistadas<b>{{ m.conquistadas }}</b></div>
+        <div class="a">Bloqueadas<b>{{ m.bloqueadas }}</b></div>
+        <div>Pendentes<b>{{ m.pendentes }}</b></div>
+        <div class="r">Perdidas<b>{{ m.perdidas }}</b></div>
+    </div>
+    <p style="margin:12px 0 0;font-size:12px;color:var(--mg-texto-3)">Cada categoria é contada uma vez em cada janela do mês ({% for n, de, ate in m.janelas %}{{ de|date:'d' }}–{{ ate|date:'d/m' }}{% if not forloop.last %}, {% endif %}{% endfor %}) e vale {{ por_contagem }} ponto. Contagem com divergência fica bloqueada até a regularização.</p>
+</section>
+
+{% if pode_marcar and mes_atual %}
+<section class="mg-card mg-card-pad rc-sobe" style="--i:1;margin-bottom:14px">
+    <h2 class="mg-h2" style="margin-bottom:12px"><i class="fas fa-plus-circle" style="color:var(--mg-teal)"></i>Registrar contagem de hoje</h2>
+    <form method="post" action="{% url 'rotina_adm:guardiao_contagem' %}" class="mg-form">{% csrf_token %}
+        <input type="hidden" name="pessoa" value="{{ pessoa.id }}"><input type="hidden" name="mes" value="{{ mes }}">
+        <label>Categoria<select name="categoria" class="mg-input" required><option value="">Escolha…</option>{% for valor, nome in categorias %}<option value="{{ valor }}">{{ nome }}</option>{% endfor %}</select></label>
+        <label style="flex:0 1 150px">Divergências<input type="number" name="divergencias" class="mg-input" min="0" max="100000" value="0" required></label>
+        <label style="flex:3 1 220px">Observação (opcional)<input type="text" name="observacao" class="mg-input" maxlength="2000" placeholder="Produtos, seriais ou ICCIDs divergentes"></label>
+        <button class="mg-botao primario"><i class="fas fa-check"></i>Registrar</button>
+    </form>
+</section>
+{% endif %}
+
+<div class="mg-categorias">
+    {% for cat in m.grade %}
+    <section class="mg-card mg-cat rc-sobe" style="--i:{{ forloop.counter|add:1 }}">
+        <div class="mg-cat-cab"><i class="fas {{ cat.icone }}"></i><h3>{{ cat.nome }}</h3><span>{{ cat.pontos }}/5</span></div>
+        <div class="mg-janelas">
+            {% for c in cat.celulas %}
+            <div class="mg-janela {{ c.situacao }}{% if c.atual %} atual{% endif %}" title="{% if c.contagem %}Contada em {{ c.contagem.data|date:'d/m' }}{% if c.contagem.feito_por %} por {{ c.contagem.feito_por.get_full_name }}{% endif %}{% if c.contagem.divergencias %} · {{ c.contagem.divergencias }} divergência(s){% endif %}{% endif %}">
+                <div>{{ c.de|date:'d' }}–{{ c.ate|date:'d/m' }}</div>
+                <i class="fas {% if c.situacao == 'conquistada' %}fa-check-circle{% elif c.situacao == 'recuperada' %}fa-sync-alt{% elif c.situacao == 'bloqueada' %}fa-lock{% elif c.situacao == 'pendente' %}fa-hourglass-half{% else %}fa-times-circle{% endif %}"></i>
+                <div>{% if c.situacao == 'conquistada' %}Conquistada{% elif c.situacao == 'recuperada' %}Recuperada{% elif c.situacao == 'bloqueada' %}Bloqueada{% elif c.situacao == 'pendente' %}Pendente{% elif c.situacao == 'perdida' %}Não regularizada{% else %}Não realizada{% endif %}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endfor %}
+</div>
+
+<section class="mg-card" id="divergencias" data-rc-revela style="scroll-margin-top:90px">
+    <div class="mg-card-cab">
+        <h2><i class="fas fa-sync-alt"></i>Protocolo de Recuperação LVUT</h2>
+        <span style="font-weight:800;color:var(--mg-teal)">{{ r.pontos_txt }}/10</span>
+    </div>
+    {% if r.abertas %}
+        {% for c in r.abertas %}
+        <div class="mg-divergencia">
+            <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:13px">
+                <b>{{ c.get_categoria_display }} · contada em {{ c.data|date:'d/m' }}{% if c.feito_por %} por {{ c.feito_por.get_full_name }}{% endif %}</b>
+                <span class="mg-selo bloqueada"><i class="fas fa-lock"></i>{{ c.divergencias }} divergência{{ c.divergencias|pluralize }}</span>
+            </div>
+            {% if c.observacao %}<div class="mg-resumo" style="margin-top:4px">“{{ c.observacao }}”</div>{% endif %}
+            {% if pode_marcar %}
+            <form method="post" action="{% url 'rotina_adm:guardiao_regularizar' c.id %}" class="mg-form" style="margin-top:10px">{% csrf_token %}
+                <input type="hidden" name="pessoa" value="{{ pessoa.id }}"><input type="hidden" name="mes" value="{{ mes }}"><input type="hidden" name="ancora" value="divergencias">
+                <label style="flex:3 1 240px">O que foi feito (evidência)<input type="text" name="regularizacao" class="mg-input" maxlength="2000" required placeholder="Ex.: ajuste no SAP, nota de transferência, produto localizado"></label>
+                <button class="mg-botao primario"><i class="fas fa-unlock"></i>Regularizar</button>
+            </form>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% else %}
+    <div class="mg-vazio">{{ r.resumo }}</div>
+    {% endif %}
+</section>
+{% else %}
+<div class="mg-aviso info"><i class="fas fa-info-circle"></i><div>A Proteção LVUT é da loja do Guardião.</div></div>
+{% endif %}
+{% endwith %}
+{% endblock %}

@@ -1,0 +1,40 @@
+{% extends 'rotina_adm/guardiao/_base.html' %}
+{% block mg_conteudo %}
+<section class="mg-card rc-sobe" style="margin-bottom:14px">
+    <div class="mg-card-cab"><h2><i class="fas fa-trophy" style="color:#d4a017"></i>Guardiões em Destaque · {{ mes_extenso }}</h2>{% if aberto %}<span style="font-size:12px;color:var(--mg-texto-3)">Parcial: pontos até hoje</span>{% endif %}</div>
+    {% if podio %}
+    <div class="mg-podio">
+        {% for ordem in '213' %}{% for l in podio %}{% if forloop.counter|stringformat:'s' == ordem %}
+        <div class="mg-degrau p{{ ordem }}">
+            {% if ordem == '1' %}<i class="fas fa-crown" style="color:#d4a017;font-size:20px;margin-bottom:6px"></i>{% else %}<i class="fas fa-medal" style="color:var(--c);font-size:18px;margin-bottom:6px"></i>{% endif %}
+            <div class="av">{% if l.pessoa.profile_picture %}<img src="{{ l.pessoa.profile_picture.url }}" alt="">{% else %}{{ l.nome|slice:':1'|upper }}{% endif %}</div>
+            <div class="nome">{{ l.nome }}</div><div class="loja">{{ l.loja }}</div>
+            <div class="base"><b>{{ ordem }}º</b><span style="font-weight:700">{{ l.total_txt }} pts</span></div>
+        </div>
+        {% endif %}{% endfor %}{% endfor %}
+    </div>
+    <p style="text-align:center;font-size:12px;color:var(--mg-texto-3);margin:0 0 16px">Guardião do Mês · reconhecimento de quem transforma responsabilidade em excelência.</p>
+    {% else %}
+    <div class="mg-vazio">Ainda ninguém pontuou neste ciclo.</div>
+    {% endif %}
+</section>
+
+<section class="mg-card" data-rc-revela>
+    <div class="mg-card-cab"><h2><i class="fas fa-list-ol"></i>Todos os Guardiões</h2><span style="font-size:12px;color:var(--mg-texto-3)">{{ ranking|length }} participante{{ ranking|length|pluralize }}</span></div>
+    {% if ranking %}
+    <ul class="mg-lista mg-rank">
+        {% for l in ranking %}
+        <li class="{% if l.pessoa.id == pessoa.id %}eu{% endif %}">
+            <span class="pos">{{ l.posicao }}º</span>
+            <span style="min-width:0"><b style="font-size:13.5px;overflow-wrap:anywhere">{{ l.nome }}</b><span class="meta"><span>{{ l.loja }}</span><span class="mg-nivel {{ l.nivel.classe }}">{{ l.nivel.nome }}</span></span></span>
+            <span class="mini">{% for p in l.pilares %}<span class="{{ p.chave }}" title="{{ p.chave }} {{ p.pontos_txt }}/{{ p.maximo }}"><span class="mg-trilho"><i style="--w:{{ p.pct|stringformat:'.1f' }}%"></i></span></span>{% endfor %}</span>
+            <span style="text-align:right;font-weight:800;color:var(--mg-texto);font-size:14px">{{ l.total_txt }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <div class="mg-vazio">Nenhum Guardião ainda: o ranking mostra quem tem a Rotina ADM liberada e é de loja.{% if superadmin %} Libere em <a class="mg-link" href="{% url 'rotina_adm:acessos' %}">Acessos</a>.{% endif %}</div>
+    {% endif %}
+</section>
+<p style="font-size:12px;color:var(--mg-texto-3);margin:10px 4px 0">Os critérios de desempate e a premiação do Guardião do Mês ainda serão definidos pela liderança. Empate aqui sai em ordem alfabética.</p>
+{% endblock %}

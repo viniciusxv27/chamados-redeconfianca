@@ -1,0 +1,59 @@
+{% extends 'rotina_adm/guardiao/_base.html' %}
+{% block mg_conteudo %}
+<section class="mg-card rc-sobe" style="margin-bottom:14px">
+    <div class="mg-faixa"><i class="fas fa-calendar-alt" style="font-size:20px"></i><div><h2>Minha Agenda de Missões</h2><p>Central de Comando do Guardião · ciclo {{ ciclo }}</p></div></div>
+    <div class="mg-agenda-nums">
+        <div>Missões atribuídas<b>{{ cartoes|length }}</b></div>
+        <div>Missões cumpridas<b style="color:var(--mg-verde)">{{ concluidas }}</b></div>
+        <div>Progresso<b>{% if cartoes %}{% widthratio concluidas cartoes|length 100 %}%{% else %}—{% endif %}</b></div>
+    </div>
+    {% if proprio or gestor %}
+    <form method="post" action="{% url 'rotina_adm:guardiao_missao' %}" class="mg-form" style="padding:0 20px 16px">{% csrf_token %}
+        <input type="hidden" name="acao" value="nova"><input type="hidden" name="pessoa" value="{{ pessoa.id }}"><input type="hidden" name="mes" value="{{ mes }}">
+        <label style="flex:3 1 240px">Nova missão<input type="text" name="titulo" class="mg-input" maxlength="200" required placeholder="Ex.: Organização de acessórios"></label>
+        <label>Quem pediu<select name="origem" class="mg-input">{% for valor, nome in origens %}<option value="{{ valor }}">{{ nome }}</option>{% endfor %}</select></label>
+        <label style="flex:0 1 160px">Prazo<input type="date" name="prazo" class="mg-input" required value="{{ hoje|date:'Y-m-d' }}"></label>
+        <button class="mg-botao primario"><i class="fas fa-plus"></i>Incluir</button>
+    </form>
+    {% endif %}
+    <div class="mg-kanban">
+        {% for col in colunas %}
+        <div class="mg-coluna {{ col.status }}">
+            <h3>{{ col.nome }} ({{ col.cartoes|length }})</h3>
+            {% for c in col.cartoes %}
+            <div class="mg-tarefa{% if c.atrasada %} atrasada{% endif %}">
+                {% if c.manual %}<div class="t">{{ c.titulo }}</div>{% else %}<a class="t" href="{{ c.href }}">{{ c.titulo }}</a>{% endif %}
+                <div class="m"><span>{{ c.tipo }}</span><span>{% if c.atrasada %}Atrasada · {% endif %}{{ c.prazo|date:'d/m' }}</span></div>
+                {% if c.manual and proprio or c.manual and gestor %}
+                <div class="mg-tarefa-acoes">
+                    <span>
+                    {% if col.status != 'ATRIBUIDA' %}<form method="post" action="{% url 'rotina_adm:guardiao_missao' %}">{% csrf_token %}<input type="hidden" name="acao" value="mover"><input type="hidden" name="missao" value="{{ c.obj.id }}"><input type="hidden" name="pessoa" value="{{ pessoa.id }}"><input type="hidden" name="mes" value="{{ mes }}"><input type="hidden" name="status" value="{% if col.status == 'CUMPRIDA' %}EM_ACAO{% else %}ATRIBUIDA{% endif %}"><button class="mg-redondo" title="Voltar" aria-label="Voltar"><i class="fas fa-chevron-left"></i></button></form>{% endif %}
+                    <form method="post" action="{% url 'rotina_adm:guardiao_missao' %}">{% csrf_token %}<input type="hidden" name="acao" value="excluir"><input type="hidden" name="missao" value="{{ c.obj.id }}"><input type="hidden" name="pessoa" value="{{ pessoa.id }}"><input type="hidden" name="mes" value="{{ mes }}"><button class="mg-redondo" title="Excluir" aria-label="Excluir" onclick="return confirm('Excluir esta missão?')"><i class="fas fa-trash-alt"></i></button></form>
+                    </span>
+                    {% if col.status != 'CUMPRIDA' %}<form method="post" action="{% url 'rotina_adm:guardiao_missao' %}">{% csrf_token %}<input type="hidden" name="acao" value="mover"><input type="hidden" name="missao" value="{{ c.obj.id }}"><input type="hidden" name="pessoa" value="{{ pessoa.id }}"><input type="hidden" name="mes" value="{{ mes }}"><input type="hidden" name="status" value="{% if col.status == 'ATRIBUIDA' %}EM_ACAO{% else %}CUMPRIDA{% endif %}"><button class="mg-redondo" title="Avançar" aria-label="Avançar"><i class="fas fa-chevron-right"></i></button></form>{% else %}<i class="fas fa-check-circle mg-feito"></i>{% endif %}
+                </div>
+                {% elif col.status == 'CUMPRIDA' %}<div class="mg-tarefa-acoes"><span></span><i class="fas fa-check-circle mg-feito"></i></div>{% endif %}
+            </div>
+            {% empty %}<div class="mg-vazio" style="padding:6px 4px">Nada aqui.</div>{% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+</section>
+
+<div class="mg-aviso info" style="margin-bottom:14px"><i class="fas fa-info-circle"></i><div>A nota da <b>Gestão da Agenda Semanal</b> ({{ por_chave.agenda.pontos_txt }}/20) vem do check-list diário da loja e da Rotina Gerencial. As missões incluídas à mão organizam o dia e entram nos números da visão geral, mas não somam pontos enquanto a validação delas não for definida.</div></div>
+
+<div class="mg-hoje">
+    <section class="mg-card" data-rc-revela>
+        <div class="mg-card-cab"><h2><i class="fas fa-store"></i>Check-list de abertura · hoje</h2><a class="mg-link" href="{% url 'rotina_adm:painel' %}{% if gestor and loja %}?loja={{ loja.id }}{% endif %}">Marcar na central</a></div>
+        {% if checklist_hoje %}
+        <ul class="mg-lista">{% for l in checklist_hoje %}<li><span>{% if l.marcacao %}<i class="fas fa-check-circle mg-feito"></i>{% else %}<i class="far fa-circle mg-falta"></i>{% endif %} {{ l.item.titulo }}</span><span>{% if l.marcacao %}{{ l.marcacao.feito_em|time:'H:i' }}{% elif l.item.horario %}até {{ l.item.horario|time:'H:i' }}{% endif %}</span></li>{% endfor %}</ul>
+        {% else %}<div class="mg-vazio">A loja ainda não tem check-list montado.</div>{% endif %}
+    </section>
+    <section class="mg-card" data-rc-revela>
+        <div class="mg-card-cab"><h2><i class="fas fa-user-clock"></i>Rotina Gerencial · hoje</h2><a class="mg-link" href="{% url 'rotina:minha' %}">Abrir a rotina</a></div>
+        {% if rotina_hoje and rotina_hoje.itens %}
+        <ul class="mg-lista">{% for i in rotina_hoje.itens %}<li><span>{% if i.feita %}<i class="fas fa-check-circle mg-feito"></i>{% else %}<i class="far fa-circle mg-falta"></i>{% endif %} {{ i.atividade.titulo }}</span><span>{{ i.atividade.inicio|time:'H:i' }}–{{ i.atividade.fim|time:'H:i' }}</span></li>{% endfor %}</ul>
+        {% else %}<div class="mg-vazio">{% if rotina_hoje %}Nenhuma atividade da Rotina Gerencial hoje.{% else %}Sem Rotina Gerencial ativa.{% endif %}</div>{% endif %}
+    </section>
+</div>
+{% endblock %}

@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import views, views_guardiao as vg
 
 app_name = 'rotina_adm'
 
@@ -11,4 +11,15 @@ urlpatterns = [
     path('ranking/', views.ranking_analistas, name='ranking'),
     path('estoque/registrar/', views.estoque_registrar, name='estoque_registrar'),
     path('acessos/', views.acessos, name='acessos'),
+    # Missão Guardião (26/11/2026)
+    path('guardiao/', vg.guardiao_tela, name='guardiao'),
+    path('guardiao/missoes/', vg.guardiao_tela, {'aba': 'missoes'}, name='guardiao_missoes'),
+    path('guardiao/lvut/', vg.guardiao_tela, {'aba': 'lvut'}, name='guardiao_lvut'),
+    path('guardiao/agenda/', vg.guardiao_tela, {'aba': 'agenda'}, name='guardiao_agenda'),
+    path('guardiao/destaque/', vg.guardiao_tela, {'aba': 'destaque'}, name='guardiao_destaque'),
+    path('guardiao/codigo/', vg.guardiao_tela, {'aba': 'codigo'}, name='guardiao_codigo'),
+    path('guardiao/lancar/', vg.guardiao_lancar, name='guardiao_lancar'),
+    path('guardiao/contagem/', vg.guardiao_contagem, name='guardiao_contagem'),
+    path('guardiao/contagem/<int:contagem_id>/regularizar/', vg.guardiao_regularizar, name='guardiao_regularizar'),
+    path('guardiao/missao/', vg.guardiao_missao, name='guardiao_missao'),
 ]

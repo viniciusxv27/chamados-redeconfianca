@@ -121,6 +121,13 @@ class ContagemEstoque(models.Model):
     feito_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                   related_name='+')
     feito_em = models.DateTimeField(auto_now_add=True)
+    # Missão Guardião (26/11/2026): contagem com divergência fica bloqueada até a loja regularizar
+    # todas; o número original (divergencias) não muda — o histórico fica para auditoria.
+    regularizada_em = models.DateTimeField(null=True, blank=True, verbose_name='Divergências regularizadas em')
+    regularizada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                         blank=True, related_name='+')
+    regularizacao = models.TextField(blank=True, default='', db_default='',
+                                     verbose_name='O que foi feito para regularizar')
 
     class Meta:
         verbose_name = 'Contagem de estoque da loja'
@@ -130,3 +137,73 @@ class ContagemEstoque(models.Model):
 
     def __str__(self):
         return f'{self.loja} — {self.get_categoria_display()} em {self.data:%d/%m/%Y}'
+
+
+class LancamentoGuardiao(models.Model):
+    """O que a Missão Guardião não acha sozinha no portal (26/11/2026), um por loja, mês e missão.
+
+    - CheckLojas Mensal: a loja registra que fez (data e observação);
+    - Estoque Total: quem gere lança o % de conformidade do inventário mensal.
+    """
+
+    CHECKLOJAS = 'CHECKLOJAS'
+    ESTOQUE_TOTAL = 'ESTOQUE_TOTAL'
+    MISSOES = [(CHECKLOJAS, 'CheckLojas Mensal'), (ESTOQUE_TOTAL, 'Estoque Total')]
+
+    loja = models.ForeignKey('users.Sector', on_delete=models.CASCADE, related_name='lancamentos_guardiao',
+                             verbose_name='Loja')
+    competencia = models.DateField(verbose_name='Mês (dia 1º)')
+    missao = models.CharField(max_length=14, choices=MISSOES, verbose_name='Missão')
+    data = models.DateField(verbose_name='Feito em')
+    valor = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True,
+                                verbose_name='Conformidade (%)')
+    observacao = models.TextField(blank=True, default='', db_default='', verbose_name='Observação')
+    lancado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='+')
+    lancado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Lançamento da Missão Guardião'
+        verbose_name_plural = 'Lançamentos da Missão Guardião'
+        constraints = [models.UniqueConstraint(fields=['loja', 'competencia', 'missao'],
+                                               name='rotina_adm_lancamento_guardiao_unico')]
+
+    def __str__(self):
+        return f'{self.loja} — {self.get_missao_display()} {self.competencia:%m/%Y}'
+
+
+class MissaoAgenda(models.Model):
+    """Missão que o Guardião inclui na Agenda de Missões (demanda do gerente ou da liderança).
+
+    Fica no quadro (Atribuída → Em Ação → Cumprida) e nos números da visão geral, mas não
+    entra na nota da Gestão da Agenda enquanto a validação das missões manuais não for definida.
+    """
+
+    ATRIBUIDA = 'ATRIBUIDA'
+    EM_ACAO = 'EM_ACAO'
+    CUMPRIDA = 'CUMPRIDA'
+    STATUS = [(ATRIBUIDA, 'Missão Atribuída'), (EM_ACAO, 'Missão em Ação'), (CUMPRIDA, 'Missão Cumprida')]
+    GERENTE = 'GERENTE'
+    LIDERANCA = 'LIDERANCA'
+    ORIGENS = [(GERENTE, 'Demanda do GL'), (LIDERANCA, 'Demanda da liderança')]
+
+    pessoa = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                               related_name='missoes_guardiao', verbose_name='Guardião')
+    titulo = models.CharField(max_length=200, verbose_name='Missão')
+    origem = models.CharField(max_length=10, choices=ORIGENS, default=GERENTE, verbose_name='Quem pediu')
+    prazo = models.DateField(verbose_name='Prazo')
+    status = models.CharField(max_length=10, choices=STATUS, default=ATRIBUIDA, db_index=True)
+    cumprida_em = models.DateTimeField(null=True, blank=True)
+    criado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+')
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Missão da agenda do Guardião'
+        verbose_name_plural = 'Missões da agenda do Guardião'
+        ordering = ['prazo', 'id']
+        indexes = [models.Index(fields=['pessoa', 'prazo'])]
+
+    def __str__(self):
+        return f'{self.pessoa} — {self.titulo}'

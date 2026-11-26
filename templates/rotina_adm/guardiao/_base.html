@@ -1,0 +1,41 @@
+{% extends 'rotina_adm/_base.html' %}
+{% load static %}
+{% block ra_titulo %}Missão Guardião{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'rotina_adm/guardiao.css' %}?v=4">{% endblock %}
+{% block ra_conteudo %}
+{% include '_rc_animacoes.html' %}
+<div class="mg">
+    <header class="mg-topo rc-surge">
+        <div class="mg-topo-linha">
+            <div class="mg-marca">
+                <div class="mg-escudo"><i class="fas fa-shield-alt"></i></div>
+                <div>
+                    <h1>Missão Guardião</h1>
+                    <p>Rede Confiança · Portal Guardião{% if not proprio %} · <b>{{ pessoa.get_full_name|default:pessoa.username }}</b>{% endif %}{% if loja %} · {{ loja.name }}{% endif %}</p>
+                </div>
+            </div>
+            <form method="get" class="mg-controles">
+                {% if gestor and guardioes %}
+                <select name="pessoa" class="mg-select" onchange="this.form.submit()" aria-label="Guardião">
+                    {% for g in guardioes %}<option value="{{ g.id }}"{% if g.id == pessoa.id %} selected{% endif %}>{{ g.get_full_name|default:g.username }}{% if g.sector %} · {{ g.sector.name }}{% endif %}</option>{% endfor %}
+                </select>
+                {% endif %}
+                <select name="mes" class="mg-select" onchange="this.form.submit()" aria-label="Ciclo">
+                    {% for valor, nome in meses %}<option value="{{ valor }}"{% if valor == mes %} selected{% endif %}>{{ nome|capfirst }}</option>{% endfor %}
+                </select>
+                <span class="mg-ciclo{% if not aberto %} fechado{% endif %}">Ciclo {{ ciclo }}{% if not aberto %} · encerrado{% endif %}</span>
+            </form>
+        </div>
+        <nav class="mg-abas">
+            {% for chave, nome, icone in abas %}
+            <a href="{% if chave == 'visao' %}{% url 'rotina_adm:guardiao' %}{% else %}{% url 'rotina_adm:guardiao_'|add:chave %}{% endif %}{% if q %}?{{ q }}{% endif %}" class="{% if aba_g == chave %}ativa{% endif %}"><i class="fas {{ icone }}"></i>{{ nome }}</a>
+            {% endfor %}
+        </nav>
+    </header>
+    {% if sem_loja %}
+    <div class="mg-aviso" style="margin-bottom:14px"><i class="fas fa-info-circle"></i><div>{% if proprio %}Seu setor principal não é uma loja{% else %}O setor principal desta pessoa não é uma loja{% endif %}: as missões da loja (Renova, CheckLojas, LVUT, fiscal e estoque) não se aplicam. {% if gestor %}Escolha um Guardião de loja no seletor acima.{% endif %}</div></div>
+    {% endif %}
+    {% block mg_conteudo %}{% endblock %}
+</div>
+{% include '_rc_animacoes_script.html' %}
+{% endblock %}

@@ -1,0 +1,96 @@
+{% extends 'rotina_adm/guardiao/_base.html' %}
+{% block mg_conteudo %}
+<div class="mg-linha1">
+    <section class="mg-card mg-card-pad rc-sobe" style="--i:0">
+        <div class="mg-card-cab" style="padding:0;border:0">
+            <h2>Minha pontuação do mês</h2>
+            <a class="mg-link" href="{% url 'rotina_adm:guardiao_missoes' %}{% if q %}?{{ q }}{% endif %}">Ver mais</a>
+        </div>
+        <div class="mg-pontuacao">
+            <div class="mg-anel" style="--p:{{ total|stringformat:'.2f' }}" role="img" aria-label="{{ total_txt }}% do ciclo">
+                <div><strong>{{ total_txt }}%</strong><small>do ciclo</small></div>
+            </div>
+            <div>
+                <span class="mg-nivel {{ nivel.classe }}"><i class="fas {{ nivel.icone }}"></i>{{ nivel.nome }}</span>
+                <div class="mg-total">{{ total_txt }}<small>/ 100 pts</small></div>
+                {% if total < 100 %}<div style="font-size:12px;color:var(--mg-texto-3)">{{ faltam_txt }} pts ainda não conquistados</div>{% endif %}
+            </div>
+        </div>
+    </section>
+
+    <section class="mg-card mg-card-pad rc-sobe" style="--i:1">
+        <h2 class="mg-h2">Onde estou ganhando pontos</h2>
+        <div class="mg-barras">
+            {% for p in pilares %}
+            <div class="{{ p.chave }}">
+                <div class="mg-barra-cab"><b>{{ p.chave }}</b><span><strong>{{ p.pontos_txt }}</strong> / {{ p.maximo }} pts</span></div>
+                <div class="mg-trilho"><i style="--w:{{ p.pct|stringformat:'.1f' }}%"></i></div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="mg-card mg-card-pad rc-sobe" style="--i:2">
+        <h2 class="mg-h2">Ações rápidas</h2>
+        <div class="mg-acoes">
+            <a class="mg-acao a1" data-rc-pop href="{% url 'rotina_adm:guardiao_missoes' %}{% if q %}?{{ q }}{% endif %}"><i class="fas fa-list-ul"></i>Minhas missões</a>
+            <a class="mg-acao a2" data-rc-pop href="{% url 'rotina_adm:guardiao_lvut' %}{% if q %}?{{ q }}{% endif %}"><i class="fas fa-shield-alt"></i>Contagem LVUT</a>
+            <a class="mg-acao a3" data-rc-pop href="{% url 'rotina_adm:guardiao_agenda' %}{% if q %}?{{ q }}{% endif %}"><i class="fas fa-calendar-alt"></i>Agenda de missões</a>
+            <a class="mg-acao a4" data-rc-pop href="{% url 'rotina_adm:guardiao_destaque' %}{% if q %}?{{ q }}{% endif %}"><i class="fas fa-star"></i>Ranking</a>
+        </div>
+    </section>
+</div>
+
+<div class="mg-numeros">
+    <div class="mg-card mg-numero rc-sobe" style="--i:3"><strong><i class="fas fa-list-ul"></i>{{ missoes|length }}</strong><span>Missões no ciclo</span></div>
+    <div class="mg-card mg-numero rc-sobe" style="--i:4;--c:#4f63d2"><strong><i class="far fa-clock" style="color:var(--c)"></i><span data-rc-conta="{{ abertas }}">{{ abertas }}</span></strong><span>Atividades abertas</span></div>
+    <div class="mg-card mg-numero rc-sobe" style="--i:5"><strong><i class="fas fa-circle" style="color:var(--mg-verde);font-size:8px"></i><span data-rc-conta="{{ concluidas }}">{{ concluidas }}</span></strong><span>Atividades concluídas</span></div>
+    <div class="mg-card mg-numero rc-sobe" style="--i:6"><strong><i class="fas fa-exclamation-triangle" style="color:var(--mg-vermelho)"></i>{{ atrasadas|length }}</strong><span>Atividades atrasadas</span></div>
+    <div class="mg-card mg-numero rc-sobe" style="--i:7"><strong><i class="fas fa-shield-alt" style="color:var(--mg-roxo)"></i>{{ por_chave.lvut.conquistadas|default:0 }}/{{ por_chave.lvut.total_contagens|default:16 }}</strong><span>Contagens validadas</span></div>
+    <div class="mg-card mg-numero rc-sobe" style="--i:8"><strong><i class="fas fa-calendar-check" style="color:var(--mg-teal)"></i>{% if por_chave.agenda.pct is not None %}{{ por_chave.agenda.pct|floatformat:2 }}%{% else %}—{% endif %}</strong><span>Agenda no prazo</span></div>
+</div>
+
+<div class="mg-grade2">
+    <section class="mg-card" data-rc-revela>
+        <div class="mg-card-cab">
+            <h2><i class="fas fa-list-ul"></i>Como a nota foi formada</h2>
+            <a class="mg-link" href="{% url 'rotina_adm:guardiao_missoes' %}{% if q %}?{{ q }}{% endif %}">Detalhar</a>
+        </div>
+        <ul class="mg-nota">
+            {% for m in missoes %}
+            <li class="{{ m.pilar }}">
+                <span class="pilar">{{ m.pilar }}</span>
+                <div class="txt">
+                    <a class="nome" href="{% url 'rotina_adm:guardiao_missoes' %}{% if q %}?{{ q }}{% endif %}#{{ m.chave }}">{{ m.nome }}</a>{% if m.fonte != 'auto' %}<span class="manual" title="{{ m.aviso }}">{% if m.fonte == 'manual' %}lançamento manual{% else %}registro da loja{% endif %}</span>{% endif %}
+                    <div class="desc">{{ m.descricao }}</div>
+                </div>
+                <div class="mg-trilho"><i style="--w:{{ m.pct_barra|stringformat:'.1f' }}%"></i></div>
+                <span class="pts">{{ m.pontos_txt }}/{{ m.maximo }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+
+    <div class="mg-lado">
+        <section class="mg-card" data-rc-revela>
+            <div class="mg-card-cab">
+                <h2><i class="fas fa-calendar-alt"></i>Próximas atividades</h2>
+                <a class="mg-link" href="{% url 'rotina_adm:guardiao_agenda' %}{% if q %}?{{ q }}{% endif %}">Todas</a>
+            </div>
+            {% if proximas %}
+            <ul class="mg-lista">
+                {% for c in proximas %}<li><a href="{{ c.href }}">{{ c.titulo }}</a><span>{{ c.prazo|date:'d/m' }}</span></li>{% endfor %}
+            </ul>
+            {% else %}<div class="mg-vazio">Nenhuma atividade em aberto no ciclo.</div>{% endif %}
+        </section>
+        <section class="mg-card alerta" data-rc-revela>
+            <div class="mg-card-cab"><h2><i class="fas fa-exclamation-triangle"></i>Atividades atrasadas</h2></div>
+            {% if atrasadas %}
+            <ul class="mg-lista">
+                {% for c in atrasadas %}<li><span>{{ c.titulo }}</span><span>{{ c.prazo|date:'d/m' }}</span></li>{% endfor %}
+            </ul>
+            {% else %}<div class="mg-vazio">Nenhuma atividade atrasada.</div>{% endif %}
+        </section>
+    </div>
+</div>
+{% endblock %}
