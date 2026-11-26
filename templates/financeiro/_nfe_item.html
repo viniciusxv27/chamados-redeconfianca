@@ -1,0 +1,38 @@
+{% comment %}Um item do formulário da NF-e. Param: it (dict) — None no modelo para item novo.{% endcomment %}
+<div class="nfe-item">
+    <div class="flex items-center justify-between mb-2">
+        <p class="text-xs font-bold text-gray-700">Item <span data-nfe-ordem>1</span> · <span class="tabular text-emerald-700" data-nfe-total>R$ 0,00</span></p>
+        <button type="button" class="fin-btn-icone w-8 h-8" data-nfe-remover title="Remover item" aria-label="Remover item"><i class="fas fa-trash-can text-xs"></i></button>
+    </div>
+    <div class="nfe-item-grade">
+        <div class="ni-2 nm-2"><label class="fin-label">Código</label><input name="item_codigo" maxlength="60" class="fin-input" value="{{ it.codigo|default:'' }}"></div>
+        <div class="ni-6 nm-4 ni-larga"><label class="fin-label">Descrição</label><input name="item_descricao" maxlength="120" class="fin-input" value="{{ it.descricao|default:'' }}"></div>
+        <div class="ni-2 nm-2"><label class="fin-label">NCM</label><input name="item_ncm" maxlength="10" inputmode="numeric" class="fin-input tabular" value="{{ it.ncm|default:'' }}" placeholder="8 números"></div>
+        <div class="ni-1 nm-2"><label class="fin-label">CFOP</label><input name="item_cfop" maxlength="4" inputmode="numeric" class="fin-input tabular" value="{{ it.cfop|default:'' }}"></div>
+        <div class="ni-1 nm-2"><label class="fin-label">Un.</label><input name="item_unidade" maxlength="6" class="fin-input" value="{{ it.unidade|default:'UN' }}"></div>
+
+        <div class="ni-2 nm-2"><label class="fin-label">Quantidade</label><input name="item_quantidade" inputmode="decimal" class="fin-input nfe-num" value="{{ it.quantidade|default:'1' }}"></div>
+        <div class="ni-2 nm-2"><label class="fin-label">Valor unitário</label><input name="item_valor_unitario" inputmode="decimal" class="fin-input nfe-num" value="{{ it.valor_unitario|default:'' }}"></div>
+        <div class="ni-2 nm-2"><label class="fin-label">Desconto</label><input name="item_valor_desconto" inputmode="decimal" class="fin-input nfe-num" value="{{ it.valor_desconto|default:'0' }}"></div>
+        <div class="ni-3 nm-3"><label class="fin-label">GTIN/EAN <span class="font-normal text-gray-400">(vazio = SEM GTIN)</span></label><input name="item_ean" maxlength="14" inputmode="numeric" class="fin-input tabular" value="{{ it.ean|default:'' }}"></div>
+        <div class="ni-3 nm-3"><label class="fin-label">CEST</label><input name="item_cest" maxlength="7" inputmode="numeric" class="fin-input tabular" value="{{ it.cest|default:'' }}"></div>
+
+        <div class="ni-3 nm-3 ni-larga"><label class="fin-label">Origem</label>
+            <select name="item_origem" class="fin-input">{% for v, r in origens %}<option value="{{ v }}" {% if it.origem == v %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></div>
+        <div class="ni-5 nm-3 ni-larga"><label class="fin-label">ICMS (CST / CSOSN)</label>
+            <select name="item_cst_icms" class="fin-input">
+                {% for v, r in cst_normal %}<option value="{{ v }}" data-regime="normal" {% if it.cst_icms == v %}selected{% endif %}>CST {{ v }} · {{ r }}</option>{% endfor %}
+                {% for v, r in csosn %}<option value="{{ v }}" data-regime="sn" {% if it.cst_icms == v %}selected{% endif %}>CSOSN {{ v }} · {{ r }}</option>{% endfor %}
+            </select></div>
+        <div class="ni-2 nm-3"><label class="fin-label">% redução BC</label><input name="item_reducao_bc_icms" inputmode="decimal" class="fin-input nfe-num" value="{{ it.reducao_bc_icms|default:'0' }}"></div>
+        <div class="ni-2 nm-3"><label class="fin-label">% ICMS</label><input name="item_aliquota_icms" inputmode="decimal" class="fin-input nfe-num" value="{{ it.aliquota_icms|default:'0' }}"></div>
+
+        <div class="ni-2 nm-2"><label class="fin-label">CST PIS</label>
+            <select name="item_cst_pis" class="fin-input">{% for v in cst_pis %}<option value="{{ v }}" {% if it.cst_pis == v or not it and v == '49' %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+        <div class="ni-1 nm-1"><label class="fin-label">% PIS</label><input name="item_aliquota_pis" inputmode="decimal" class="fin-input nfe-num" value="{{ it.aliquota_pis|default:'0' }}"></div>
+        <div class="ni-2 nm-2"><label class="fin-label">CST Cofins</label>
+            <select name="item_cst_cofins" class="fin-input">{% for v in cst_pis %}<option value="{{ v }}" {% if it.cst_cofins == v or not it and v == '49' %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+        <div class="ni-1 nm-1"><label class="fin-label">% Cofins</label><input name="item_aliquota_cofins" inputmode="decimal" class="fin-input nfe-num" value="{{ it.aliquota_cofins|default:'0' }}"></div>
+        <div class="ni-6 nm-6 ni-larga"><label class="fin-label">Informação adicional do item</label><input name="item_info_adicional" maxlength="500" class="fin-input" value="{{ it.info_adicional|default:'' }}"></div>
+    </div>
+</div>

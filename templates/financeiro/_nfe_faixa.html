@@ -1,0 +1,13 @@
+{% comment %}Faixa do estado da emissão (desligada / homologação / produção). Param: config.{% endcomment %}
+{% if not config.ligado %}
+<div class="nfe-faixa nfe-faixa-desligada mb-4" role="status"><i class="fas fa-power-off"></i>
+    <div><p class="font-semibold">Emissão desligada.</p>
+    <p class="text-xs opacity-90">Dá para montar e conferir rascunhos (com DANFE de prévia), mas nada vai para a SEFAZ até o SUPERADMIN ligar em Configuração.{% if not config.tem_certificado %} Falta subir o certificado A1.{% endif %}</p></div></div>
+{% elif not config.producao %}
+<div class="nfe-faixa nfe-faixa-hom mb-4" role="status"><i class="fas fa-flask"></i>
+    <div><p class="font-semibold">Ambiente de homologação.</p>
+    <p class="text-xs opacity-90">As notas vão para a SEFAZ de teste: são autorizadas de verdade, mas sem valor fiscal (o destinatário sai como "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO").</p></div></div>
+{% else %}
+<div class="nfe-faixa nfe-faixa-prod mb-4" role="status"><i class="fas fa-shield-check"></i>
+    <div><p class="font-semibold">Produção: as notas enviadas valem como documento fiscal.</p></div></div>
+{% endif %}

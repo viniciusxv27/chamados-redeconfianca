@@ -364,6 +364,8 @@ window.Fin.brl = function (n) { return Number(n || 0).toLocaleString('pt-BR', {s
             <a href="{% url 'financeiro:conciliacao' %}" class="fin-tab {% if aba == 'conciliacao' %}fin-tab-ativa{% endif %}" {% if aba == 'conciliacao' %}aria-current="page"{% endif %}><i class="fas {{ icone }}"></i><span>Conciliação bancária</span></a>
             {% elif chave == 'cartoes' %}
             <a href="{% url 'financeiro:cartoes' %}" class="fin-tab {% if aba == 'cartoes' %}fin-tab-ativa{% endif %}" {% if aba == 'cartoes' %}aria-current="page"{% endif %}><i class="fas {{ icone }}"></i><span>Cartões</span></a>
+            {% elif chave == 'notas' %}
+            <a href="{% url 'financeiro:notas' %}" class="fin-tab {% if aba == 'notas' %}fin-tab-ativa{% endif %}" {% if aba == 'notas' %}aria-current="page"{% endif %}><i class="fas {{ icone }}"></i><span>Notas fiscais</span></a>
             {% elif chave == 'plano' %}
             <a href="{% url 'financeiro:plano' %}" class="fin-tab {% if aba == 'plano' %}fin-tab-ativa{% endif %}" {% if aba == 'plano' %}aria-current="page"{% endif %}><i class="fas {{ icone }}"></i><span>Plano de contas</span></a>
             {% elif chave == 'auditoria' %}

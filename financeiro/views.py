@@ -88,7 +88,7 @@ def _contexto_base(request, aba):
         'pagar.ver', 'pagar.editar', 'pagar.cancelar', 'receber.ver', 'receber.editar', 'receber.cancelar',
         'baixas.baixar', 'baixas.estornar', 'bancos.ver', 'bancos.editar', 'bancos.lancar', 'conciliacao.ver',
         'conciliacao.conciliar', 'cartoes.ver', 'cartoes.conciliar', 'plano.ver', 'plano.editar', 'auditoria.ver',
-        'caixa.ver')}, 'pode_baixas': pode(user, 'baixas'), 'pode_fechamento': _pode_ver_fechamento(user),
+        'caixa.ver', 'notas.ver', 'notas.emitir', 'notas.cancelar')}, 'pode_baixas': pode(user, 'baixas'), 'pode_fechamento': _pode_ver_fechamento(user),
         'pode_piscofins': pode_piscofins(user)}
 
 

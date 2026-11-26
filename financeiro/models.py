@@ -418,6 +418,7 @@ class LogFinanceiro(models.Model):
         ('IMPORTAR', 'Importou'), ('CONCILIAR', 'Conciliou'), ('DESCONCILIAR', 'Desfez a conciliação'),
         ('ACESSO', 'Mudou acessos'), ('EXPORTAR', 'Exportou'), ('MANIFESTAR', 'Manifestou nota'),
         ('BLOQUEAR', 'Bloqueou'), ('DESBLOQUEAR', 'Desbloqueou'),
+        ('EMITIR', 'Emitiu nota'), ('CORRIGIR', 'Carta de correção'), ('CONFIGURAR', 'Mudou a configuração'),
     ]
 
     quando = models.DateTimeField(default=timezone.now, db_index=True, verbose_name='Quando')
@@ -630,3 +631,8 @@ class DespesaMesTitulo(models.Model):
 
     def __str__(self):
         return f'{self.mes} ← {self.titulo_id}'
+
+
+# Emissão de NF-e (saída, entrada e devolução) — modelos no arquivo próprio.
+from .models_nfe import (ConfiguracaoNFe, EmitenteNFe, EventoNotaFiscal, ItemNotaFiscal,  # noqa: E402,F401
+                         NotaFiscalEmitida)

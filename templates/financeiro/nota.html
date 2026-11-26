@@ -1,0 +1,190 @@
+{% extends 'financeiro/base_financeiro.html' %}
+{% load caixa_tags %}
+{% block fin_titulo %}{% if nota.numero %}NF-e {{ nota.numero }}{% else %}Rascunho de NF-e{% endif %}{% endblock %}
+{% block fin_cabecalho %}{% if nota.numero %}NF-e nº {{ nota.numero }} <span class="text-gray-400 font-semibold text-base">série {{ nota.serie }}</span>{% else %}Rascunho #{{ nota.pk }}{% endif %}{% endblock %}
+{% block fin_subtitulo %}{{ nota.rotulo_tipo }} · {{ nota.natureza|default:'sem natureza' }} · {{ nota.emitente.nome_fantasia|default:nota.emitente.razao_social }}{% endblock %}
+{% block fin_acoes %}
+<a href="{% url 'financeiro:notas' %}" class="fin-btn fin-btn-claro"><i class="fas fa-arrow-left"></i>Notas</a>
+<a href="{% url 'financeiro:nota_danfe' nota.pk %}" target="_blank" rel="noopener" class="fin-btn fin-btn-claro"><i class="fas fa-file-pdf"></i>{% if nota.xml_autorizado %}DANFE{% else %}Prévia da DANFE{% endif %}</a>
+{% if nota.xml_autorizado or nota.xml_assinado %}<a href="{% url 'financeiro:nota_xml' nota.pk %}" class="fin-btn fin-btn-claro"><i class="fas fa-file-code"></i>XML</a>{% endif %}
+{% if pode.notas_emitir %}<a href="{% url 'financeiro:nota_nova' %}?copiar={{ nota.pk }}" class="fin-btn fin-btn-claro" title="Nova nota com os mesmos dados"><i class="fas fa-copy"></i><span class="hidden sm:inline">Copiar</span></a>{% endif %}
+{% endblock %}
+{% block fin_css %}{% include 'financeiro/_nfe_css.html' %}{% endblock %}
+
+{% block fin_conteudo %}
+{% include 'financeiro/_nfe_faixa.html' %}
+<div class="grid lg:grid-cols-3 gap-4">
+<div class="lg:col-span-2 space-y-4 min-w-0">
+
+    <section class="fin-card p-4">
+        <div class="flex items-start justify-between gap-3 flex-wrap mb-3">
+            <div class="flex items-center gap-2 flex-wrap">
+                <span class="nfe-st nfe-{{ nota.status }} text-xs">{{ nota.get_status_display }}</span>
+                <span class="nfe-tipo {% if nota.devolucao %}nfe-tipo-devolucao{% elif nota.tipo_operacao == '0' %}nfe-tipo-entrada{% else %}nfe-tipo-saida{% endif %}">{{ nota.rotulo_tipo }}</span>
+                {% if nota.ambiente == '2' %}<span class="fin-chip bg-amber-50 text-amber-700">homologação</span>{% endif %}
+            </div>
+            <p class="text-2xl font-extrabold tabular text-gray-900">{{ nota.valor_total|brl_zero }}</p>
+        </div>
+        {% if nota.cstat %}
+        <p class="text-sm {% if nota.status == 'AUTORIZADA' %}text-emerald-700{% elif nota.status == 'REJEITADA' or nota.status == 'DENEGADA' %}text-red-700{% else %}text-gray-700{% endif %}">
+            <span class="font-semibold">SEFAZ {{ nota.cstat }}:</span> {{ nota.motivo }}</p>
+        {% endif %}
+        {% if nota.chave %}<p class="mt-3 fin-label">Chave de acesso</p><p class="nfe-chave">{{ nota.chave }}</p>{% endif %}
+        <dl class="nfe-dl nfe-dl-3 mt-3">
+            {% if nota.protocolo %}<div><dt>Protocolo</dt><dd class="tabular">{{ nota.protocolo }}</dd></div>{% endif %}
+            {% if nota.emitida_em %}<div><dt>Emissão</dt><dd>{{ nota.emitida_em|date:'d/m/Y H:i' }}</dd></div>{% endif %}
+            {% if nota.autorizada_em %}<div><dt>{% if nota.status == 'DENEGADA' %}Denegada em{% else %}Autorizada em{% endif %}</dt><dd>{{ nota.autorizada_em|date:'d/m/Y H:i' }}</dd></div>{% endif %}
+            {% if nota.cancelada_em %}<div><dt>Cancelada em</dt><dd>{{ nota.cancelada_em|date:'d/m/Y H:i' }}</dd></div>{% endif %}
+            {% if nota.chave_referenciada %}<div class="sm:col-span-2 lg:col-span-3"><dt>Nota referenciada</dt><dd class="nfe-chave">{{ nota.chave_referenciada }}</dd></div>{% endif %}
+        </dl>
+    </section>
+
+    {% if problemas %}
+    <section class="fin-card p-4 border-amber-300" role="alert">
+        <p class="nfe-secao text-amber-700" style="color:#B45309"><i class="fas fa-triangle-exclamation"></i>Antes de enviar, acerte {{ problemas|length }} ponto{{ problemas|length|pluralize }}</p>
+        <ul class="list-disc pl-5 space-y-1 text-sm text-gray-700">{% for p in problemas %}<li>{{ p }}</li>{% endfor %}</ul>
+    </section>
+    {% endif %}
+
+    <section class="fin-card p-4">
+        <p class="nfe-secao"><i class="fas fa-building"></i>Emitente</p>
+        <dl class="nfe-dl">
+            <div><dt>Razão social</dt><dd>{{ nota.emitente.razao_social }}</dd></div>
+            <div><dt>CNPJ · IE</dt><dd class="tabular">{{ nota.emitente.cnpj_formatado }} · {{ nota.emitente.ie }}</dd></div>
+            <div><dt>Regime</dt><dd>{{ nota.emitente.get_crt_display }}</dd></div>
+            <div><dt>Endereço</dt><dd>{{ nota.emitente.logradouro }}, {{ nota.emitente.numero }} · {{ nota.emitente.municipio }}/{{ nota.emitente.uf }}</dd></div>
+        </dl>
+        <p class="nfe-secao mt-4"><i class="fas fa-user-tag"></i>{% if nota.tipo_operacao == '0' %}Remetente{% else %}Destinatário{% endif %}</p>
+        <dl class="nfe-dl">
+            <div><dt>Nome</dt><dd>{{ nota.dest_nome|default:'—' }}</dd></div>
+            <div><dt>CNPJ/CPF · IE</dt><dd class="tabular">{{ nota.dest_documento_formatado|default:'—' }}{% if nota.dest_ie %} · {{ nota.dest_ie }}{% endif %} <span class="text-gray-400 text-xs">({{ nota.get_dest_ind_ie_display }})</span></dd></div>
+            <div><dt>Endereço</dt><dd>{{ nota.dest_logradouro }}{% if nota.dest_numero %}, {{ nota.dest_numero }}{% endif %}{% if nota.dest_complemento %} · {{ nota.dest_complemento }}{% endif %} · {{ nota.dest_bairro }}</dd></div>
+            <div><dt>Município</dt><dd>{{ nota.dest_municipio }}/{{ nota.dest_uf }} <span class="text-gray-400 text-xs">IBGE {{ nota.dest_codigo_municipio }}</span>{% if id_dest == '2' %} <span class="fin-chip bg-sky-50 text-sky-700">interestadual</span>{% endif %}</dd></div>
+            <div><dt>Operação</dt><dd>{{ nota.get_presenca_display }}{% if nota.consumidor_final %} · consumidor final{% endif %}</dd></div>
+            <div><dt>Frete · pagamento</dt><dd>{{ nota.get_modalidade_frete_display }} · {% if nota.finalidade == '3' or nota.finalidade == '4' %}Sem pagamento{% else %}{{ nota.get_forma_pagamento_display }}{% endif %}</dd></div>
+        </dl>
+    </section>
+
+    <section class="fin-card overflow-hidden">
+        <div class="fin-cab"><h2>Itens ({{ itens|length }})</h2></div>
+        <div class="overflow-x-auto" data-rc-wrapped="1">
+        <table class="fin-tabela fin-empilha">
+            <thead><tr><th>#</th><th>Produto</th><th>NCM · CFOP</th><th>ICMS</th><th class="text-right">Qtd.</th><th class="text-right">Unitário</th><th class="text-right">Total</th></tr></thead>
+            <tbody>
+            {% for i in itens %}
+            <tr>
+                <td data-label="#" class="tabular text-gray-400">{{ i.ordem }}</td>
+                <td class="fin-td-principal" data-label="Produto"><span class="font-semibold">{{ i.descricao }}</span><span class="block text-[11px] text-gray-500">cód. {{ i.codigo }}{% if i.ean %} · EAN {{ i.ean }}{% endif %}</span></td>
+                <td data-label="NCM · CFOP" class="tabular text-xs">{{ i.ncm }} · {{ i.cfop }}</td>
+                <td data-label="ICMS" class="text-xs">{% if nota.emitente.simples %}CSOSN{% else %}CST{% endif %} {{ i.origem }}{{ i.cst_icms }}{% if i.valor_icms %}<span class="block text-gray-500 tabular">{{ i.aliquota_icms|floatformat:'-2' }}% · {{ i.valor_icms|brl_zero }}</span>{% endif %}</td>
+                <td data-label="Qtd." class="text-right tabular">{{ i.quantidade|floatformat:'-4' }} {{ i.unidade }}</td>
+                <td data-label="Unitário" class="text-right tabular">{{ i.valor_unitario|floatformat:'-4' }}</td>
+                <td data-label="Total" class="text-right tabular font-semibold">{{ i.valor_total|brl_zero }}</td>
+            </tr>
+            {% empty %}<tr class="fin-linha-vazia"><td colspan="7" class="text-center text-gray-500 py-6">Sem itens.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        <div class="p-4 border-t border-gray-100">
+            <div class="nfe-totais">
+                <div><span>Produtos</span><strong>{{ nota.valor_produtos|brl_zero }}</strong></div>
+                <div><span>Desconto</span><strong>{{ nota.valor_desconto|brl_zero }}</strong></div>
+                <div><span>Frete + seguro + outras</span><strong>{{ nota.valor_frete|add:nota.valor_seguro|add:nota.valor_outras|brl_zero }}</strong></div>
+                <div><span>BC ICMS · ICMS</span><strong>{{ nota.base_icms|brl_zero }} · {{ nota.valor_icms|brl_zero }}</strong></div>
+                <div><span>PIS</span><strong>{{ nota.valor_pis|brl_zero }}</strong></div>
+                <div><span>Cofins</span><strong>{{ nota.valor_cofins|brl_zero }}</strong></div>
+                <div class="nfe-total-nota" style="grid-column:span 2"><span>Total da nota</span><strong>{{ nota.valor_total|brl_zero }}</strong></div>
+            </div>
+            {% if nota.info_complementar %}<p class="fin-label mt-3">Informações complementares</p><p class="text-sm text-gray-700 whitespace-pre-line">{{ nota.info_complementar }}</p>{% endif %}
+        </div>
+    </section>
+</div>
+
+<aside class="space-y-4 min-w-0">
+    <section class="fin-card p-4">
+        <p class="nfe-secao"><i class="fas fa-paper-plane"></i>SEFAZ</p>
+        <div class="space-y-2">
+        {% if nota.editavel and pode.notas_emitir %}
+            <form method="post" action="{% url 'financeiro:nota_enviar' nota.pk %}" data-nfe-confirmar="{% if config.producao %}Enviar para a SEFAZ de PRODUÇÃO? A nota passa a valer como documento fiscal.{% else %}Enviar para a SEFAZ de homologação (teste)?{% endif %}">{% csrf_token %}
+                <button class="fin-btn fin-btn-verde w-full" {% if problemas or not config.ligado %}disabled title="{% if not config.ligado %}Emissão desligada{% else %}Acerte os pontos da lista antes{% endif %}"{% endif %}><i class="fas fa-paper-plane"></i>{% if nota.status == 'REJEITADA' %}Enviar de novo{% else %}Enviar para a SEFAZ{% endif %}</button>
+            </form>
+            <a href="{% url 'financeiro:nota_editar' nota.pk %}" class="fin-btn fin-btn-claro w-full"><i class="fas fa-pen"></i>Editar</a>
+        {% endif %}
+        {% if nota.chave and nota.status != 'RASCUNHO' %}
+            <form method="post" action="{% url 'financeiro:nota_consultar' nota.pk %}">{% csrf_token %}
+                <button class="fin-btn fin-btn-claro w-full" {% if not config.ligado %}disabled title="Emissão desligada"{% endif %}><i class="fas fa-rotate"></i>Consultar na SEFAZ</button></form>
+        {% endif %}
+        {% if pode_excluir and pode.notas_emitir %}
+            <form method="post" action="{% url 'financeiro:nota_excluir' nota.pk %}" data-nfe-confirmar="Excluir este rascunho?">{% csrf_token %}
+                <button class="fin-btn fin-btn-claro w-full text-red-600"><i class="fas fa-trash-can"></i>Excluir rascunho</button></form>
+        {% endif %}
+        </div>
+        {% if nota.status == 'REJEITADA' %}<p class="text-[11px] text-gray-500 mt-2">O número {{ nota.numero }} fica reservado para esta nota: corrija e envie de novo.</p>{% endif %}
+    </section>
+
+    {% if nota.status == 'AUTORIZADA' %}
+    {% if pode.notas_emitir %}
+    <section class="fin-card p-4">
+        <p class="nfe-secao"><i class="fas fa-file-pen"></i>Carta de correção</p>
+        <form method="post" action="{% url 'financeiro:nota_correcao' nota.pk %}" data-nfe-confirmar="Registrar a carta de correção na SEFAZ?">{% csrf_token %}
+            <textarea name="correcao" rows="3" minlength="15" maxlength="1000" class="fin-input" placeholder="O que corrigir (15 a 1000 caracteres)" required></textarea>
+            <p class="text-[11px] text-gray-500 mt-1">Não corrige valores, impostos, quantidade, remetente/destinatário nem a data. Até 20 cartas; a última substitui as anteriores.</p>
+            <button class="fin-btn fin-btn-claro w-full mt-2" {% if not config.ligado %}disabled{% endif %}><i class="fas fa-file-signature"></i>Registrar correção</button>
+        </form>
+    </section>
+    {% endif %}
+    {% if pode.notas_cancelar %}
+    <section class="fin-card p-4">
+        <p class="nfe-secao" style="color:#B91C1C"><i class="fas fa-ban"></i>Cancelar a nota</p>
+        <form method="post" action="{% url 'financeiro:nota_cancelar' nota.pk %}" data-nfe-confirmar="Cancelar a NF-e nº {{ nota.numero }} na SEFAZ? Não tem volta.">{% csrf_token %}
+            <textarea name="justificativa" rows="2" minlength="15" maxlength="255" class="fin-input" placeholder="Justificativa (15 a 255 caracteres)" required></textarea>
+            {% if nota.pode_cancelar_ate %}<p class="text-[11px] text-gray-500 mt-1">Prazo usual: até {{ nota.pode_cancelar_ate|date:'d/m/Y H:i' }} (24 h da autorização). Depois disso a SEFAZ pode recusar.</p>{% endif %}
+            <button class="fin-btn fin-btn-perigo w-full mt-2" {% if not config.ligado %}disabled{% endif %}><i class="fas fa-ban"></i>Cancelar na SEFAZ</button>
+        </form>
+    </section>
+    {% endif %}
+    {% endif %}
+
+    {% if eventos %}
+    <section class="fin-card p-4">
+        <p class="nfe-secao"><i class="fas fa-list"></i>Eventos</p>
+        <ul class="space-y-2 text-sm">
+            {% for e in eventos %}
+            <li class="border border-gray-100 rounded-lg p-2">
+                <p class="font-semibold">{{ e.get_tipo_display }}{% if e.tipo == '110110' %} nº {{ e.sequencia }}{% endif %}
+                    {% if e.sucesso %}<span class="nfe-st nfe-AUTORIZADA ml-1">registrado</span>{% else %}<span class="nfe-st nfe-REJEITADA ml-1">recusado</span>{% endif %}</p>
+                <p class="text-xs text-gray-600 mt-0.5">{{ e.texto|truncatechars:160 }}</p>
+                <p class="text-[11px] text-gray-400 mt-0.5">{{ e.enviado_em|date:'d/m/Y H:i' }} · {{ e.enviado_por.get_full_name|default:e.enviado_por.username|default:'—' }} · {{ e.cstat }} {{ e.motivo|truncatechars:80 }}</p>
+                <a href="{% url 'financeiro:nota_evento_xml' e.pk %}" class="fin-link mt-1"><i class="fas fa-file-code"></i>XML do evento</a>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {% if historico %}
+    <section class="fin-card p-4">
+        <p class="nfe-secao"><i class="fas fa-clock-rotate-left"></i>Conversa com a SEFAZ</p>
+        <ul class="nfe-linha-tempo text-xs">
+            {% for h in historico %}
+            <li class="{{ h.classe }}">
+                <p class="font-semibold text-gray-800">{{ h.operacao }} · <span class="tabular">{{ h.cstat }}</span></p>
+                <p class="text-gray-600">{{ h.motivo }}</p>
+                <p class="text-gray-400 tabular">{{ h.quando }}</p>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+</aside>
+</div>
+<script>
+document.querySelectorAll('form[data-nfe-confirmar]').forEach(function (f) {
+    f.addEventListener('submit', function (e) {
+        if (!window.confirm(f.dataset.nfeConfirmar)) { e.preventDefault(); return; }
+        var b = f.querySelector('button'); if (b) { setTimeout(function () { b.disabled = true; b.innerHTML = '<i class="fas fa-spinner fa-spin"></i>Aguarde…'; }, 0); }
+    });
+});
+</script>
+{% endblock %}

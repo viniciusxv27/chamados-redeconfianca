@@ -2,7 +2,8 @@ from django.urls import path
 
 from contagem_caixa import views_piscofins
 
-from . import views, views_admin, views_banco, views_fechamento, views_importacao, views_recorrentes
+from . import (views, views_admin, views_banco, views_fechamento, views_importacao, views_nfe,  # noqa: I001
+               views_recorrentes)
 
 app_name = 'financeiro'
 
@@ -31,6 +32,21 @@ urlpatterns = [
     path('recorrentes/<int:pk>/mes/<int:ano>/<int:mes>/', views_recorrentes.mes_detalhe, name='recorrente_mes'),
     path('recorrentes/<int:pk>/mes/<int:ano>/<int:mes>/vincular/', views_recorrentes.vincular, name='recorrente_vincular'),
     path('recorrentes/<int:pk>/mes/<int:ano>/<int:mes>/lancar/', views_recorrentes.lancar, name='recorrente_lancar'),
+
+    # Notas fiscais (NF-e de saída, entrada e devolução)
+    path('notas/', views_nfe.notas, name='notas'),
+    path('notas/nova/', views_nfe.nota_nova, name='nota_nova'),
+    path('notas/configuracao/', views_nfe.notas_configuracao, name='notas_configuracao'),
+    path('notas/<int:pk>/', views_nfe.nota, name='nota'),
+    path('notas/<int:pk>/editar/', views_nfe.nota_editar, name='nota_editar'),
+    path('notas/<int:pk>/enviar/', views_nfe.nota_enviar, name='nota_enviar'),
+    path('notas/<int:pk>/consultar/', views_nfe.nota_consultar, name='nota_consultar'),
+    path('notas/<int:pk>/cancelar/', views_nfe.nota_cancelar, name='nota_cancelar'),
+    path('notas/<int:pk>/correcao/', views_nfe.nota_correcao, name='nota_correcao'),
+    path('notas/<int:pk>/excluir/', views_nfe.nota_excluir, name='nota_excluir'),
+    path('notas/<int:pk>/xml/', views_nfe.nota_xml, name='nota_xml'),
+    path('notas/<int:pk>/danfe/', views_nfe.nota_danfe, name='nota_danfe'),
+    path('notas/evento/<int:pk>/xml/', views_nfe.evento_xml, name='nota_evento_xml'),
 
     # Títulos
     path('pagar/', views.pagar, name='pagar'),

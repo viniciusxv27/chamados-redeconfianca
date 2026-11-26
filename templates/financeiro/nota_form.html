@@ -1,0 +1,251 @@
+{% extends 'financeiro/base_financeiro.html' %}
+{% block fin_titulo %}{% if nova %}Nova NF-e{% else %}Editar NF-e{% endif %}{% endblock %}
+{% block fin_cabecalho %}{% if nova %}Nova nota fiscal{% else %}Editar {% if nota.numero %}NF-e nº {{ nota.numero }}{% else %}rascunho #{{ nota.pk }}{% endif %}{% endif %}{% endblock %}
+{% block fin_subtitulo %}Salve como rascunho, confira e depois envie para a SEFAZ{% endblock %}
+{% block fin_acoes %}
+<a href="{% if nota.pk %}{% url 'financeiro:nota' nota.pk %}{% else %}{% url 'financeiro:notas' %}{% endif %}" class="fin-btn fin-btn-claro"><i class="fas fa-arrow-left"></i>Voltar</a>
+{% endblock %}
+{% block fin_css %}{% include 'financeiro/_nfe_css.html' %}{% endblock %}
+
+{% block fin_conteudo %}
+{% include 'financeiro/_nfe_faixa.html' %}
+
+{% if nova %}
+<form method="get" class="fin-card p-4 mb-4" id="nfePuxar" {% if nota.finalidade != '4' %}hidden{% endif %}>
+    <p class="nfe-secao"><i class="fas fa-file-import"></i>Puxar da nota original</p>
+    <p class="text-xs text-gray-500 mb-2">Cole a chave da NF-e que está sendo devolvida. Vale nota recebida de fornecedor (que já tenha o XML completo em PIS/Cofins) ou nota emitida aqui. Destinatário, itens e CFOP de devolução vêm preenchidos.</p>
+    <div class="flex gap-2 flex-wrap">
+        <input name="devolver" class="fin-input flex-1 min-w-[16rem] nfe-chave" inputmode="numeric" maxlength="54" placeholder="44 números da chave de acesso" value="{{ request.GET.devolver|default:'' }}" aria-label="Chave da nota original">
+        <input type="hidden" name="tipo" value="devolucao">
+        <button class="fin-btn fin-btn-verde"><i class="fas fa-download"></i>Puxar itens</button>
+    </div>
+    {% if original %}
+    <p class="text-xs text-emerald-700 mt-2"><i class="fas fa-check mr-1"></i>Nota original: nº {{ original.numero }} série {{ original.serie }} de {{ original.emissao }}, {{ original.emitente }}, R$ {{ original.valor }}.</p>
+    {% endif %}
+</form>
+{% endif %}
+
+<form method="post" id="nfeForm" novalidate>{% csrf_token %}
+<div class="grid xl:grid-cols-3 gap-4">
+<div class="xl:col-span-2 space-y-4 min-w-0">
+
+    <section class="fin-card p-4">
+        <p class="nfe-secao"><i class="fas fa-shuffle"></i>Operação</p>
+        <div class="nfe-escolha mb-3" role="radiogroup" aria-label="Tipo da nota">
+            <label><input type="radio" name="_modo" value="saida" {% if nota.finalidade != '4' and nota.tipo_operacao == '1' %}checked{% endif %}>
+                <span><span class="font-semibold text-sm block">Saída</span><span class="text-xs text-gray-500">Venda, remessa, transferência.</span></span></label>
+            <label><input type="radio" name="_modo" value="entrada" {% if nota.finalidade != '4' and nota.tipo_operacao == '0' %}checked{% endif %}>
+                <span><span class="font-semibold text-sm block">Entrada</span><span class="text-xs text-gray-500">Compra de quem não emite nota, retorno, importação.</span></span></label>
+            <label><input type="radio" name="_modo" value="devolucao" {% if nota.finalidade == '4' %}checked{% endif %}>
+                <span><span class="font-semibold text-sm block">Devolução</span><span class="text-xs text-gray-500">Referencia a chave da nota original.</span></span></label>
+        </div>
+        <div class="nfe-grade">
+            <div class="nfe-c2"><label class="fin-label" for="nfeTipo">Entrada ou saída</label>
+                <select name="tipo_operacao" id="nfeTipo" class="fin-input">{% for v, r in tipos %}<option value="{{ v }}" {% if nota.tipo_operacao == v %}selected{% endif %}>{{ v }} · {{ r }}</option>{% endfor %}</select>
+                <p class="text-[11px] text-gray-400 mt-1" id="nfeDicaDevolucao" {% if nota.finalidade != '4' %}hidden{% endif %}>Saída = você devolve ao fornecedor · Entrada = o cliente devolve a você.</p></div>
+            <div class="nfe-c2"><label class="fin-label" for="nfeFinalidade">Finalidade</label>
+                <select name="finalidade" id="nfeFinalidade" class="fin-input">{% for v, r in finalidades %}<option value="{{ v }}" {% if nota.finalidade == v %}selected{% endif %}>{{ v }} · {{ r }}</option>{% endfor %}</select></div>
+            <div class="nfe-c2"><label class="fin-label" for="nfeEmitente">Emitente (CNPJ que emite)</label>
+                <select name="emitente" id="nfeEmitente" class="fin-input" required>
+                    {% for e in emitentes %}<option value="{{ e.pk }}" data-simples="{% if e.simples %}1{% endif %}" data-uf="{{ e.uf }}" {% if nota.emitente_id == e.pk %}selected{% endif %}>{{ e.nome_fantasia|default:e.razao_social }} · {{ e.uf }} · {{ e.cnpj_formatado }}</option>{% endfor %}
+                </select></div>
+            <div class="nfe-c4"><label class="fin-label" for="nfeNatureza">Natureza da operação</label>
+                <input name="natureza" id="nfeNatureza" maxlength="60" class="fin-input" value="{{ nota.natureza }}" list="nfeNaturezas" placeholder="Ex.: Devolucao de compra para comercializacao">
+                <datalist id="nfeNaturezas"><option value="Venda de mercadoria"><option value="Devolucao de compra para comercializacao"><option value="Devolucao de venda"><option value="Transferencia de mercadoria"><option value="Remessa para conserto"><option value="Retorno de conserto"><option value="Remessa em comodato"><option value="Entrada de mercadoria"></datalist></div>
+            <div class="nfe-c2"><label class="fin-label" for="nfePresenca">Presença do comprador</label>
+                <select name="presenca" id="nfePresenca" class="fin-input">{% for v, r in presencas %}<option value="{{ v }}" {% if nota.presenca == v %}selected{% endif %}>{{ v }} · {{ r }}</option>{% endfor %}</select></div>
+            <div class="nfe-c6" id="nfeRefBloco" {% if nota.finalidade == '1' and not nota.chave_referenciada %}hidden{% endif %}>
+                <label class="fin-label" for="nfeRef">Chave da nota referenciada <span class="font-normal text-gray-400">(obrigatória na devolução)</span></label>
+                <input name="chave_referenciada" id="nfeRef" class="fin-input nfe-chave" inputmode="numeric" maxlength="54" value="{{ nota.chave_referenciada }}" placeholder="44 números"></div>
+        </div>
+    </section>
+
+    <section class="fin-card p-4">
+        <p class="nfe-secao"><i class="fas fa-user-tag"></i><span id="nfeRotuloDest">{% if nota.tipo_operacao == '0' %}Remetente{% else %}Destinatário{% endif %}</span></p>
+        <div class="nfe-grade">
+            <div class="nfe-c2"><label class="fin-label" for="nfeDoc">CNPJ ou CPF</label><input name="dest_documento" id="nfeDoc" class="fin-input tabular" inputmode="numeric" maxlength="18" value="{{ nota.dest_documento }}"></div>
+            <div class="nfe-c4"><label class="fin-label" for="nfeNome">Nome / razão social</label><input name="dest_nome" id="nfeNome" maxlength="60" class="fin-input" value="{{ nota.dest_nome }}"></div>
+            <div class="nfe-c2"><label class="fin-label" for="nfeIndIE">Indicador da IE</label>
+                <select name="dest_ind_ie" id="nfeIndIE" class="fin-input">{% for v, r in ind_ie %}<option value="{{ v }}" {% if nota.dest_ind_ie == v %}selected{% endif %}>{{ v }} · {{ r }}</option>{% endfor %}</select></div>
+            <div class="nfe-c2"><label class="fin-label" for="nfeIE">Inscrição estadual</label><input name="dest_ie" id="nfeIE" class="fin-input tabular" inputmode="numeric" maxlength="14" value="{{ nota.dest_ie }}"></div>
+            <div class="nfe-c2 flex items-end pb-2"><label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="checkbox" name="consumidor_final" value="1" class="accent-emerald-600 w-4 h-4" {% if nota.consumidor_final %}checked{% endif %}>Consumidor final</label></div>
+            <div class="nfe-c3"><label class="fin-label" for="nfeLgr">Logradouro</label><input name="dest_logradouro" id="nfeLgr" maxlength="60" class="fin-input" value="{{ nota.dest_logradouro }}"></div>
+            <div class="nfe-c1" style="grid-column:span 1"><label class="fin-label" for="nfeNro">Número</label><input name="dest_numero" id="nfeNro" maxlength="60" class="fin-input" value="{{ nota.dest_numero }}"></div>
+            <div class="nfe-c2"><label class="fin-label" for="nfeCpl">Complemento</label><input name="dest_complemento" id="nfeCpl" maxlength="60" class="fin-input" value="{{ nota.dest_complemento }}"></div>
+            <div class="nfe-c2"><label class="fin-label" for="nfeBairro">Bairro</label><input name="dest_bairro" id="nfeBairro" maxlength="60" class="fin-input" value="{{ nota.dest_bairro }}"></div>
+            <div class="nfe-c2"><label class="fin-label" for="nfeCep">CEP</label><input name="dest_cep" id="nfeCep" class="fin-input tabular" inputmode="numeric" maxlength="9" value="{{ nota.dest_cep }}"></div>
+            <div class="nfe-c2"><label class="fin-label" for="nfeUF">UF</label>
+                <select name="dest_uf" id="nfeUF" class="fin-input"><option value="">—</option>{% for uf in ufs %}<option value="{{ uf }}" {% if nota.dest_uf == uf %}selected{% endif %}>{{ uf }}</option>{% endfor %}</select></div>
+            <div class="nfe-c3"><label class="fin-label" for="nfeMun">Município</label><input name="dest_municipio" id="nfeMun" maxlength="60" class="fin-input" value="{{ nota.dest_municipio }}"></div>
+            <div class="nfe-c3"><label class="fin-label" for="nfeCMun">Código IBGE do município <a href="https://www.ibge.gov.br/explica/codigos-dos-municipios.php" target="_blank" rel="noopener" class="fin-link ml-1">consultar</a></label><input name="dest_codigo_municipio" id="nfeCMun" class="fin-input tabular" inputmode="numeric" maxlength="7" value="{{ nota.dest_codigo_municipio }}"></div>
+            <div class="nfe-c3"><label class="fin-label" for="nfeEmail">E-mail</label><input name="dest_email" id="nfeEmail" type="email" maxlength="60" class="fin-input" value="{{ nota.dest_email }}"></div>
+            <div class="nfe-c3"><label class="fin-label" for="nfeFone">Telefone</label><input name="dest_telefone" id="nfeFone" class="fin-input tabular" inputmode="tel" maxlength="16" value="{{ nota.dest_telefone }}"></div>
+        </div>
+    </section>
+
+    <section class="fin-card p-4">
+        <div class="flex items-center justify-between gap-2 mb-2">
+            <p class="nfe-secao mb-0"><i class="fas fa-boxes-stacked"></i>Itens <span class="fin-selo" id="nfeQtdItens">{{ itens|length }}</span></p>
+            <button type="button" class="fin-btn fin-btn-claro" id="nfeAddItem"><i class="fas fa-plus"></i>Item</button>
+        </div>
+        <p class="text-[11px] text-gray-500 mb-3" id="nfeDicaCst">O código do ICMS segue o regime do emitente: <strong>CST</strong> no regime normal, <strong>CSOSN</strong> no Simples Nacional. CFOP começa com 5 (saída no estado), 6 (saída para outro estado), 1 ou 2 (entrada).</p>
+        <div id="nfeItens">
+            {% for it in itens %}{% include 'financeiro/_nfe_item.html' %}{% endfor %}
+        </div>
+        <template id="nfeItemModelo">{% with it=None %}{% include 'financeiro/_nfe_item.html' %}{% endwith %}</template>
+    </section>
+
+    <section class="fin-card p-4">
+        <p class="nfe-secao"><i class="fas fa-truck"></i>Frete, pagamento e observações</p>
+        <div class="nfe-grade">
+            <div class="nfe-c3"><label class="fin-label" for="nfeFrete">Modalidade do frete</label>
+                <select name="modalidade_frete" id="nfeFrete" class="fin-input">{% for v, r in fretes %}<option value="{{ v }}" {% if nota.modalidade_frete == v %}selected{% endif %}>{{ v }} · {{ r }}</option>{% endfor %}</select></div>
+            <div class="nfe-c3"><label class="fin-label" for="nfePag">Pagamento</label>
+                <select name="forma_pagamento" id="nfePag" class="fin-input">{% for v, r in pagamentos %}<option value="{{ v }}" {% if nota.forma_pagamento == v %}selected{% endif %}>{{ r }}</option>{% endfor %}</select>
+                <p class="text-[11px] text-gray-400 mt-1">Devolução e ajuste saem sempre como "Sem pagamento".</p></div>
+            <div class="nfe-c6 grid grid-cols-3 gap-2">
+                <div><label class="fin-label" for="nfeVFrete">Frete</label><input name="valor_frete" id="nfeVFrete" class="fin-input nfe-num" inputmode="decimal" value="{{ nota.valor_frete|stringformat:'s'|default:'0' }}" data-nfe-soma></div>
+                <div><label class="fin-label" for="nfeVSeg">Seguro</label><input name="valor_seguro" id="nfeVSeg" class="fin-input nfe-num" inputmode="decimal" value="{{ nota.valor_seguro|stringformat:'s'|default:'0' }}" data-nfe-soma></div>
+                <div><label class="fin-label" for="nfeVOut">Outras</label><input name="valor_outras" id="nfeVOut" class="fin-input nfe-num" inputmode="decimal" value="{{ nota.valor_outras|stringformat:'s'|default:'0' }}" data-nfe-soma></div>
+            </div>
+            <div class="nfe-c6"><label class="fin-label" for="nfeInfo">Informações complementares <span class="font-normal text-gray-400">(na devolução, o número e a chave da nota original entram sozinhos)</span></label>
+                <textarea name="info_complementar" id="nfeInfo" rows="3" maxlength="5000" class="fin-input">{{ nota.info_complementar }}</textarea></div>
+        </div>
+    </section>
+</div>
+
+<aside class="space-y-4 min-w-0">
+    <div class="fin-card p-4 fin-lateral">
+        <p class="nfe-secao"><i class="fas fa-calculator"></i>Totais (prévia)</p>
+        <div class="nfe-totais" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+            <div><span>Produtos</span><strong id="nfeTProd">R$ 0,00</strong></div>
+            <div><span>Descontos</span><strong id="nfeTDesc">R$ 0,00</strong></div>
+            <div><span>ICMS</span><strong id="nfeTIcms">R$ 0,00</strong></div>
+            <div><span>PIS + Cofins</span><strong id="nfeTPc">R$ 0,00</strong></div>
+            <div class="nfe-total-nota" style="grid-column:span 2"><span>Total da nota</span><strong id="nfeTNota">R$ 0,00</strong></div>
+        </div>
+        <p class="text-[11px] text-gray-400 mt-2">O valor que vale é o que o servidor calcula ao salvar (com rateio do frete pelos itens).</p>
+        <button class="fin-btn fin-btn-verde w-full mt-3"><i class="fas fa-floppy-disk"></i>Salvar rascunho</button>
+        <p class="text-[11px] text-gray-500 mt-2 text-center">Nada vai para a SEFAZ ao salvar.</p>
+    </div>
+</aside>
+</div>
+</form>
+
+<script>
+(function () {
+    var form = document.getElementById('nfeForm');
+    var lista = document.getElementById('nfeItens');
+    var modelo = document.getElementById('nfeItemModelo');
+    var emitente = document.getElementById('nfeEmitente');
+    var tipo = document.getElementById('nfeTipo');
+    var finalidade = document.getElementById('nfeFinalidade');
+
+    function num(v) {
+        v = String(v || '').trim().replace(/\s|R\$|%/g, '');
+        if (v.indexOf(',') >= 0) v = v.replace(/\./g, '').replace(',', '.');
+        var n = parseFloat(v);
+        return isNaN(n) ? 0 : n;
+    }
+    function r2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
+    function simples() { var o = emitente.options[emitente.selectedIndex]; return !!(o && o.dataset.simples); }
+
+    function ajustarCst(item) {
+        var sel = item.querySelector('[name=item_cst_icms]');
+        var sn = simples();
+        var valido = false;
+        Array.prototype.forEach.call(sel.options, function (o) {
+            var deste = (o.dataset.regime === 'sn') === sn;
+            o.hidden = !deste; o.disabled = !deste;
+            if (deste && o.selected) valido = true;
+        });
+        if (!valido) {
+            var primeiro = Array.prototype.find.call(sel.options, function (o) { return !o.disabled; });
+            if (primeiro) sel.value = primeiro.value;
+        }
+    }
+
+    function recalcular() {
+        var itens = lista.querySelectorAll('.nfe-item');
+        var prod = 0, desc = 0, icms = 0, pc = 0;
+        itens.forEach(function (item, i) {
+            item.querySelector('[data-nfe-ordem]').textContent = i + 1;
+            var q = num(item.querySelector('[name=item_quantidade]').value);
+            var u = num(item.querySelector('[name=item_valor_unitario]').value);
+            var d = num(item.querySelector('[name=item_valor_desconto]').value);
+            var total = r2(q * u);
+            var cst = item.querySelector('[name=item_cst_icms]').value;
+            var aliq = num(item.querySelector('[name=item_aliquota_icms]').value);
+            var red = num(item.querySelector('[name=item_reducao_bc_icms]').value);
+            var base = total - d, vIcms = 0;
+            if (cst === '00' || cst === '20' || ((cst === '90' || cst === '900') && aliq > 0)) {
+                var bc = (cst === '00') ? base : base * (1 - red / 100);
+                vIcms = r2(r2(bc) * aliq / 100);
+            }
+            var pp = num(item.querySelector('[name=item_aliquota_pis]').value), pcf = num(item.querySelector('[name=item_aliquota_cofins]').value);
+            item.querySelector('[data-nfe-total]').textContent = Fin.brl(total);
+            prod += total; desc += d; icms += vIcms; pc += r2(base * pp / 100) + r2(base * pcf / 100);
+        });
+        var extra = num(document.getElementById('nfeVFrete').value) + num(document.getElementById('nfeVSeg').value) + num(document.getElementById('nfeVOut').value);
+        document.getElementById('nfeTProd').textContent = Fin.brl(prod);
+        document.getElementById('nfeTDesc').textContent = Fin.brl(desc);
+        document.getElementById('nfeTIcms').textContent = Fin.brl(icms);
+        document.getElementById('nfeTPc').textContent = Fin.brl(pc);
+        document.getElementById('nfeTNota').textContent = Fin.brl(r2(prod - desc + extra));
+        document.getElementById('nfeQtdItens').textContent = itens.length;
+    }
+
+    function prepararItem(item) {
+        ajustarCst(item);
+        item.querySelector('[data-nfe-remover]').addEventListener('click', function () {
+            if (lista.querySelectorAll('.nfe-item').length === 1) {
+                item.querySelectorAll('input').forEach(function (c) { c.value = ''; });
+            } else { item.remove(); }
+            recalcular();
+        });
+    }
+
+    document.getElementById('nfeAddItem').addEventListener('click', function () {
+        var novo = modelo.content.firstElementChild.cloneNode(true);
+        var ultimo = lista.querySelector('.nfe-item:last-child');
+        if (ultimo) {   // repete o fiscal do item anterior (CFOP, CST, alíquotas) para agilizar
+            ['cfop', 'origem', 'cst_icms', 'aliquota_icms', 'reducao_bc_icms', 'cst_pis', 'aliquota_pis', 'cst_cofins', 'aliquota_cofins', 'unidade'].forEach(function (c) {
+                var de = ultimo.querySelector('[name=item_' + c + ']'), para = novo.querySelector('[name=item_' + c + ']');
+                if (de && para) para.value = de.value;
+            });
+        }
+        lista.appendChild(novo);
+        prepararItem(novo);
+        recalcular();
+        novo.querySelector('[name=item_codigo]').focus();
+    });
+
+    function modo() {
+        var m = (form.querySelector('[name=_modo]:checked') || {}).value;
+        if (m === 'saida') { tipo.value = '1'; if (finalidade.value === '4') finalidade.value = '1'; }
+        if (m === 'entrada') { tipo.value = '0'; if (finalidade.value === '4') finalidade.value = '1'; }
+        if (m === 'devolucao') { finalidade.value = '4'; document.getElementById('nfePag').value = '90'; }
+        sincronizar();
+    }
+    function sincronizar() {
+        var dev = finalidade.value === '4';
+        document.getElementById('nfeRefBloco').hidden = finalidade.value === '1' && !document.getElementById('nfeRef').value;
+        document.getElementById('nfeDicaDevolucao').hidden = !dev;
+        var puxar = document.getElementById('nfePuxar'); if (puxar) puxar.hidden = !dev;
+        document.getElementById('nfeRotuloDest').textContent = tipo.value === '0' ? 'Remetente' : 'Destinatário';
+        var r = form.querySelector('[name=_modo][value=' + (dev ? 'devolucao' : (tipo.value === '0' ? 'entrada' : 'saida')) + ']');
+        if (r) r.checked = true;
+    }
+    form.querySelectorAll('[name=_modo]').forEach(function (r) { r.addEventListener('change', modo); });
+    tipo.addEventListener('change', sincronizar);
+    finalidade.addEventListener('change', sincronizar);
+    emitente.addEventListener('change', function () { lista.querySelectorAll('.nfe-item').forEach(ajustarCst); recalcular(); });
+    form.addEventListener('input', function (e) { if (e.target.closest('.nfe-item') || e.target.hasAttribute('data-nfe-soma')) recalcular(); });
+    form.addEventListener('change', function (e) { if (e.target.closest('.nfe-item')) recalcular(); });
+    form.addEventListener('submit', function () { var b = form.querySelector('button.fin-btn-verde'); if (b) { b.disabled = true; b.innerHTML = '<i class="fas fa-spinner fa-spin"></i>Salvando…'; } });
+    lista.querySelectorAll('.nfe-item').forEach(prepararItem);
+    sincronizar();
+    recalcular();
+})();
+</script>
+{% endblock %}
