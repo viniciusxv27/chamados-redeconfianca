@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { abrirArquivo } from '@/components/modulos/comum';
 import { BarraProgresso } from '@/components/modulos/impulso/barra';
 import { CartaoConvite } from '@/components/modulos/impulso/cartao-convite';
+import { TextoFormatado } from '@/components/ui/texto-formatado';
 import { COR_PRIORIDADE_META, COR_STATUS_META, ROTULO_STATUS, dataCurta, textoDoPrazo } from '@/components/modulos/impulso/comum';
 import { Avatar, BarraDetalhe, Botao, BotaoIcone, Cartao, Esqueleto, EstadoErro, Icone, type NomeIcone, Pressionavel, Selo, Tela, Texto } from '@/components/ui';
 import { estado, fontes, marca, raios } from '@/constants/theme';
@@ -59,7 +60,7 @@ export default function DetalheMetaImpulso() {
             ) : null}
             {data.pode_mover ? <Mover meta={data} /> : null}
             <Secao icone="document-text-outline" titulo="Descrição">
-              <Texto selectable>{data.descricao || 'Sem descrição.'}</Texto>
+              {data.descricao ? <TextoFormatado texto={data.descricao} selectable /> : <Texto selectable>Sem descrição.</Texto>}
               {data.descricao_foto ? (
                 <Pressionavel onPress={() => data.descricao_foto && void abrirArquivo(data.descricao_foto)} accessibilityLabel="Abrir a foto da descrição">
                   <Image source={{ uri: data.descricao_foto }} style={{ width: '100%', height: 200, borderRadius: raios.md }} contentFit="cover" transition={200} />
@@ -494,9 +495,7 @@ function Mensagem({ comentario, indice }: { comentario: ComentarioMeta; indice: 
               {comentario.autor?.nome ?? 'Alguém'}
             </Texto>
           ) : null}
-          <Texto selectable style={meu ? { color: '#fff' } : undefined}>
-            {comentario.texto}
-          </Texto>
+          <TextoFormatado texto={comentario.texto} cor={meu ? '#fff' : undefined} selectable />
         </View>
         <Texto variante="legenda" tom="fraco" style={{ fontSize: 11, alignSelf: meu ? 'flex-end' : 'flex-start' }}>
           {tempoRelativo(comentario.criado_em)}
