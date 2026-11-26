@@ -1310,6 +1310,45 @@ class UserDocument(models.Model):
         return f"{size / (1024 * 1024):.1f} MB"
 
 
+class CategoriaDocumento(models.Model):
+    """Categoria de documento criada pela tela, além das fixas (CATEGORIAS_DOCUMENTO).
+
+    A chave ("CAT…") é o que vai em UserDocument.categoria e em PermissaoCategoriaDocumento;
+    quem vê segue a mesma regra das fixas (users.documentos_acesso).
+    """
+    chave = models.CharField(max_length=14, unique=True, editable=False)
+    nome = models.CharField(max_length=60, unique=True, verbose_name='Nome')
+    criada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+', verbose_name='Criada por')
+    criada_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['nome']
+        verbose_name = 'Categoria de documento (criada pela tela)'
+        verbose_name_plural = 'Categorias de documento (criadas pela tela)'
+
+    def __str__(self):
+        return self.nome
+
+    def save(self, *args, **kwargs):
+        if not self.chave:
+            import secrets
+            self.chave = 'CAT' + secrets.token_hex(4).upper()
+        super().save(*args, **kwargs)
+
+
+def categorias_documento():
+    """As fixas e as criadas pela tela (antes de "Outros Documentos"), como [(chave, rótulo)]."""
+    from django.db import transaction
+    try:
+        with transaction.atomic():      # savepoint: sem a tabela (migração pendente) valem só as fixas
+            extras = [(c.chave, c.nome) for c in CategoriaDocumento.objects.only('chave', 'nome')]
+    except Exception:  # noqa: BLE001
+        extras = []
+    fixas = [c for c in CATEGORIAS_DOCUMENTO if c[0] != CATEGORIA_DOC_OUTROS]
+    return fixas + extras + [c for c in CATEGORIAS_DOCUMENTO if c[0] == CATEGORIA_DOC_OUTROS]
+
+
 class PermissaoCategoriaDocumento(models.Model):
     """Quem vê cada categoria de documento do colaborador. Sem linha, vale o padrão (ver users.documentos_acesso)."""
     GESTORES, RH_DP, SUPERADMIN = 'GESTORES', 'RH_DP', 'SUPERADMIN'

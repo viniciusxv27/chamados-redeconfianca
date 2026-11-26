@@ -1,6 +1,7 @@
 import datetime
 import logging
 import re
+import unicodedata
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
@@ -25,7 +26,7 @@ import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
 from .models import (CATEGORIA_DOC_ADMISSIONAL, CATEGORIA_DOC_ATESTADO, CATEGORIA_DOC_DECLARACAO, CATEGORIA_DOC_OUTROS,
-                     CATEGORIA_DOC_PESSOAL, CATEGORIAS_DOCUMENTO,
+                     CATEGORIA_DOC_PESSOAL, CategoriaDocumento, categorias_documento,
                      User, Sector, UserSession, normalize_cpf, RequiredDocument, UserDocument,
                      EmergencyContact, Dependent)
 from .serializers import UserSerializer, SectorSerializer
@@ -1579,6 +1580,7 @@ ICONES_CATEGORIA_DOCUMENTO = {
     CATEGORIA_DOC_DECLARACAO: ('fa-file-lines', 'text-violet-600'),
     CATEGORIA_DOC_OUTROS: ('fa-folder', 'text-gray-500'),
 }
+ICONE_CATEGORIA_CRIADA = ('fa-folder-open', 'text-amber-600')
 
 
 def _documentos_visiveis(quem_ve, target):
@@ -1596,12 +1598,13 @@ def _contexto_documentos(request, target):
     visiveis = categorias_visiveis(request.user)
     grupos = []
     for categoria, rotulo in visiveis:
-        icone, cor = ICONES_CATEGORIA_DOCUMENTO[categoria]
+        icone, cor = ICONES_CATEGORIA_DOCUMENTO.get(categoria, ICONE_CATEGORIA_CRIADA)
         lista = [d for d in documents if d.categoria_efetiva == categoria]
         grupos.append({'categoria': categoria, 'rotulo': rotulo, 'icone': icone, 'cor': cor, 'lista': lista})
     return {
         'documents': documents, 'grupos_documentos': grupos, 'documentos_restritos': documentos_restritos,
-        'categorias_documento': CATEGORIAS_DOCUMENTO, 'categorias_para_escolher': visiveis,
+        'categorias_documento': categorias_documento(), 'categorias_para_escolher': visiveis,
+        'acessos_nova_categoria': _acessos_que_pode_dar(request.user),
         'required_documents': RequiredDocument.objects.filter(is_active=True),
         'pode_configurar_documentos': request.user.is_superuser or request.user.hierarchy == 'SUPERADMIN',
     }
@@ -2942,7 +2945,7 @@ def admin_upload_user_document_view(request, user_id):
         messages.error(request, 'Selecione um arquivo para enviar.')
         return _voltar_documentos(request, target.id)
 
-    categorias = dict(CATEGORIAS_DOCUMENTO)
+    categorias = dict(categorias_documento())
     tipos = {str(t.id): t for t in RequiredDocument.objects.filter(
         id__in=[v for v in (request.POST.get(f'document_type{suf}') for suf, _n in linhas) if v and v.isdigit()])}
     enviados, falhas, escondidos = [], [], []
@@ -2986,6 +2989,62 @@ def admin_upload_user_document_view(request, user_id):
     return _voltar_documentos(request, target.id)
 
 
+def _acessos_que_pode_dar(user):
+    """Quem vai ver a categoria nova: só as opções em que quem cria continua vendo."""
+    from .models import PermissaoCategoriaDocumento as P
+    superadmin = user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN'
+    opcoes = [(P.GESTORES, 'Quem gerencia cadastros')]
+    if superadmin or user.pode_ver_atestados():
+        opcoes.append((P.RH_DP, 'Só RH/DP e SUPERADMIN'))
+    if superadmin:
+        opcoes.append((P.SUPERADMIN, 'Só o SUPERADMIN'))
+    return opcoes
+
+
+def _nome_comparavel(nome):
+    limpo = unicodedata.normalize('NFKD', nome or '').encode('ascii', 'ignore').decode().lower()
+    return ' '.join(re.findall(r'[a-z0-9]+', limpo))
+
+
+@login_required
+@require_POST
+def documento_categoria_nova_view(request):
+    """Cria uma categoria de documento pela tela de documentos (edição ou perfil do colaborador).
+
+    Nome igual (sem acento/maiúscula) a uma que já existe devolve a existente.
+    """
+    from .models import PermissaoCategoriaDocumento as P
+    if not request.user.can_manage_users():
+        return JsonResponse({'ok': False, 'erro': 'Sem permissão.'}, status=403)
+    nome = ' '.join((request.POST.get('nome') or '').split())[:60]
+    if len(nome) < 3:
+        return JsonResponse({'ok': False, 'erro': 'Dê um nome à categoria (ao menos 3 letras).'}, status=400)
+    acesso = request.POST.get('acesso') or P.GESTORES
+    if acesso not in dict(_acessos_que_pode_dar(request.user)):
+        return JsonResponse({'ok': False, 'erro': 'Você não pode criar uma categoria que nem você veria.'}, status=403)
+    from .documentos_acesso import pode_ver_categoria
+    comparavel = _nome_comparavel(nome)
+    for chave, rotulo in categorias_documento():
+        if _nome_comparavel(rotulo) == comparavel:
+            if not pode_ver_categoria(request.user, chave):
+                return JsonResponse({'ok': False, 'erro': f'Já existe a categoria "{rotulo}", com acesso restrito.'}, status=403)
+            return JsonResponse({'ok': True, 'chave': chave, 'nome': rotulo, 'ja_existia': True})
+    from django.db import IntegrityError, transaction
+    try:
+        with transaction.atomic():
+            categoria = CategoriaDocumento.objects.create(nome=nome, criada_por=request.user)
+            if acesso != P.GESTORES:
+                P.objects.create(categoria=categoria.chave, acesso=acesso, atualizado_por=request.user)
+    except IntegrityError:
+        existente = CategoriaDocumento.objects.filter(nome__iexact=nome).first()
+        if existente is None:
+            return JsonResponse({'ok': False, 'erro': 'Não deu para criar a categoria. Tente de novo.'}, status=409)
+        return JsonResponse({'ok': True, 'chave': existente.chave, 'nome': existente.nome, 'ja_existia': True})
+    log_action(request.user, 'USER_UPDATE', f'Categoria de documento criada: "{nome}" '
+                                             f'({dict(P.ACESSOS)[acesso].lower()})', request)
+    return JsonResponse({'ok': True, 'chave': categoria.chave, 'nome': categoria.nome, 'ja_existia': False})
+
+
 @login_required
 @require_POST
 def user_document_categoria_view(request, document_id):
@@ -2994,7 +3053,7 @@ def user_document_categoria_view(request, document_id):
         return JsonResponse({'ok': False, 'erro': 'Sem permissão.'}, status=403)
     doc = get_object_or_404(UserDocument, id=document_id)
     categoria = request.POST.get('categoria', '')
-    if categoria not in dict(CATEGORIAS_DOCUMENTO):
+    if categoria not in dict(categorias_documento()):
         return JsonResponse({'ok': False, 'erro': 'Categoria inválida.'}, status=400)
     from .documentos_acesso import pode_ver_categoria
     if not (pode_ver_categoria(request.user, doc.categoria_efetiva) and pode_ver_categoria(request.user, categoria)):
@@ -3061,7 +3120,7 @@ def documentos_permissoes_view(request):
         return redirect('manage_users')
     if request.method == 'POST':
         mudancas = []
-        for categoria, rotulo in CATEGORIAS_DOCUMENTO:
+        for categoria, rotulo in categorias_documento():
             acesso = request.POST.get(f'acesso_{categoria}', '')
             if acesso not in dict(P.ACESSOS):
                 continue
@@ -3080,9 +3139,9 @@ def documentos_permissoes_view(request):
         return redirect('documentos_permissoes')
     regras = {r.categoria: r for r in P.objects.prefetch_related('usuarios')}
     linhas = []
-    for categoria, rotulo in CATEGORIAS_DOCUMENTO:
+    for categoria, rotulo in categorias_documento():
         regra = regras.get(categoria)
-        icone, cor = ICONES_CATEGORIA_DOCUMENTO[categoria]
+        icone, cor = ICONES_CATEGORIA_DOCUMENTO.get(categoria, ICONE_CATEGORIA_CRIADA)
         linhas.append({'categoria': categoria, 'rotulo': rotulo, 'icone': icone, 'cor': cor,
                        'acesso': regra.acesso if regra else PADRAO.get(categoria, P.GESTORES),
                        'usuarios': list(regra.usuarios.all()) if regra else [],

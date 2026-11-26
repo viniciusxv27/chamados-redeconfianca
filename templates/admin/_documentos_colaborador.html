@@ -55,14 +55,41 @@
                 {% csrf_token %}
                 <input type="hidden" name="voltar" value="{{ request.path }}">
                 <div class="space-y-3" data-doc-linhas></div>
+                <div class="hidden mt-3 p-3 rounded-lg bg-white border border-blue-300" data-cat-nova role="group" aria-labelledby="catNovaTitulo{{ alvo.id }}">
+                    <p class="text-xs font-semibold text-blue-900 mb-2" id="catNovaTitulo{{ alvo.id }}"><i class="fas fa-folder-plus mr-1"></i>Nova categoria de documento</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2 items-end">
+                        <div>
+                            <label class="block text-xs font-medium text-blue-900 mb-1" for="catNovaNome{{ alvo.id }}">Nome</label>
+                            <input type="text" id="catNovaNome{{ alvo.id }}" data-cat-nome maxlength="60" placeholder="Ex: Treinamentos, EPI, Advertências"
+                                   class="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white text-sm">
+                        </div>
+                        <div {% if acessos_nova_categoria|length < 2 %}hidden{% endif %}>
+                            <label class="block text-xs font-medium text-blue-900 mb-1" for="catNovaAcesso{{ alvo.id }}">Quem vê</label>
+                            <select id="catNovaAcesso{{ alvo.id }}" data-cat-acesso class="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white text-sm">
+                                {% for valor, rotulo in acessos_nova_categoria %}<option value="{{ valor }}">{{ rotulo }}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div class="flex gap-2">
+                            <button type="button" data-cat-criar class="bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium inline-flex items-center disabled:opacity-60"><i class="fas fa-check mr-1.5"></i>Criar</button>
+                            <button type="button" data-cat-cancelar class="px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 text-sm">Cancelar</button>
+                        </div>
+                    </div>
+                    <p class="text-xs mt-2 text-red-600 hidden" data-cat-erro role="alert"></p>
+                </div>
                 <div class="flex flex-wrap items-center justify-between gap-2 mt-3">
+                    <div class="flex flex-wrap gap-2">
                     <button type="button" data-doc-mais class="px-3 py-2 rounded-lg border border-blue-300 bg-white text-blue-700 hover:bg-blue-100 text-sm font-medium inline-flex items-center">
                         <i class="fas fa-plus mr-2"></i> Adicionar mais
                     </button>
+                    <button type="button" data-cat-abrir class="px-3 py-2 rounded-lg border border-blue-300 bg-white text-blue-700 hover:bg-blue-100 text-sm font-medium inline-flex items-center">
+                        <i class="fas fa-folder-plus mr-2"></i> Nova categoria
+                    </button>
+                    </div>
                     <button type="submit" data-doc-enviar class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm inline-flex items-center disabled:opacity-60">
                         <i class="fas fa-upload mr-2"></i> <span>Enviar documento</span>
                     </button>
                 </div>
+                <p class="text-xs mt-2 text-emerald-700 hidden" data-cat-msg role="status"></p>
             </form>
             <template id="docLinhaModelo{{ alvo.id }}">
                 <div class="doc-linha relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end p-3 rounded-lg bg-white/70 border border-blue-200" data-doc-linha>
@@ -75,6 +102,7 @@
                         <select data-nome="categoria" class="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white text-sm">
                             <option value="">Pelo nome do documento</option>
                             {% for valor, rotulo in categorias_para_escolher %}<option value="{{ valor }}">{{ rotulo }}</option>{% endfor %}
+                            <option value="__nova__">+ Nova categoria…</option>
                         </select>
                     </div>
                     <div>
@@ -151,6 +179,71 @@
         enviar.disabled = true;
         enviar.querySelector('i').className = 'fas fa-circle-notch fa-spin mr-2';
         enviar.querySelector('span').textContent = 'Enviando…';
+    });
+    // Categoria nova: pela opção "+ Nova categoria…" de uma linha ou pelo botão; vale na hora para todas as listas da tela.
+    var painel = form.querySelector('[data-cat-nova]'), nomeCat = painel.querySelector('[data-cat-nome]'),
+        acessoCat = painel.querySelector('[data-cat-acesso]'), criar = painel.querySelector('[data-cat-criar]'),
+        erroCat = painel.querySelector('[data-cat-erro]'), msgCat = form.querySelector('[data-cat-msg]'), alvoCat = null, timerCat = null;
+    function avisoCat(texto) { erroCat.textContent = texto || ''; erroCat.classList.toggle('hidden', !texto); }
+    function abrirCat(select) {
+        alvoCat = select || null;
+        painel.classList.remove('hidden'); avisoCat(''); msgCat.classList.add('hidden');
+        nomeCat.focus();
+    }
+    function fecharCat() { painel.classList.add('hidden'); nomeCat.value = ''; alvoCat = null; }
+    function selectsDeCategoria() {
+        var lista = Array.prototype.slice.call(document.querySelectorAll('select[data-nome="categoria"], #documentos .js-doc-categoria'));
+        var modeloSel = modelo.content.querySelector('select[data-nome="categoria"]');
+        if (modeloSel) lista.push(modeloSel);
+        return lista;
+    }
+    function incluirOpcao(chave, nome) {
+        selectsDeCategoria().forEach(function (sel) {
+            if (Array.prototype.some.call(sel.options, function (o) { return o.value === chave; })) return;
+            var antesDe = sel.querySelector('option[value="OUTROS"]') || sel.querySelector('option[value="__nova__"]');
+            sel.insertBefore(new Option(nome, chave), antesDe);
+        });
+    }
+    caixa.addEventListener('focusin', function (e) {
+        if (e.target.matches('select[data-nome="categoria"]')) e.target.dataset.antes = e.target.value === '__nova__' ? '' : e.target.value;
+    });
+    caixa.addEventListener('change', function (e) {
+        var sel = e.target;
+        if (!sel.matches('select[data-nome="categoria"]')) return;
+        if (sel.value === '__nova__') { sel.value = sel.dataset.antes || ''; abrirCat(sel); }
+        else sel.dataset.antes = sel.value;
+    });
+    form.querySelector('[data-cat-abrir]').addEventListener('click', function () { abrirCat(null); });
+    painel.querySelector('[data-cat-cancelar]').addEventListener('click', fecharCat);
+    nomeCat.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); criar.click(); }
+        else if (e.key === 'Escape') { e.preventDefault(); fecharCat(); }
+    });
+    criar.addEventListener('click', function () {
+        var nome = nomeCat.value.trim();
+        if (nome.length < 3) { avisoCat('Dê um nome à categoria (ao menos 3 letras).'); nomeCat.focus(); return; }
+        criar.disabled = true;
+        var corpo = new URLSearchParams({nome: nome, acesso: acessoCat ? acessoCat.value : '', csrfmiddlewaretoken: '{{ csrf_token }}'});
+        fetch('{% url "documento_categoria_nova" %}', {method: 'POST', body: corpo, credentials: 'same-origin'})
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                criar.disabled = false;
+                if (!d.ok) { avisoCat(d.erro || 'Não deu para criar a categoria.'); return; }
+                incluirOpcao(d.chave, d.nome);
+                var destino = alvoCat || (function () {
+                    var vazias = Array.prototype.filter.call(caixa.querySelectorAll('select[data-nome="categoria"]'), function (s) { return !s.value; });
+                    return vazias.length === 1 ? vazias[0] : null;
+                })();
+                if (destino) { destino.value = d.chave; destino.dataset.antes = d.chave; }
+                var texto = (d.ja_existia ? 'A categoria “' + d.nome + '” já existia' : 'Categoria “' + d.nome + '” criada') +
+                    (destino ? ' e escolhida na linha.' : ': escolha-a na linha do documento.');
+                fecharCat();
+                msgCat.innerHTML = '<i class="fas fa-check mr-1"></i>'; msgCat.appendChild(document.createTextNode(texto));
+                msgCat.classList.remove('hidden');
+                clearTimeout(timerCat); timerCat = setTimeout(function () { msgCat.classList.add('hidden'); }, 6000);
+                if (destino) destino.focus();
+            })
+            .catch(function () { criar.disabled = false; avisoCat('Sem conexão. Tente de novo.'); });
     });
     window.addEventListener('pageshow', function (e) { if (e.persisted) { enviar.disabled = false; enviar.querySelector('i').className = 'fas fa-upload mr-2'; renumerar(); } });
     nova(false);

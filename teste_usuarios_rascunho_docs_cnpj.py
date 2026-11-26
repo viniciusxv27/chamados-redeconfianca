@@ -136,6 +136,66 @@ try:
         h = html(ca.get(f'/users/manage/users/{alvo.pk}/profile/'))
         t('perfil usa o mesmo formulário com "Adicionar mais"', 'data-doc-mais' in h)
 
+        print('— Categoria nova pela tela de documentos')
+        from users.models import CategoriaDocumento, PermissaoCategoriaDocumento, categorias_documento
+        h = html(ca.get(f'/users/manage/users/{alvo.pk}/edit/'))
+        t('opção "+ Nova categoria…" e botão "Nova categoria"', '<option value="__nova__">+ Nova categoria…</option>' in h
+          and 'data-cat-abrir' in h and '/users/manage/documentos/categorias/nova/' in h)
+        t('SUPERADMIN escolhe quem vê (3 opções)', h.count('<option value="SUPERADMIN">Só o SUPERADMIN</option>') == 1
+          and '<option value="RH_DP">' in h)
+        URL_NOVA = '/users/manage/documentos/categorias/nova/'
+        r = ca.post(URL_NOVA, {'nome': '  Treinamentos   ZZ ', 'acesso': 'GESTORES'})
+        j = r.json()
+        cat = CategoriaDocumento.objects.filter(nome='Treinamentos ZZ').first()
+        t('cria a categoria (nome limpo, chave CAT…)', r.status_code == 200 and j['ok'] and cat is not None
+          and j['chave'] == cat.chave and cat.chave.startswith('CAT') and len(cat.chave) <= 14 and cat.criada_por == adm, j)
+        t('entra na lista de categorias antes de "Outros"', [c for c, _ in categorias_documento()][-2:] == [cat.chave, 'OUTROS'])
+        j = ca.post(URL_NOVA, {'nome': 'treinamentos zz'}).json()
+        t('mesmo nome (sem maiúscula) devolve a que existe', j['ok'] and j['ja_existia'] and j['chave'] == cat.chave
+          and CategoriaDocumento.objects.filter(nome__iexact='treinamentos zz').count() == 1)
+        j = ca.post(URL_NOVA, {'nome': 'Declarações'}).json()
+        t('nome de categoria fixa devolve a fixa', j['ja_existia'] and j['chave'] == 'DECLARACAO')
+        t('nome curto recusado', ca.post(URL_NOVA, {'nome': 'ab'}).status_code == 400)
+        t('quem não gerencia cadastros não cria', cc.post(URL_NOVA, {'nome': 'ZZ Proibida'}).status_code == 403
+          and not CategoriaDocumento.objects.filter(nome='ZZ Proibida').exists())
+        antes = UserDocument.objects.filter(user=alvo).count()
+        ca.post(f'/users/manage/users/{alvo.pk}/documents/upload/', {'categoria_0': cat.chave, 'document_name_0': 'NR-10 ZZ',
+                                                                     'file_0': pdf('nr10.pdf')})
+        d = UserDocument.objects.filter(user=alvo, document_name='NR-10 ZZ').first()
+        t('documento sobe na categoria nova', d is not None and d.categoria == cat.chave and d.categoria_efetiva == cat.chave)
+        h = html(ca.get(f'/users/manage/users/{alvo.pk}/edit/'))
+        i_cat = h.find(f'id="doc-{cat.chave.lower()}"')
+        t('a tela ganha a seção da categoria nova, com o documento', i_cat > 0 and h.find('NR-10 ZZ', i_cat) > 0
+          and 'Treinamentos ZZ' in h)
+        outro = UserDocument.objects.filter(user=alvo, document_name='Bom ZZ').first()
+        r = ca.post(f'/users/manage/user-documents/{outro.pk}/categoria/', {'categoria': cat.chave})
+        outro.refresh_from_db()
+        t('reclassificar para a categoria nova', r.json()['ok'] and outro.categoria == cat.chave)
+        t('a categoria nova aparece no acesso por categoria', 'Treinamentos ZZ' in html(ca.get('/users/manage/documentos/permissoes/')))
+
+        gestor = User.objects.create_user(username='zz.urd.gestor', email='zz.urd.gestor@exemplo-teste.local', password='x',
+                                          first_name='ZZ', last_name='Supervisor', hierarchy='SUPERVISOR', sector=loja)
+        cg = Client()
+        cg.force_login(gestor)
+        h = html(cg.get(f'/users/manage/users/{alvo.pk}/profile/'))
+        t('quem não é do RH só cria categoria que ele mesmo vê', 'data-cat-abrir' in h and '<option value="SUPERADMIN">Só o SUPERADMIN' not in h
+          and '<option value="RH_DP">' not in h)
+        r = cg.post(URL_NOVA, {'nome': 'ZZ Escondida', 'acesso': 'SUPERADMIN'})
+        t('…e não cria categoria escondida dele', r.status_code == 403 and not CategoriaDocumento.objects.filter(nome='ZZ Escondida').exists())
+        j = cg.post(URL_NOVA, {'nome': 'ZZ Uniformes'}).json()
+        t('supervisor cria categoria aberta a quem gerencia cadastros', j['ok'] and not j['ja_existia'])
+        j = ca.post(URL_NOVA, {'nome': 'ZZ Saúde ocupacional', 'acesso': 'RH_DP'}).json()
+        restrita = CategoriaDocumento.objects.get(chave=j['chave'])
+        t('categoria restrita grava a regra de acesso', PermissaoCategoriaDocumento.objects.filter(
+            categoria=restrita.chave, acesso='RH_DP').exists())
+        j = cg.post(URL_NOVA, {'nome': 'zz saude ocupacional'}).json()
+        t('nome de categoria restrita não vaza para quem não vê', not j['ok'] and 'acesso restrito' in j['erro'])
+        antes = UserDocument.objects.filter(user=alvo).count()
+        cg.post(f'/users/manage/users/{alvo.pk}/documents/upload/', {'categoria_0': restrita.chave, 'file_0': pdf('z.pdf')})
+        t('supervisor não sobe documento na categoria restrita', UserDocument.objects.filter(user=alvo).count() == antes)
+        h = html(cg.get(f'/users/manage/users/{alvo.pk}/profile/'))
+        t('…nem a vê na lista de categorias', 'Saúde ocupacional' not in h and 'ZZ Uniformes' in h)
+
         print('— Pré-cadastro: CNPJ Filial')
         User.objects.filter(pk=alvo.pk).update(branch_cnpj='39410478/000125')
         r = ca.get('/users/manage/users/pre-register/')

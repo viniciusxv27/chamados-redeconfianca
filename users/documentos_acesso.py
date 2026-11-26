@@ -6,7 +6,7 @@ liberar pessoas a mais. O SUPERADMIN sempre vê tudo.
 """
 from django.db import transaction
 
-from .models import CATEGORIA_DOC_ATESTADO, CATEGORIAS_DOCUMENTO, PermissaoCategoriaDocumento as P
+from .models import CATEGORIA_DOC_ATESTADO, PermissaoCategoriaDocumento as P, categorias_documento
 
 PADRAO = {CATEGORIA_DOC_ATESTADO: P.RH_DP}
 
@@ -19,7 +19,7 @@ def regras(user=None):
     """{categoria: (acesso, {ids a mais})}. Guardado no próprio usuário durante a requisição."""
     if user is not None and hasattr(user, '_regras_docs'):
         return user._regras_docs
-    saida = {c: (PADRAO.get(c, P.GESTORES), set()) for c, _r in CATEGORIAS_DOCUMENTO}
+    saida = {c: (PADRAO.get(c, P.GESTORES), set()) for c, _r in categorias_documento()}
     try:
         with transaction.atomic():      # savepoint: sem a tabela, a transação da página segue viva
             for regra in P.objects.prefetch_related('usuarios'):
@@ -47,7 +47,7 @@ def pode_ver_categoria(user, categoria):
 
 
 def categorias_visiveis(user):
-    return [(c, r) for c, r in CATEGORIAS_DOCUMENTO if pode_ver_categoria(user, c)]
+    return [(c, r) for c, r in categorias_documento() if pode_ver_categoria(user, c)]
 
 
 def pode_ver_documento(user, doc):

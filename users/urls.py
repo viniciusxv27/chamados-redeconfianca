@@ -69,6 +69,7 @@ urlpatterns = [
     path('manage/user-documents/<int:document_id>/delete/', views.delete_user_document_view, name='delete_user_document'),
     path('manage/user-documents/<int:document_id>/arquivo/', views.user_document_arquivo_view, name='user_document_arquivo'),
     path('manage/documentos/permissoes/', views.documentos_permissoes_view, name='documentos_permissoes'),
+    path('manage/documentos/categorias/nova/', views.documento_categoria_nova_view, name='documento_categoria_nova'),
     path('manage/required-documents/', views.manage_required_documents_view, name='manage_required_documents'),
     path('manage/required-documents/<int:doc_id>/edit/', views.edit_required_document_view, name='edit_required_document'),
     path('manage/required-documents/<int:doc_id>/delete/', views.delete_required_document_view, name='delete_required_document'),
