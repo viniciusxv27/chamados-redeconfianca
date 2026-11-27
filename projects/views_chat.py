@@ -1327,6 +1327,9 @@ def support_admin_dashboard(request):
         status='FECHADO', closed_at__lt=timezone.now() - timedelta(days=30)
     ).select_related(
         'user', 'user__sector', 'assigned_to', 'sector', 'category'
+    ).prefetch_related(
+        # can_assume olha os agentes padrão da categoria: sem isto eram 2 consultas por chamado.
+        'category__default_agents'
     ).order_by('-created_at')
     
     # Agentes de suporte (filtrados por setor)
@@ -1371,6 +1374,7 @@ def support_admin_dashboard(request):
         
         recent_chats_data.append({
             'id': chat.id,
+            'protocol': chat.protocol,
             'title': chat.title,
             'status': chat.status,
             'get_status_display': chat.get_status_display(),

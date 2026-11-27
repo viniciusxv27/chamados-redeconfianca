@@ -1,525 +1,315 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Dashboard de Suporte - Administrativo{% endblock %}
+{% block title %}Central de Suporte{% endblock %}
 
 {% block extra_css %}
+{% include '_rc_animacoes.html' %}
 <style>
-    /* Forçar cor escura nos selects dos modais */
-    #transferAgentSelect,
-    #transferAgentSelect option,
-    #changeCategorySelect,
-    #changeCategorySelect option,
-    #changeCategorySelect optgroup {
-        color: #111827 !important;
-        background-color: #ffffff !important;
-    }
-    
-    /* Estilização customizada da barra de rolagem */
-    #chatMessages::-webkit-scrollbar {
-        width: 8px;
-    }
-    
-    #chatMessages::-webkit-scrollbar-track {
-        background: #F7FAFC;
-        border-radius: 4px;
-    }
-    
-    #chatMessages::-webkit-scrollbar-thumb {
-        background: #CBD5E0;
-        border-radius: 4px;
-    }
-    
-    #chatMessages::-webkit-scrollbar-thumb:hover {
-        background: #A0AEC0;
-    }
-    
-    /* Garantir que a barra de rolagem seja sempre visível */
-    #chatMessages {
-        overflow-y: scroll !important;
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-    }
-    
-    /* Estilização para as listas de categorias e agentes */
-    #categoriesList::-webkit-scrollbar,
-    #agentsList::-webkit-scrollbar {
-        width: 6px;
-    }
-    
-    #categoriesList::-webkit-scrollbar-track,
-    #agentsList::-webkit-scrollbar-track {
-        background: #F7FAFC;
-    }
-    
-    #categoriesList::-webkit-scrollbar-thumb,
-    #agentsList::-webkit-scrollbar-thumb {
-        background: #CBD5E0;
-        border-radius: 3px;
-    }
-    
-    /* Badges de prioridade */
-    .priority-badge {
-        display: inline-block;
-        padding: 4px 12px;
-        border-radius: 9999px;
-        font-size: 0.75rem;
-        font-weight: 500;
-    }
-    
-    .priority-baixa {
-        background-color: #D1FAE5;
-        color: #065F46;
-    }
-    
-    .priority-media {
-        background-color: #FEF3C7;
-        color: #92400E;
-    }
-    
-    .priority-alta {
-        background-color: #FED7AA;
-        color: #9A3412;
-    }
-    
-    .priority-urgente {
-        background-color: #FECACA;
-        color: #991B1B;
-    }
+    /* Painel de suporte no visual da home (27/11/2026): topo rc-hero, números que filtram, busca instantânea. */
+    .rc-filtro[aria-pressed="true"] { box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgba(255, 255, 255, .65); background: rgba(255, 255, 255, .3); }
+    html:not(.dark) #transferAgentSelect, html:not(.dark) #transferAgentSelect option,
+    html:not(.dark) #changeCategorySelect, html:not(.dark) #changeCategorySelect option,
+    html:not(.dark) #changeCategorySelect optgroup { color: #111827 !important; background-color: #ffffff !important; }
 
-    /* Cores para mensagens de diferentes usuários */
-    .msg-color-0 { background-color: #3B82F6 !important; color: white !important; } /* Blue */
-    .msg-color-1 { background-color: #10B981 !important; color: white !important; } /* Green */
-    .msg-color-2 { background-color: #8B5CF6 !important; color: white !important; } /* Purple */
-    .msg-color-3 { background-color: #F59E0B !important; color: white !important; } /* Amber */
-    .msg-color-4 { background-color: #EF4444 !important; color: white !important; } /* Red */
-    .msg-color-5 { background-color: #06B6D4 !important; color: white !important; } /* Cyan */
-    .msg-color-6 { background-color: #EC4899 !important; color: white !important; } /* Pink */
-    .msg-color-7 { background-color: #14B8A6 !important; color: white !important; } /* Teal */
-    
-    /* Mensagem do lado esquerdo (outros usuários) */
-    .msg-left { text-align: left; }
-    .msg-left .msg-bubble { display: inline-block; max-width: 75%; }
-    
-    /* Mensagem do lado direito (usuário logado) */
-    .msg-right { text-align: right; }
-    .msg-right .msg-bubble { display: inline-block; max-width: 75%; }
+    .sp-campo { width: 100%; padding: .55rem .75rem; border: 1px solid #e5e7eb; border-radius: .9rem; font-size: .85rem; background: #fff; color: #111827; }
+    .sp-campo:focus { outline: none; border-color: #fb923c; box-shadow: 0 0 0 3px rgba(251, 146, 60, .2); }
+    html.dark .sp-campo { background: var(--tema-superficie-3); border-color: var(--tema-borda); color: var(--tema-texto); }
+    .sp-rotulo { display: block; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #6b7280; margin-bottom: .25rem; }
 
-    .support-chat-row {
-        display: flex;
-        width: 100%;
-        margin-bottom: 10px;
-        align-items: flex-end;
-        gap: 8px;
-    }
+    .sp-seg button { padding: .45rem .9rem; border-radius: .7rem; font-size: .85rem; font-weight: 600; color: #4b5563; transition: background-color .2s, color .2s; }
+    .sp-seg button[aria-pressed="true"] { background: #fff; color: #ea580c; box-shadow: 0 2px 6px -2px rgba(15, 23, 42, .25); }
+    html.dark .sp-seg button[aria-pressed="true"] { background: var(--tema-superficie); color: #fb923c; }
 
-    .support-chat-row.incoming {
-        justify-content: flex-start;
-    }
+    .sp-atalho { display: inline-flex; align-items: center; gap: .4rem; padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600;
+        border: 1px solid #e5e7eb; background: #fff; color: #374151; transition: all .2s cubic-bezier(.2, .8, .2, 1); }
+    .sp-atalho:hover { border-color: #fdba74; transform: translateY(-1px); }
+    .sp-atalho[aria-pressed="true"] { background: linear-gradient(135deg, #ff6b35, #f59e0b); border-color: transparent; color: #fff; }
+    .sp-atalho b { font-variant-numeric: tabular-nums; }
+    html.dark .sp-atalho { background: var(--tema-superficie); border-color: var(--tema-borda); color: var(--tema-texto-2); }
+    html.dark .sp-atalho[aria-pressed="true"] { background: linear-gradient(135deg, #b8441c, #a85a12); color: #fff; }
 
-    .support-chat-row.outgoing {
-        justify-content: flex-end;
-    }
+    /* cartões do kanban: faixa da prioridade à esquerda */
+    .sp-card { position: relative; border-left: 4px solid var(--sp-cor, #d1d5db); }
+    .sp-card[data-prio="baixa"] { --sp-cor: #10b981; }
+    .sp-card[data-prio="media"] { --sp-cor: #f59e0b; }
+    .sp-card[data-prio="alta"] { --sp-cor: #f97316; }
+    .sp-card[data-prio="urgente"] { --sp-cor: #ef4444; }
+    .sp-avatar { width: 1.6rem; height: 1.6rem; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center;
+        font-size: 10px; font-weight: 700; color: #fff; flex-shrink: 0; background: linear-gradient(135deg, #ff6b35, #f59e0b); }
+    .sp-contador { min-width: 1.75rem; text-align: center; padding: .15rem .55rem; border-radius: 9999px; font-size: .75rem; font-weight: 700; }
+    .sp-coluna.sp-alvo { box-shadow: 0 0 0 2px #fb923c; }
+    .sp-novo-pulso { animation: sp-pulso 1.6s ease-out 2; }
+    @keyframes sp-pulso { 0% { box-shadow: 0 0 0 0 rgba(249, 115, 22, .55); } 100% { box-shadow: 0 0 0 12px rgba(249, 115, 22, 0); } }
 
-    .support-chat-bubble {
-        position: relative;
-        display: inline-block;
-        max-width: 78%;
-        padding: 10px 12px;
-        border-radius: 16px;
-        box-shadow: 0 1px 1px rgba(0, 0, 0, 0.12);
-        word-break: break-word;
-        line-height: 1.45;
-    }
+    [draggable="true"] { cursor: grab; }
+    [draggable="true"]:active { cursor: grabbing; }
+    .drop-zone { transition: background-color .2s ease; }
+    .drop-zone.drag-over { background-color: rgba(251, 146, 60, .12) !important; outline: 2px dashed #fb923c; outline-offset: -6px; }
 
-    .support-chat-row.incoming .support-chat-bubble {
-        background: #ffffff;
-        border: 1px solid #E5E7EB;
-        border-top-left-radius: 6px;
-        color: #111827;
-    }
+    /* cronômetro */
+    .timer-badge { display: inline-flex; align-items: center; gap: 4px; font-size: .7rem; padding: 2px 7px; border-radius: 9999px; background: #f3f4f6; color: #374151; font-variant-numeric: tabular-nums; }
+    .timer-badge.warning { background: #fef3c7; color: #92400e; }
+    .timer-badge.danger { background: #fee2e2; color: #991b1b; }
+    html.dark .timer-badge { background: var(--tema-superficie-3); color: var(--tema-texto-2); }
+    html.dark .timer-badge.warning { background: rgba(234, 179, 8, .18); color: #fcd34d; }
+    html.dark .timer-badge.danger { background: rgba(239, 68, 68, .2); color: #fca5a5; }
 
-    .support-chat-row.incoming .support-chat-bubble::before {
-        content: '';
-        position: absolute;
-        left: -7px;
-        top: 0;
-        width: 0;
-        height: 0;
-        border-top: 10px solid #ffffff;
-        border-right: 8px solid transparent;
-    }
+    .priority-badge { display: inline-block; padding: 3px 11px; border-radius: 9999px; font-size: .75rem; font-weight: 600; }
+    .priority-baixa { background: #d1fae5; color: #065f46; }
+    .priority-media { background: #fef3c7; color: #92400e; }
+    .priority-alta { background: #fed7aa; color: #9a3412; }
+    .priority-urgente { background: #fecaca; color: #991b1b; }
 
-    .support-chat-row.outgoing .support-chat-bubble {
-        background: #DCF8C6;
-        border: 1px solid #CDEBB2;
-        color: #1F2937;
-        border-top-right-radius: 6px;
-    }
+    /* conversa */
+    #chatMessages { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; scrollbar-width: thin; }
+    .whatsapp-wall { background-color: #efe7de;
+        background-image: radial-gradient(circle at 25px 25px, rgba(255, 255, 255, .2) 2px, transparent 0), radial-gradient(circle at 75px 75px, rgba(255, 255, 255, .14) 2px, transparent 0);
+        background-size: 100px 100px; }
+    html.dark .whatsapp-wall { background-color: #0f141c; background-image: none; }
+    .sp-msg { display: flex; align-items: flex-end; gap: 8px; width: 100%; margin-bottom: 4px; }
+    .sp-msg.eu { justify-content: flex-end; }
+    .sp-balao { max-width: 78%; padding: 9px 12px; border-radius: 6px 16px 16px 16px; background: #fff; color: #111827; border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 1px rgba(0, 0, 0, .1); line-height: 1.45; overflow-wrap: anywhere; }
+    .sp-msg.eu .sp-balao { background: #dcf8c6; border-color: #cdebb2; color: #1f2937; border-radius: 16px 6px 16px 16px; }
+    .sp-msg.interna .sp-balao { background: #fffbeb; border: 1px dashed #f59e0b; color: #78350f; }
+    .sp-balao a { word-break: break-all; }
+    .sp-balao-texto { white-space: pre-wrap; font-size: 13px; }
+    .sp-balao-meta { margin-top: 4px; font-size: 10px; opacity: .7; display: flex; gap: 6px; align-items: center; }
+    .sp-msg.eu .sp-balao-meta { justify-content: flex-end; }
+    html.dark .sp-balao { background: var(--tema-superficie-2); color: var(--tema-texto); border-color: var(--tema-borda); }
+    html.dark .sp-msg.eu .sp-balao { background: #1d4a37; border-color: #2a6a4f; color: #e6f6ec; }
+    html.dark .sp-msg.interna .sp-balao { background: rgba(245, 158, 11, .12); color: #fcd34d; border-color: #b45309; }
+    .chat-avatar-dot { width: 26px; height: 26px; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center;
+        font-size: 11px; font-weight: 700; flex-shrink: 0; color: #fff; background: linear-gradient(135deg, #6b7280, #9ca3af); }
 
-    .support-chat-row.outgoing .support-chat-bubble::before {
-        content: '';
-        position: absolute;
-        right: -7px;
-        top: 0;
-        width: 0;
-        height: 0;
-        border-top: 10px solid #DCF8C6;
-        border-left: 8px solid transparent;
-    }
+    .support-info-card { background: #fff; border: 1px solid #eef0f4; border-radius: 1rem; padding: 14px; box-shadow: 0 6px 18px -14px rgba(15, 23, 42, .35); }
+    html.dark .support-info-card { background: var(--tema-superficie); border-color: var(--tema-borda); }
+    .sp-aba[aria-selected="true"] { color: #ea580c; border-bottom-color: #f97316; }
 
-    .support-chat-meta {
-        margin-top: 4px;
-        font-size: 10px;
-        opacity: 0.7;
-        display: flex;
-        justify-content: flex-end;
-        gap: 6px;
-        align-items: center;
-    }
-
-    .support-chat-row.incoming .support-chat-meta {
-        justify-content: flex-start;
-    }
-
-    .support-chat-text {
-        white-space: pre-wrap;
-        font-size: 13px;
-    }
-
-    .support-chat-bubble a {
-        word-break: break-all;
-    }
-
-    .support-chat-row.outgoing .support-chat-bubble a {
-        color: #1F2937;
-    }
-
-    .support-info-card {
-        position: relative;
-        background: #ffffff;
-        border: 1px solid #DDE7F3;
-        border-radius: 12px;
-        padding: 12px;
-        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
-    }
-
-    .support-info-card::before {
-        content: '';
-        position: absolute;
-        left: -8px;
-        top: 14px;
-        width: 0;
-        height: 0;
-        border-top: 8px solid transparent;
-        border-bottom: 8px solid transparent;
-        border-right: 8px solid #DDE7F3;
-    }
-
-    .support-info-card::after {
-        content: '';
-        position: absolute;
-        left: -7px;
-        top: 14px;
-        width: 0;
-        height: 0;
-        border-top: 8px solid transparent;
-        border-bottom: 8px solid transparent;
-        border-right: 8px solid #ffffff;
-    }
-
-    .whatsapp-wall {
-        background-color: #E5DDD5;
-        background-image: radial-gradient(circle at 25px 25px, rgba(255, 255, 255, 0.16) 2px, transparent 0), radial-gradient(circle at 75px 75px, rgba(255, 255, 255, 0.12) 2px, transparent 0);
-        background-size: 100px 100px;
-    }
-
-    .chat-avatar-dot {
-        width: 26px;
-        height: 26px;
-        border-radius: 9999px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 11px;
-        font-weight: 700;
-        flex-shrink: 0;
-        color: #ffffff;
-        background: #6B7280;
-    }
-
-    /* Cronômetro */
-    .timer-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        font-size: 0.7rem;
-        padding: 2px 6px;
-        border-radius: 4px;
-        background-color: #F3F4F6;
-        color: #374151;
-    }
-    .timer-badge.warning { background-color: #FEF3C7; color: #92400E; }
-    .timer-badge.danger { background-color: #FEE2E2; color: #991B1B; }
-
-    /* Estilos para Drag and Drop */
-    [draggable="true"] {
-        cursor: grab;
-    }
-
-    [draggable="true"]:active {
-        cursor: grabbing;
-    }
-
-    [draggable="true"]:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    }
-
-    .drop-zone {
-        position: relative;
-        transition: all 200ms ease;
-    }
-
-    .drop-zone.drag-over {
-        background-color: #EBF8FF !important;
-        border: 2px dashed #3B82F6 !important;
-    }
+    /* avisos */
+    #spToasts { position: fixed; right: 1rem; bottom: 1rem; z-index: 80; display: flex; flex-direction: column; gap: .5rem; max-width: min(24rem, calc(100vw - 2rem)); }
+    .sp-toast { display: flex; align-items: flex-start; gap: .6rem; padding: .75rem 1rem; border-radius: 1rem; color: #fff; font-size: .875rem;
+        box-shadow: 0 14px 30px -14px rgba(15, 23, 42, .55); animation: rc-sobe .45s cubic-bezier(.2, .8, .2, 1) both; transition: opacity .3s, transform .3s; overflow-wrap: anywhere; }
+    .sp-toast.sai { opacity: 0; transform: translateY(12px); }
 </style>
 {% endblock %}
 
 {% block content %}
-<!-- CSRF Token Global -->
 {% csrf_token %}
 
-<div class="container mx-auto px-4 py-6">
-    <!-- Header -->
-    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
-        <div>
-            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard de Suporte</h1>
-            <p class="text-gray-600">Gerenciamento de tickets e atendimentos</p>
+<div class="max-w-7xl mx-auto px-4 sm:px-0">
+    {% comment %}Topo no estilo da home (27/11/2026): os números filtram o quadro e a lista na hora.{% endcomment %}
+    <section class="rc-hero rc-surge relative overflow-hidden rounded-3xl text-white shadow-lg mb-5">
+        <span class="rc-forma rc-forma-1" aria-hidden="true"></span>
+        <span class="rc-forma rc-forma-2" aria-hidden="true"></span>
+        <span class="rc-forma rc-forma-3" aria-hidden="true"></span>
+        <div class="relative p-5 sm:p-7">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0">
+                    <h1 class="text-2xl sm:text-3xl font-bold flex items-center gap-3"><i class="fas fa-headset"></i> Central de Suporte</h1>
+                    <p class="rc-hero-suave text-sm mt-1">Chamados e atendimentos dos seus setores, ao vivo.</p>
+                    <p class="rc-hero-suave text-xs mt-2 inline-flex items-center gap-2">
+                        <span class="rc-ponto-vivo inline-block w-2 h-2 rounded-full bg-white"></span>
+                        Ao vivo · atualizado <span id="lastUpdate">--</span>
+                    </p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" onclick="openCategoriesModal()" data-rc-pop class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-orange-600 font-semibold text-sm shadow hover:shadow-md transition-shadow">
+                        <i class="fas fa-tags"></i> Categorias
+                    </button>
+                    <button type="button" onclick="openAgentsModal()" data-rc-pop class="rc-vidro inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-white font-semibold text-sm">
+                        <i class="fas fa-users"></i> Agentes
+                    </button>
+                    <a href="/projects/support/metrics/" data-rc-pop class="rc-vidro inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-white font-semibold text-sm">
+                        <i class="fas fa-chart-bar"></i> Métricas
+                    </a>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3 mt-6" role="group" aria-label="Filtrar por situação">
+                <button type="button" data-sp-status="" aria-pressed="true" style="--i: 1" class="rc-filtro rc-hero-acao rc-sobe rounded-2xl px-4 py-3 text-left">
+                    <span class="block text-2xl font-bold" id="stat-total" data-rc-conta="{{ stats.total }}">{{ stats.total }}</span>
+                    <span class="rc-hero-suave text-xs"><i class="fas fa-layer-group mr-1"></i>Todos</span>
+                </button>
+                <button type="button" data-sp-status="ABERTO" aria-pressed="false" style="--i: 2" class="rc-filtro rc-hero-acao rc-sobe rounded-2xl px-4 py-3 text-left">
+                    <span class="block text-2xl font-bold" id="stat-open" data-rc-conta="{{ stats.open }}">{{ stats.open }}</span>
+                    <span class="rc-hero-suave text-xs"><i class="fas fa-inbox mr-1"></i>Abertos</span>
+                </button>
+                <button type="button" data-sp-status="EM_ANDAMENTO" aria-pressed="false" style="--i: 3" class="rc-filtro rc-hero-acao rc-sobe rounded-2xl px-4 py-3 text-left">
+                    <span class="block text-2xl font-bold" id="stat-progress" data-rc-conta="{{ stats.in_progress }}">{{ stats.in_progress }}</span>
+                    <span class="rc-hero-suave text-xs"><i class="fas fa-spinner mr-1"></i>Em andamento</span>
+                </button>
+                <button type="button" data-sp-status="FECHADO" aria-pressed="false" style="--i: 4" class="rc-filtro rc-hero-acao rc-sobe rounded-2xl px-4 py-3 text-left">
+                    <span class="block text-2xl font-bold" id="stat-closed" data-rc-conta="{{ stats.closed }}">{{ stats.closed }}</span>
+                    <span class="rc-hero-suave text-xs"><i class="fas fa-check-circle mr-1"></i>Fechados</span>
+                </button>
+                <div style="--i: 5" class="rc-hero-saldo rc-sobe col-span-2 sm:col-span-1 rounded-2xl px-4 py-3">
+                    <span class="block text-2xl font-bold"><span id="stat-rating">{{ stats.avg_rating }}</span> <i class="fas fa-star text-yellow-200 text-lg"></i></span>
+                    <span class="rc-hero-suave text-xs">Avaliação média</span>
+                </div>
+            </div>
         </div>
+    </section>
 
-        <div class="flex flex-wrap gap-3">
-            <button onclick="openCategoriesModal()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg">
-                <i class="fas fa-tags mr-2"></i>Categorias
-            </button>
-            <button onclick="openAgentsModal()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg">
-                <i class="fas fa-users mr-2"></i>Agentes
-            </button>
-            <a href="/projects/support/metrics/" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg inline-flex items-center">
-                <i class="fas fa-chart-bar mr-2"></i>Métricas
-            </a>
+    <!-- Busca, visão e filtros -->
+    <section class="rc-sobe bg-white rounded-2xl border border-gray-100 shadow-sm p-3 sm:p-4 mb-4" style="--i: 6">
+        <div class="flex flex-col md:flex-row gap-3 md:items-center">
+            <div class="relative flex-1 min-w-0">
+                <i class="fas fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                <input type="search" id="spBusca" autocomplete="off" placeholder="Buscar por título, protocolo, cliente, loja, ADABAS, categoria, atendente ou CPF…"
+                       class="sp-campo" style="padding-left: 2.5rem; padding-top: .7rem; padding-bottom: .7rem;">
+            </div>
+            <div class="sp-seg inline-flex self-start md:self-auto rounded-xl bg-gray-100 p-1 flex-shrink-0" role="group" aria-label="Visão">
+                <button type="button" onclick="toggleView('kanban')" id="btn-kanban" aria-pressed="true"><i class="fas fa-columns mr-1.5"></i>Quadro</button>
+                <button type="button" onclick="toggleView('list')" id="btn-list" aria-pressed="false"><i class="fas fa-list mr-1.5"></i>Lista</button>
+            </div>
         </div>
-    </div>
-
-    <!-- Stats -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-        <div class="bg-white p-6 rounded-lg border border-gray-200 text-center shadow-sm">
-            <div class="text-3xl font-bold text-blue-600">{{ stats.total }}</div>
-            <div class="text-gray-600 text-sm mt-1">Total de Tickets</div>
-        </div>
-        <div class="bg-white p-6 rounded-lg border border-gray-200 text-center shadow-sm">
-            <div class="text-3xl font-bold text-red-600">{{ stats.open }}</div>
-            <div class="text-gray-600 text-sm mt-1">Abertos</div>
-        </div>
-        <div class="bg-white p-6 rounded-lg border border-gray-200 text-center shadow-sm">
-            <div class="text-3xl font-bold text-yellow-600">{{ stats.in_progress }}</div>
-            <div class="text-gray-600 text-sm mt-1">Em Andamento</div>
-        </div>
-        <div class="bg-white p-6 rounded-lg border border-gray-200 text-center shadow-sm">
-            <div class="text-3xl font-bold text-green-600" id="stat-closed">{{ stats.closed }}</div>
-            <div class="text-gray-600 text-sm mt-1">Fechados</div>
-        </div>
-        <div class="bg-white p-6 rounded-lg border border-gray-200 text-center shadow-sm">
-            <div class="text-3xl font-bold text-purple-600">{{ stats.avg_rating }}</div>
-            <div class="text-gray-600 text-sm mt-1">Avaliação Média</div>
-        </div>
-    </div>
-
-    <!-- View Toggle -->
-    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
-        <div class="flex space-x-2">
-            <button onclick="toggleView('kanban')" id="btn-kanban" class="px-4 py-2 rounded-lg bg-blue-500 text-white font-medium transition-colors">
-                <i class="fas fa-columns mr-2"></i>Kanban
-            </button>
-            <button onclick="toggleView('list')" id="btn-list" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 font-medium transition-colors">
-                <i class="fas fa-list mr-2"></i>Lista
-            </button>
-        </div>
-        <div class="flex flex-wrap items-center gap-3">
-            <div id="kanban-sector-filter-wrapper" class="flex items-center gap-2">
-                <label for="kanbanSectorFilter" class="text-sm font-medium text-gray-700">Setor:</label>
-                <select id="kanbanSectorFilter" onchange="applyKanbanFilter()" class="w-full sm:w-auto sm:min-w-[220px] px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+        <div class="mt-3 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2">
+            <label class="min-w-0"><span class="sp-rotulo">Setor de atendimento</span>
+                <select id="kanbanSectorFilter" class="sp-campo" data-sp-filtro>
                     <option value="">Todos os setores</option>
-                    {% for sector in user_sectors %}
-                    <option value="{{ sector.id }}">{{ sector.name }}</option>
-                    {% endfor %}
+                    {% for sector in user_sectors %}<option value="{{ sector.id }}">{{ sector.name }}</option>{% endfor %}
                 </select>
-            </div>
-            <div class="text-sm text-gray-600">
-                <i class="fas fa-clock mr-1"></i>
-                Atualizado: <span id="lastUpdate">--</span>
-            </div>
-        </div>
-    </div>
-
-    <!-- Kanban Board -->
-    <div id="kanban-view" class="grid grid-cols-1 lg:grid-cols-3 gap-4 h-auto lg:h-[70vh] overflow-visible lg:overflow-hidden">
-        <!-- Abertos -->
-        <div class="bg-gray-50 rounded-lg border border-gray-200 flex flex-col overflow-hidden">
-            <div class="p-4 font-semibold border-b border-gray-200 bg-red-100 text-red-800 flex justify-between items-center">
-                <span>Abertos</span>
-                <span class="bg-red-200 px-2 py-1 rounded-full text-xs">{{ stats.open }}</span>
-            </div>
-            <div class="flex-1 overflow-y-auto p-2 max-h-[60vh] lg:max-h-none drop-zone" id="open-tickets" data-status="ABERTO">
-                <!-- Tickets abertos serão carregados aqui -->
-            </div>
-        </div>
-
-        <!-- Em Andamento -->
-        <div class="bg-gray-50 rounded-lg border border-gray-200 flex flex-col overflow-hidden">
-            <div class="p-4 font-semibold border-b border-gray-200 bg-yellow-100 text-yellow-800 flex justify-between items-center">
-                <span>Em Andamento</span>
-                <span class="bg-yellow-200 px-2 py-1 rounded-full text-xs">{{ stats.in_progress }}</span>
-            </div>
-            <div class="flex-1 overflow-y-auto p-2 max-h-[60vh] lg:max-h-none drop-zone" id="progress-tickets" data-status="EM_ANDAMENTO">
-                <!-- Tickets em andamento serão carregados aqui -->
-            </div>
-        </div>
-
-        <!-- Fechados (inclui Fechados) -->
-        <div class="bg-gray-50 rounded-lg border border-gray-200 flex flex-col overflow-hidden">
-            <div class="p-4 font-semibold border-b border-gray-200 bg-green-100 text-green-800 flex justify-between items-center">
-                <span>Fechados</span>
-                <span class="bg-green-200 px-2 py-1 rounded-full text-xs" id="closed-count">0</span>
-            </div>
-            <div class="flex-1 overflow-y-auto p-2 max-h-[60vh] lg:max-h-none drop-zone" id="closed-tickets" data-status="FECHADO">
-                <!-- Tickets fechados serão carregados aqui -->
-            </div>
-        </div>
-    </div>
-
-    <!-- List View (hidden by default) -->
-    <div id="list-view" class="hidden h-[70vh] overflow-hidden">
-        <div class="bg-white rounded-lg border border-gray-200 h-full flex flex-col">
-            <!-- Filtros da lista -->
-            <div class="p-3 border-b border-gray-200 bg-gray-50 flex flex-wrap items-center gap-4">
-                <label class="text-sm font-medium text-gray-700">Status:</label>
-                <select id="listStatusFilter" onchange="applyListFilter()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                    <option value="">Todos</option>
-                    <option value="ABERTO">Abertos</option>
-                    <option value="EM_ANDAMENTO">Em Andamento</option>
-                    <option value="FECHADO">Fechados</option>
-                </select>
-
-                <label class="text-sm font-medium text-gray-700">Loja (Setor Solicitante):</label>
-                <select id="listSectorFilter" onchange="applyListFilter()" class="min-w-[200px] px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+            </label>
+            <label class="min-w-0"><span class="sp-rotulo">Loja de abertura</span>
+                <select id="listOrigemFilter" class="sp-campo" data-sp-filtro><option value="">Todas</option></select>
+            </label>
+            <label class="min-w-0"><span class="sp-rotulo">Atendente</span>
+                <select id="listAgentFilter" class="sp-campo" data-sp-filtro><option value="">Todos</option><option value="__unassigned__">Sem agente</option></select>
+            </label>
+            <label class="min-w-0"><span class="sp-rotulo">Quem abriu</span>
+                <select id="listRequesterFilter" class="sp-campo" data-sp-filtro><option value="">Todos</option></select>
+            </label>
+            <label class="min-w-0 col-span-2 md:col-span-1"><span class="sp-rotulo">Prioridade</span>
+                <select id="spPrioridadeFilter" class="sp-campo" data-sp-filtro>
                     <option value="">Todas</option>
+                    <option value="urgente">Urgente</option>
+                    <option value="alta">Alta</option>
+                    <option value="media">Média</option>
+                    <option value="baixa">Baixa</option>
                 </select>
+            </label>
+        </div>
+        <div class="mt-3 flex flex-wrap items-center gap-2" role="group" aria-label="Atalhos">
+            <button type="button" class="sp-atalho" data-sp-atalho="sem" aria-pressed="false" data-rc-pop><i class="fas fa-user-slash"></i>Sem atendente <b data-sp-conta-atalho="sem">0</b></button>
+            <button type="button" class="sp-atalho" data-sp-atalho="meus" aria-pressed="false" data-rc-pop><i class="fas fa-user-check"></i>Comigo <b data-sp-conta-atalho="meus">0</b></button>
+            <button type="button" class="sp-atalho" data-sp-atalho="atrasado" aria-pressed="false" data-rc-pop><i class="fas fa-hourglass-half"></i>Há mais de 24h <b data-sp-conta-atalho="atrasado">0</b></button>
+            <button type="button" id="spLimpar" class="hidden text-xs font-semibold text-orange-600 hover:underline px-2"><i class="fas fa-filter-circle-xmark mr-1"></i>Limpar filtros</button>
+            <span id="listFilterCount" class="text-xs text-gray-500 sm:ml-auto"></span>
+        </div>
+    </section>
 
-                <label class="text-sm font-medium text-gray-700">Agente assumiu atendimento:</label>
-                <select id="listAgentFilter" onchange="applyListFilter()" class="min-w-[220px] px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                    <option value="">Todos</option>
-                    <option value="__unassigned__">Sem agente</option>
-                </select>
+    <!-- Quadro -->
+    <div id="kanban-view" class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <section class="sp-coluna rc-sobe bg-gray-50 rounded-2xl border border-gray-100 flex flex-col overflow-hidden lg:h-[70vh]" data-sp-coluna="ABERTO" style="--i: 7">
+            <header class="px-4 py-3 flex items-center justify-between gap-2 bg-white border-b border-gray-100">
+                <h2 class="rc-secao-titulo font-bold text-gray-900"><span class="rc-secao-icone" style="background:linear-gradient(135deg,#ef4444,#f97316)"><i class="fas fa-inbox text-sm"></i></span>Abertos</h2>
+                <span id="open-count" class="sp-contador bg-red-100 text-red-700">0</span>
+            </header>
+            <div class="flex-1 overflow-y-auto p-3 space-y-3 max-h-[60vh] lg:max-h-none drop-zone" id="open-tickets" data-status="ABERTO"></div>
+        </section>
+        <section class="sp-coluna rc-sobe bg-gray-50 rounded-2xl border border-gray-100 flex flex-col overflow-hidden lg:h-[70vh]" data-sp-coluna="EM_ANDAMENTO" style="--i: 8">
+            <header class="px-4 py-3 flex items-center justify-between gap-2 bg-white border-b border-gray-100">
+                <h2 class="rc-secao-titulo font-bold text-gray-900"><span class="rc-secao-icone" style="background:linear-gradient(135deg,#f59e0b,#eab308)"><i class="fas fa-spinner text-sm"></i></span>Em andamento</h2>
+                <span id="progress-count" class="sp-contador bg-yellow-100 text-yellow-700">0</span>
+            </header>
+            <div class="flex-1 overflow-y-auto p-3 space-y-3 max-h-[60vh] lg:max-h-none drop-zone" id="progress-tickets" data-status="EM_ANDAMENTO"></div>
+        </section>
+        <section class="sp-coluna rc-sobe bg-gray-50 rounded-2xl border border-gray-100 flex flex-col overflow-hidden lg:h-[70vh]" data-sp-coluna="FECHADO" style="--i: 9">
+            <header class="px-4 py-3 flex items-center justify-between gap-2 bg-white border-b border-gray-100">
+                <h2 class="rc-secao-titulo font-bold text-gray-900"><span class="rc-secao-icone" style="background:linear-gradient(135deg,#10b981,#22c55e)"><i class="fas fa-check text-sm"></i></span>
+                    <span>Fechados <span class="block text-[11px] font-medium text-gray-500">últimos 30 dias</span></span></h2>
+                <span id="closed-count" class="sp-contador bg-green-100 text-green-700">0</span>
+            </header>
+            <div class="flex-1 overflow-y-auto p-3 space-y-3 max-h-[60vh] lg:max-h-none drop-zone" id="closed-tickets" data-status="FECHADO"></div>
+        </section>
+    </div>
 
-                <label class="text-sm font-medium text-gray-700">Usuário que abriu:</label>
-                <select id="listRequesterFilter" onchange="applyListFilter()" class="min-w-[220px] px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                    <option value="">Todos</option>
-                </select>
-
-                <span id="listFilterCount" class="text-sm text-gray-500"></span>
-            </div>
-            <div class="overflow-x-auto flex-1">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50 sticky top-0">
+    <!-- Lista -->
+    <div id="list-view" class="hidden">
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div class="hidden md:block overflow-x-auto max-h-[72vh]">
+                <table class="min-w-full divide-y divide-gray-100">
+                    <thead class="bg-gray-50 sticky top-0 z-10">
                         <tr>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ticket</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Setor</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Abertura / ADABAS</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoria</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prioridade</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Atendente</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tempo</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                            <th class="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Chamado</th>
+                            <th class="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Cliente</th>
+                            <th class="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Setor</th>
+                            <th class="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Abertura / ADABAS</th>
+                            <th class="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Categoria</th>
+                            <th class="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Prioridade</th>
+                            <th class="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                            <th class="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Atendente</th>
+                            <th class="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Tempo</th>
+                            <th class="px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Ações</th>
                         </tr>
                     </thead>
-                    <tbody id="list-tickets" class="bg-white divide-y divide-gray-200">
-                        <!-- Tickets serão carregados aqui -->
-                    </tbody>
+                    <tbody id="list-tickets" class="bg-white divide-y divide-gray-100"></tbody>
                 </table>
             </div>
+            <div id="list-cards" class="md:hidden p-3 space-y-3"></div>
         </div>
+    </div>
+
+    <div id="spVazio" class="hidden bg-white rounded-2xl border border-gray-100 p-10 text-center text-sm text-gray-500 mt-4">
+        <i class="fas fa-filter-circle-xmark text-2xl text-gray-300 mb-2 block"></i>Nenhum chamado com esse filtro.
     </div>
 </div>
 
-<!-- Modal de Ticket -->
-<div id="ticketModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
-    <div class="bg-white rounded-lg w-full max-w-6xl h-[84vh] flex flex-col mx-4">
-        <div class="flex items-center justify-between p-4 border-b">
-            <h3 class="text-lg font-semibold" id="ticketModalTitle">Detalhes do Ticket</h3>
-            <button onclick="closeTicketModal()" class="text-gray-400 hover:text-gray-600">
-                <i class="fas fa-times text-xl"></i>
+<div id="spToasts" aria-live="polite"></div>
+
+<!-- Modal do chamado -->
+<div id="ticketModal" class="fixed inset-0 rc-modal-fundo z-50 hidden flex items-end sm:items-center justify-center sm:p-4">
+    <div class="rc-modal-cartao bg-white w-full max-w-6xl h-[100dvh] sm:h-[88vh] sm:rounded-3xl flex flex-col overflow-hidden shadow-2xl">
+        <div class="rc-hero px-4 sm:px-5 py-3 text-white flex items-center justify-between gap-3 flex-shrink-0">
+            <div class="min-w-0">
+                <p class="rc-hero-suave text-[11px] uppercase tracking-wide" id="ticketModalProtocolo">Chamado</p>
+                <h3 class="text-base sm:text-lg font-bold truncate" id="ticketModalTitle">Detalhes do Ticket</h3>
+            </div>
+            <button type="button" onclick="closeTicketModal()" class="rc-vidro w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" aria-label="Fechar">
+                <i class="fas fa-times"></i>
             </button>
         </div>
-        
-        <div class="flex-1 overflow-hidden">
+        <div class="flex-1 overflow-hidden min-h-0">
             <div id="ticketModalContent" class="h-full">
-                <!-- Conteúdo do ticket será carregado aqui -->
+                <div class="h-full flex items-center justify-center text-gray-400"><i class="fas fa-circle-notch fa-spin text-2xl"></i></div>
             </div>
         </div>
     </div>
 </div>
 
 <!-- Modal de Categorias -->
-<div id="categoriesModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
-    <div class="bg-white rounded-lg w-full max-w-4xl h-[80vh] flex flex-col mx-4">
-        <div class="flex items-center justify-between p-4 border-b">
-            <h3 class="text-lg font-semibold">Gerenciar Categorias</h3>
-            <button onclick="closeCategoriesModal()" class="text-gray-400 hover:text-gray-600">
-                <i class="fas fa-times text-xl"></i>
-            </button>
+<div id="categoriesModal" class="fixed inset-0 rc-modal-fundo z-50 hidden flex items-end sm:items-center justify-center sm:p-4">
+    <div class="rc-modal-cartao bg-white w-full max-w-4xl h-[100dvh] sm:h-[82vh] sm:rounded-3xl flex flex-col overflow-hidden shadow-2xl">
+        <div class="rc-hero px-5 py-3 text-white flex items-center justify-between flex-shrink-0">
+            <h3 class="text-lg font-bold flex items-center gap-2"><i class="fas fa-tags"></i>Gerenciar Categorias</h3>
+            <button type="button" onclick="closeCategoriesModal()" class="rc-vidro w-9 h-9 rounded-full flex items-center justify-center" aria-label="Fechar"><i class="fas fa-times"></i></button>
         </div>
-        
-        <div class="flex-1 overflow-hidden flex">
-            <!-- Lista de categorias -->
-            <div class="w-2/3 border-r overflow-y-auto p-4">
-                <h4 class="font-semibold mb-4">Categorias Existentes</h4>
+        <div class="flex-1 min-h-0 overflow-y-auto md:overflow-hidden flex flex-col md:flex-row">
+            <div class="w-full md:w-2/3 md:border-r border-gray-100 md:overflow-y-auto p-4">
+                <h4 class="font-semibold text-gray-900 mb-3">Categorias existentes</h4>
                 <div id="categoriesList" class="space-y-2">
-                    <div class="text-center text-gray-500 py-4">
-                        <i class="fas fa-spinner fa-spin mr-2"></i>Carregando categorias...
-                    </div>
+                    <div class="text-center text-gray-500 py-4"><i class="fas fa-spinner fa-spin mr-2"></i>Carregando categorias...</div>
                 </div>
             </div>
-            
-            <!-- Formulário de nova categoria -->
-            <div class="w-1/3 p-4">
-                <h4 class="font-semibold mb-4">Nova Categoria</h4>
+            <div class="w-full md:w-1/3 p-4 md:overflow-y-auto bg-gray-50">
+                <h4 class="font-semibold text-gray-900 mb-3">Nova categoria</h4>
                 <form id="newCategoryForm" class="space-y-4">
                     {% csrf_token %}
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Setor</label>
-                        <select id="newCategorySector" required onchange="loadAgentsForCategory(this.value)" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                        <label class="sp-rotulo">Setor</label>
+                        <select id="newCategorySector" required onchange="loadAgentsForCategory(this.value)" class="sp-campo">
                             <option value="">Selecione o setor</option>
                         </select>
                     </div>
-                    
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Nome</label>
-                        <input type="text" id="newCategoryName" required 
-                               class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                        <label class="sp-rotulo">Nome</label>
+                        <input type="text" id="newCategoryName" required class="sp-campo">
                     </div>
-                    
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
-                        <textarea id="newCategoryDescription" rows="3"
-                                  class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"></textarea>
+                        <label class="sp-rotulo">Descrição</label>
+                        <textarea id="newCategoryDescription" rows="3" class="sp-campo"></textarea>
                     </div>
-
                     <div>
                         <label class="flex items-center space-x-2 cursor-pointer">
                             <input type="checkbox" id="newCategoryRequestCpf" class="rounded border-gray-300">
@@ -527,16 +317,12 @@
                         </label>
                         <p class="text-xs text-gray-500 mt-1">Se marcado, o usuário deverá informar CPF do cliente antes de entrar na fila</p>
                     </div>
-                    
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Agentes Padrão</label>
-                        <div id="newCategoryAgentsContainer" class="max-h-40 overflow-y-auto border border-gray-300 rounded-md p-2">
-                            <!-- Checkboxes serão carregados via JS -->
-                        </div>
+                        <label class="sp-rotulo">Agentes padrão</label>
+                        <div id="newCategoryAgentsContainer" class="max-h-40 overflow-y-auto border border-gray-200 rounded-xl p-2 bg-white"></div>
                         <p class="text-xs text-gray-500 mt-1">Tickets desta categoria serão atribuídos automaticamente a um destes agentes</p>
                     </div>
-                    
-                    <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md">
+                    <button type="submit" data-rc-pop class="w-full rounded-xl py-2.5 px-4 font-semibold text-white" style="background:linear-gradient(135deg,#ff6b35,#f59e0b)">
                         <i class="fas fa-plus mr-2"></i>Criar Categoria
                     </button>
                 </form>
@@ -546,64 +332,49 @@
 </div>
 
 <!-- Modal de Agentes -->
-<div id="agentsModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
-    <div class="bg-white rounded-lg w-full max-w-4xl h-[80vh] flex flex-col mx-4">
-        <div class="flex items-center justify-between p-4 border-b">
-            <h3 class="text-lg font-semibold">Gerenciar Agentes de Suporte</h3>
-            <button onclick="closeAgentsModal()" class="text-gray-400 hover:text-gray-600">
-                <i class="fas fa-times text-xl"></i>
-            </button>
+<div id="agentsModal" class="fixed inset-0 rc-modal-fundo z-50 hidden flex items-end sm:items-center justify-center sm:p-4">
+    <div class="rc-modal-cartao bg-white w-full max-w-4xl h-[100dvh] sm:h-[82vh] sm:rounded-3xl flex flex-col overflow-hidden shadow-2xl">
+        <div class="rc-hero px-5 py-3 text-white flex items-center justify-between flex-shrink-0">
+            <h3 class="text-lg font-bold flex items-center gap-2"><i class="fas fa-users"></i>Gerenciar Agentes de Suporte</h3>
+            <button type="button" onclick="closeAgentsModal()" class="rc-vidro w-9 h-9 rounded-full flex items-center justify-center" aria-label="Fechar"><i class="fas fa-times"></i></button>
         </div>
-        
-        <div class="flex-1 overflow-hidden flex">
-            <!-- Lista de agentes -->
-            <div class="w-2/3 border-r overflow-y-auto p-4">
-                <h4 class="font-semibold mb-4">Agentes Ativos</h4>
-                <div id="agentsList" class="space-y-2">
-                    <!-- Agentes serão carregados aqui -->
-                </div>
+        <div class="flex-1 min-h-0 overflow-y-auto md:overflow-hidden flex flex-col md:flex-row">
+            <div class="w-full md:w-2/3 md:border-r border-gray-100 md:overflow-y-auto p-4">
+                <h4 class="font-semibold text-gray-900 mb-3">Agentes ativos</h4>
+                <div id="agentsList" class="space-y-2"></div>
             </div>
-            
-            <!-- Formulário de novo agente -->
-            <div class="w-1/3 p-4 overflow-y-auto">
-                <h4 class="font-semibold mb-4">Adicionar Agente</h4>
+            <div class="w-full md:w-1/3 p-4 md:overflow-y-auto bg-gray-50">
+                <h4 class="font-semibold text-gray-900 mb-3">Adicionar agente</h4>
                 <form id="newAgentForm" class="space-y-4">
                     {% csrf_token %}
-                    
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Setor</label>
-                        <select id="newAgentSector" required onchange="loadUsersForSector(this.value)" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                        <label class="sp-rotulo">Setor</label>
+                        <select id="newAgentSector" required onchange="loadUsersForSector(this.value)" class="sp-campo">
                             <option value="">Selecione o setor</option>
                         </select>
                         <p class="text-xs text-gray-500 mt-1">Selecione o setor primeiro</p>
                     </div>
-                    
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Usuário</label>
-                        <select id="newAgentUser" required class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                        <label class="sp-rotulo">Usuário</label>
+                        <select id="newAgentUser" required class="sp-campo">
                             <option value="">Selecione o setor primeiro</option>
                         </select>
                         <p class="text-xs text-gray-500 mt-1">Usuários do setor selecionado</p>
                     </div>
-                    
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Setores que irá atender</label>
-                        <div id="agentSectorsList" class="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded p-2">
-                            <!-- Checkboxes dos setores serão carregados aqui -->
-                        </div>
+                        <label class="sp-rotulo">Setores que irá atender</label>
+                        <div id="agentSectorsList" class="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-xl p-2 bg-white"></div>
                         <p class="text-xs text-gray-500 mt-1">Selecione os setores que este agente irá atender</p>
                     </div>
-                    
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Permissões</label>
+                        <label class="sp-rotulo">Permissões</label>
                         <label class="flex items-center space-x-2 cursor-pointer">
                             <input type="checkbox" id="newAgentCanAssign" class="rounded border-gray-300">
                             <span class="text-sm text-gray-700">Pode atribuir tickets</span>
                         </label>
                         <p class="text-xs text-gray-500 mt-1">Permitir que este agente atribua tickets a outros</p>
                     </div>
-                    
-                    <button type="submit" class="w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-md">
+                    <button type="submit" data-rc-pop class="w-full rounded-xl py-2.5 px-4 font-semibold text-white bg-emerald-600 hover:bg-emerald-700">
                         <i class="fas fa-user-plus mr-2"></i>Adicionar Agente
                     </button>
                 </form>
@@ -613,31 +384,22 @@
 </div>
 
 <!-- Modal de Transferir Atendimento -->
-<div id="transferModal" class="fixed inset-0 bg-black bg-opacity-50 z-[60] hidden flex items-center justify-center">
-    <div class="bg-white rounded-lg w-full max-w-md mx-4 p-6">
+<div id="transferModal" class="fixed inset-0 rc-modal-fundo z-[60] hidden flex items-center justify-center p-4">
+    <div class="rc-modal-cartao bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl">
         <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-900">
-                <i class="fas fa-exchange-alt text-orange-500 mr-2"></i>Transferir Atendimento
+            <h3 class="rc-secao-titulo text-lg font-bold text-gray-900">
+                <span class="rc-secao-icone" style="background:linear-gradient(135deg,#f97316,#f59e0b)"><i class="fas fa-exchange-alt text-sm"></i></span>Transferir Atendimento
             </h3>
-            <button onclick="closeTransferModal()" class="text-gray-400 hover:text-gray-600">
-                <i class="fas fa-times text-xl"></i>
-            </button>
+            <button type="button" onclick="closeTransferModal()" class="text-gray-400 hover:text-gray-600" aria-label="Fechar"><i class="fas fa-times text-xl"></i></button>
         </div>
-        
         <input type="hidden" id="transferTicketId" value="">
-        
-        <div class="mb-4">
-            <label class="block text-sm font-medium text-gray-700 mb-2">Selecione o novo agente:</label>
-            <select id="transferAgentSelect" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 bg-white">
-                <option value="">Carregando agentes...</option>
-            </select>
+        <div class="mb-5">
+            <label class="sp-rotulo">Novo agente</label>
+            <select id="transferAgentSelect" class="sp-campo"><option value="">Carregando agentes...</option></select>
         </div>
-        
-        <div class="flex space-x-3">
-            <button onclick="closeTransferModal()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 px-4 rounded-md text-sm">
-                Cancelar
-            </button>
-            <button onclick="confirmTransfer()" class="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2 px-4 rounded-md text-sm">
+        <div class="flex gap-3">
+            <button type="button" onclick="closeTransferModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 px-4 rounded-xl text-sm font-semibold">Cancelar</button>
+            <button type="button" onclick="confirmTransfer()" class="flex-1 text-white py-2.5 px-4 rounded-xl text-sm font-semibold" style="background:linear-gradient(135deg,#ff6b35,#f59e0b)">
                 <i class="fas fa-exchange-alt mr-2"></i>Transferir
             </button>
         </div>
@@ -645,101 +407,67 @@
 </div>
 
 <!-- Modal de Alterar Categoria -->
-<div id="changeCategoryModal" class="fixed inset-0 bg-black bg-opacity-50 z-[60] hidden flex items-center justify-center">
-    <div class="bg-white rounded-lg w-full max-w-md mx-4 p-6">
+<div id="changeCategoryModal" class="fixed inset-0 rc-modal-fundo z-[60] hidden flex items-center justify-center p-4">
+    <div class="rc-modal-cartao bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl">
         <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-900">
-                <i class="fas fa-tags text-blue-500 mr-2"></i>Alterar Categoria
+            <h3 class="rc-secao-titulo text-lg font-bold text-gray-900">
+                <span class="rc-secao-icone bg-blue-500"><i class="fas fa-tags text-sm"></i></span>Alterar Categoria
             </h3>
-            <button onclick="closeChangeCategoryModal()" class="text-gray-400 hover:text-gray-600">
-                <i class="fas fa-times text-xl"></i>
-            </button>
+            <button type="button" onclick="closeChangeCategoryModal()" class="text-gray-400 hover:text-gray-600" aria-label="Fechar"><i class="fas fa-times text-xl"></i></button>
         </div>
-        
         <input type="hidden" id="changeCategoryTicketId" value="">
-        
-        <div class="mb-4">
-            <label class="block text-sm font-medium text-gray-700 mb-2">Selecione a nova categoria:</label>
-            <select id="changeCategorySelect" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 bg-white">
-                <option value="">Carregando categorias...</option>
-            </select>
+        <div class="mb-5">
+            <label class="sp-rotulo">Nova categoria</label>
+            <select id="changeCategorySelect" class="sp-campo"><option value="">Carregando categorias...</option></select>
         </div>
-        
-        <div class="flex space-x-3">
-            <button onclick="closeChangeCategoryModal()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 px-4 rounded-md text-sm">
-                Cancelar
-            </button>
-            <button onclick="confirmChangeCategory()" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md text-sm">
+        <div class="flex gap-3">
+            <button type="button" onclick="closeChangeCategoryModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 px-4 rounded-xl text-sm font-semibold">Cancelar</button>
+            <button type="button" onclick="confirmChangeCategory()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 px-4 rounded-xl text-sm font-semibold">
                 <i class="fas fa-check mr-2"></i>Alterar
             </button>
         </div>
     </div>
 </div>
 
-
 <!-- Modal de Pesquisa de Satisfação (antes de finalizar/fechar) -->
-<div id="satisfactionSurveyModal" class="fixed inset-0 bg-black bg-opacity-50 z-[60] hidden flex items-center justify-center">
-    <div class="bg-white rounded-lg w-full max-w-lg mx-4 p-6">
+<div id="satisfactionSurveyModal" class="fixed inset-0 rc-modal-fundo z-[60] hidden flex items-center justify-center p-4">
+    <div class="rc-modal-cartao bg-white rounded-3xl w-full max-w-lg p-6 shadow-2xl">
         <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-900">
-                <i class="fas fa-star text-yellow-500 mr-2"></i>Pesquisa de Satisfação
+            <h3 class="rc-secao-titulo text-lg font-bold text-gray-900">
+                <span class="rc-secao-icone" style="background:linear-gradient(135deg,#f59e0b,#ec4899)"><i class="fas fa-star text-sm"></i></span>Pesquisa de Satisfação
             </h3>
-            <button onclick="closeSatisfactionSurveyModal()" class="text-gray-400 hover:text-gray-600">
-                <i class="fas fa-times text-xl"></i>
-            </button>
+            <button type="button" onclick="closeSatisfactionSurveyModal()" class="text-gray-400 hover:text-gray-600" aria-label="Fechar"><i class="fas fa-times text-xl"></i></button>
         </div>
-        
         <p class="text-gray-600 mb-4">Antes de finalizar, como você avalia este atendimento?</p>
-        
         <input type="hidden" id="surveyTicketId" value="">
         <input type="hidden" id="surveyAction" value="">
-        
-        <!-- Estrelas de avaliação -->
-        <div class="flex justify-center mb-4">
+        <div class="flex justify-center mb-3">
             <div class="flex space-x-2" id="surveyStars">
-                <button onclick="setSurveyRating(1)" class="survey-star text-4xl text-gray-300 hover:text-yellow-400 transition-colors" data-rating="1">
+                {% for n in "12345" %}
+                <button type="button" onclick="setSurveyRating({{ n }})" class="survey-star text-4xl text-gray-300 hover:text-yellow-400 transition-colors" data-rating="{{ n }}" data-rc-pop>
                     <i class="fas fa-star"></i>
                 </button>
-                <button onclick="setSurveyRating(2)" class="survey-star text-4xl text-gray-300 hover:text-yellow-400 transition-colors" data-rating="2">
-                    <i class="fas fa-star"></i>
-                </button>
-                <button onclick="setSurveyRating(3)" class="survey-star text-4xl text-gray-300 hover:text-yellow-400 transition-colors" data-rating="3">
-                    <i class="fas fa-star"></i>
-                </button>
-                <button onclick="setSurveyRating(4)" class="survey-star text-4xl text-gray-300 hover:text-yellow-400 transition-colors" data-rating="4">
-                    <i class="fas fa-star"></i>
-                </button>
-                <button onclick="setSurveyRating(5)" class="survey-star text-4xl text-gray-300 hover:text-yellow-400 transition-colors" data-rating="5">
-                    <i class="fas fa-star"></i>
-                </button>
+                {% endfor %}
             </div>
         </div>
-        
-        <div class="text-center mb-4">
-            <span id="surveyRatingLabel" class="text-sm text-gray-500">Selecione uma avaliação</span>
+        <div class="text-center mb-4"><span id="surveyRatingLabel" class="text-sm text-gray-500">Selecione uma avaliação</span></div>
+        <div class="mb-5">
+            <label class="sp-rotulo">Comentário (opcional)</label>
+            <textarea id="surveyFeedback" rows="3" placeholder="Deixe um comentário sobre o atendimento..." class="sp-campo"></textarea>
         </div>
-        
-        <!-- Feedback -->
-        <div class="mb-4">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Comentário (opcional)</label>
-            <textarea id="surveyFeedback" rows="3" placeholder="Deixe um comentário sobre o atendimento..."
-                      class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
-        </div>
-        
-        <!-- Botões -->
-        <div class="flex space-x-3">
-            <button onclick="submitSatisfactionSurvey()" id="submitSurveyBtn"
-                    class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+        <div class="flex flex-col sm:flex-row gap-3">
+            <button type="button" onclick="submitSatisfactionSurvey()" id="submitSurveyBtn" disabled
+                    class="flex-1 text-white py-2.5 px-4 rounded-xl font-semibold transition-opacity disabled:opacity-50 disabled:cursor-not-allowed" style="background:linear-gradient(135deg,#ff6b35,#f59e0b)">
                 <i class="fas fa-check mr-2"></i>Enviar Avaliação e Finalizar
             </button>
-            <button onclick="skipSatisfactionSurvey()" 
-                    class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 px-4 rounded-md transition-colors">
+            <button type="button" onclick="skipSatisfactionSurvey()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 px-4 rounded-xl font-semibold transition-colors">
                 <i class="fas fa-forward mr-2"></i>Pular e Finalizar
             </button>
         </div>
     </div>
 </div>
 
+{% include '_rc_animacoes_script.html' %}
 {% endblock %}
 
 {% block extra_js %}
@@ -1131,39 +859,28 @@ function stopTitleBlink() {
     }
 }
 
+const spUsuarioId = {{ request.user.id }};
+const spCalmo = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const spFiltro = { status: '', atalho: '' };
+const spJaVistos = new Set();
+let spPrimeiraCarga = true;
+let spAnimarProxima = true;
+
+function spMudaNumero(id, valor) {
+    const el = document.getElementById(id);
+    if (!el || valor === undefined || valor === null) return;
+    const novo = String(valor);
+    if (el.textContent.trim() === novo) return;
+    el.textContent = novo;
+    if (!spCalmo) { el.classList.remove('rc-pop'); void el.offsetWidth; el.classList.add('rc-pop'); }
+}
+
 function updateStatCounters(stats) {
-    // Atualizar os contadores no topo do dashboard
-    const containers = document.querySelectorAll('.grid.grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-5 > div');
-    if (containers.length >= 1) {
-        // Total
-        const totalCounter = containers[0].querySelector('.text-3xl');
-        if (totalCounter) totalCounter.textContent = stats.total;
-    }
-    if (containers.length >= 2) {
-        // Abertos
-        const openCounter = containers[1].querySelector('.text-3xl');
-        if (openCounter) openCounter.textContent = stats.open;
-    }
-    if (containers.length >= 3) {
-        // Em Andamento
-        const progressCounter = containers[2].querySelector('.text-3xl');
-        if (progressCounter) progressCounter.textContent = stats.in_progress;
-    }
-    if (containers.length >= 4) {
-        // Fechados (Fechados somados)
-        const closedCounter = containers[3].querySelector('.text-3xl');
-        if (closedCounter) closedCounter.textContent = stats.closed || 0;
-    }
-    
-    // Atualizar badges nas colunas do kanban
-    const openBadge = document.querySelector('#open-tickets').parentElement.querySelector('.bg-red-200');
-    if (openBadge) openBadge.textContent = stats.open;
-    
-    const progressBadge = document.querySelector('#progress-tickets').parentElement.querySelector('.bg-yellow-200');
-    if (progressBadge) progressBadge.textContent = stats.in_progress;
-    
-    const closedCount = document.getElementById('closed-count');
-    if (closedCount) closedCount.textContent = stats.closed || 0;
+    spMudaNumero('stat-total', stats.total);
+    spMudaNumero('stat-open', stats.open);
+    spMudaNumero('stat-progress', stats.in_progress);
+    spMudaNumero('stat-closed', stats.closed || 0);
+    if (stats.avg_rating !== undefined) spMudaNumero('stat-rating', stats.avg_rating);
 }
 
 function loadSupportTickets() {
@@ -1175,22 +892,9 @@ function loadSupportTickets() {
             return response.json();
         })
         .then(data => {
-            if (data.recent_chats && data.recent_chats.length > 0) {
-                renderTickets(data.recent_chats);
-            } else {
-                console.warn('[LoadTickets] Nenhum ticket encontrado');
-                // Limpar containers
-                ['open-tickets', 'progress-tickets', 'closed-tickets'].forEach(id => {
-                    const container = document.getElementById(id);
-                    if (container) {
-                        container.innerHTML = '<div class="text-center text-gray-500 py-4 text-sm">Nenhum ticket</div>';
-                    }
-                });
-            }
-            // Atualizar contadores com stats do backend (valores corretos do banco)
+            renderTickets(data.recent_chats || []);
             if (data.stats) {
                 updateStatCounters(data.stats);
-                applyKanbanFilter();
             }
         })
         .catch(error => {
@@ -1199,68 +903,144 @@ function loadSupportTickets() {
         });
 }
 
+// ===== FILTRO ÚNICO (quadro e lista), tudo no navegador: nenhuma consulta a mais =====
+function spNorm(t) {
+    return (t === undefined || t === null ? '' : String(t)).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+function spTextoBusca(t) {
+    if (t._busca === undefined) {
+        t._busca = spNorm([
+            t.title, t.id, t.protocol, t.user && t.user.get_full_name, t.sector && t.sector.name,
+            t.origem && t.origem.name, t.origem && t.origem.adabas, t.category && t.category.name,
+            t.assigned_to && t.assigned_to.get_full_name, t.customer_cpf, (t.customer_cpf || '').replace(/\D/g, ''),
+            t.get_status_display, t.get_priority_display
+        ].join(' '));
+    }
+    return t._busca;
+}
+function spGrupoStatus(s) { return (s === 'AGUARDANDO' || s === 'ABERTO') ? 'ABERTO' : s; }
+function spHorasAbertas(t) {
+    const ini = new Date(t.started_at || t.created_at);
+    return (Date.now() - ini) / 36e5;
+}
+function spCasaAtalho(t, atalho) {
+    if (!atalho) return true;
+    if (t.status === 'FECHADO') return false;
+    if (atalho === 'sem') return !t.assigned_to;
+    if (atalho === 'meus') return !!(t.assigned_to && t.assigned_to.id === spUsuarioId);
+    if (atalho === 'atrasado') return spHorasAbertas(t) >= 24;
+    return true;
+}
+function spPassa(t, opcoes = {}) {
+    const setor = getFilterValue('kanbanSectorFilter');
+    const origem = getFilterValue('listOrigemFilter');
+    const agente = getFilterValue('listAgentFilter');
+    const quem = getFilterValue('listRequesterFilter');
+    const prio = getFilterValue('spPrioridadeFilter');
+    const busca = spNorm((document.getElementById('spBusca') || {}).value || '').trim();
+    if (setor && !(t.sector && String(t.sector.id) === setor)) return false;
+    if (origem && !(t.origem && String(t.origem.id) === origem)) return false;
+    if (agente && (agente === '__unassigned__' ? !!t.assigned_to : !(t.assigned_to && String(t.assigned_to.id) === agente))) return false;
+    if (quem && !(t.user && String(t.user.id) === quem)) return false;
+    if (prio && (t.priority || '').toLowerCase() !== prio) return false;
+    if (!opcoes.semStatus && spFiltro.status && spGrupoStatus(t.status) !== spFiltro.status) return false;
+    if (!opcoes.semAtalho && !spCasaAtalho(t, spFiltro.atalho)) return false;
+    if (busca && busca.split(/\s+/).some(p => spTextoBusca(t).indexOf(p) === -1)) return false;
+    return true;
+}
+function spFiltroAtivo() {
+    return !!(spFiltro.status || spFiltro.atalho || getFilterValue('kanbanSectorFilter') || getFilterValue('listOrigemFilter')
+        || getFilterValue('listAgentFilter') || getFilterValue('listRequesterFilter') || getFilterValue('spPrioridadeFilter')
+        || ((document.getElementById('spBusca') || {}).value || '').trim());
+}
+
+function spAplicarFiltros() {
+    spAnimarProxima = true;
+    renderTickets(allTicketsData);
+}
+
 function renderTickets(tickets) {
     allTicketsData = tickets;
+    updateDynamicListFilters(tickets);
     const kanbanTickets = getKanbanFilteredTickets(tickets);
-    
+
     const containers = {
         'AGUARDANDO': document.getElementById('open-tickets'),
         'ABERTO': document.getElementById('open-tickets'),
         'EM_ANDAMENTO': document.getElementById('progress-tickets'),
-        'FECHADO': document.getElementById('closed-tickets'),
         'FECHADO': document.getElementById('closed-tickets')
     };
-    
-    
-    // Limpar containers
-    Object.values(containers).forEach(container => {
-        if (container) container.innerHTML = '';
-    });
-    
+    Object.values(containers).forEach(container => { if (container) container.innerHTML = ''; });
+
+    const animarTudo = spAnimarProxima && !spCalmo;
+    const porColuna = {};
     kanbanTickets.forEach(ticket => {
         const container = containers[ticket.status];
-        if (container) {
-            const ticketElement = createTicketElement(ticket);
-            container.appendChild(ticketElement);
-        } else {
+        if (!container) {
             console.warn('Container não encontrado para status:', ticket.status);
+            return;
+        }
+        const n = porColuna[container.id] = (porColuna[container.id] || 0) + 1;
+        const novo = !spPrimeiraCarga && !spJaVistos.has(ticket.id);
+        const el = createTicketElement(ticket);
+        if ((animarTudo && n <= 12) || (novo && !spCalmo)) {
+            el.classList.add('rc-sobe');
+            el.style.setProperty('--i', animarTudo ? n : 0);
+        }
+        if (novo && !spCalmo) el.classList.add('sp-novo-pulso');
+        container.appendChild(el);
+    });
+    Object.values(containers).forEach(container => {
+        if (container && !container.children.length) {
+            container.innerHTML = '<div class="text-center text-gray-400 py-8 text-sm"><i class="fas fa-mug-hot text-xl mb-2 block"></i>Nenhum chamado</div>';
         }
     });
-    
-    // Atualizar contadores
+    tickets.forEach(t => spJaVistos.add(t.id));
+    spPrimeiraCarga = false;
+
+    // Coluna escolhida no topo: as outras saem do quadro.
+    const colunas = document.querySelectorAll('[data-sp-coluna]');
+    let visiveis = 0;
+    colunas.forEach(c => {
+        const mostra = !spFiltro.status || c.dataset.spColuna === spFiltro.status;
+        c.classList.toggle('hidden', !mostra);
+        if (mostra) visiveis++;
+    });
+    const kanban = document.getElementById('kanban-view');
+    kanban.classList.toggle('lg:grid-cols-3', visiveis === 3);
+    kanban.classList.toggle('lg:grid-cols-1', visiveis === 1);
+
     updateTicketCounts(kanbanTickets);
-    
-    // Renderizar lista também
-    renderListView(tickets);
-    
-    // Atualizar timestamp
+    renderListView(tickets, animarTudo);
+    spAnimarProxima = false;
+
     const lastUpdate = document.getElementById('lastUpdate');
     if (lastUpdate) {
         lastUpdate.textContent = new Date().toLocaleTimeString('pt-BR');
     }
-    
-    // Configurar drop zones
     setupDropZones();
 }
 
+function spIniciais(nome) {
+    const partes = (nome || '?').trim().split(/\s+/);
+    return ((partes[0] || '?')[0] + (partes.length > 1 ? partes[partes.length - 1][0] : '')).toUpperCase();
+}
+
 function createTicketElement(ticket) {
-    
-    const div = document.createElement('div');
-    div.className = 'bg-white rounded-md p-3 mb-2 border border-gray-200 cursor-move transition-all duration-200 hover:shadow-md hover:border-blue-400';
+    const div = document.createElement('article');
+    div.className = 'sp-card rc-post bg-white rounded-xl p-3 border border-gray-100 shadow-sm cursor-pointer';
     div.draggable = true;
     div.dataset.ticketId = ticket.id;
     div.dataset.ticketStatus = ticket.status;
+    div.dataset.prio = (ticket.priority || '').toLowerCase();
     div.onclick = (e) => {
-        // Não abrir modal se estiver começando um drag
         if (!window.isDragging) {
             openTicketModal(ticket.id);
         }
     };
-    
-    // Event listeners para drag
     div.addEventListener('dragstart', handleDragStart);
     div.addEventListener('dragend', handleDragEnd);
-    
+
     const priorityColors = {
         'baixa': 'bg-green-100 text-green-800',
         'media': 'bg-yellow-100 text-yellow-800',
@@ -1269,75 +1049,67 @@ function createTicketElement(ticket) {
     };
     const priorityClass = priorityColors[ticket.priority?.toLowerCase()] || 'bg-gray-100 text-gray-800';
     const timeAgo = getTimeAgo(ticket.created_at);
-    
-    // Usar can_assume calculado pelo backend (considera múltiplos agentes na categoria)
     const canAssign = ticket.can_assume || false;
-    
-    
     const canDelete = {% if is_superadmin or is_supervisor_or_higher %}true{% else %}false{% endif %};
-    
-    // Calcular tempo decorrido
     const timerHtml = getTimerHtml(ticket.created_at, ticket.closed_at, ticket.started_at);
-    
+    const cliente = ticket.user.get_full_name || '';
+
     div.innerHTML = `
-        <div class="flex justify-between items-start mb-2">
-            <h4 class="font-medium text-sm text-gray-900 truncate flex-1 mr-2">${escapeHtml(ticket.title)}</h4>
-            <div class="flex items-center gap-1">
-                <span class="text-xs px-2 py-1 rounded-full font-medium ${priorityClass}">${ticket.get_priority_display || 'Normal'}</span>
+        <div class="flex justify-between items-start gap-2 mb-2">
+            <div class="min-w-0 flex-1">
+                ${ticket.protocol ? `<p class="text-[10px] font-mono text-gray-400">#${escapeHtml(ticket.protocol)}</p>` : ''}
+                <h4 class="font-semibold text-sm text-gray-900 leading-snug line-clamp-2">${escapeHtml(ticket.title)}</h4>
+            </div>
+            <div class="flex items-center gap-1 flex-shrink-0">
+                <span class="text-[11px] px-2 py-0.5 rounded-full font-semibold ${priorityClass}">${ticket.get_priority_display || 'Normal'}</span>
                 ${canDelete ? `
-                <button onclick="event.stopPropagation(); deleteTicket(${ticket.id}, '${escapeHtml(ticket.title).replace(/'/g, "\\'")}');" 
-                        class="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
-                        title="Excluir chat">
+                <button onclick="event.stopPropagation(); deleteTicket(${ticket.id}, '${escapeHtml(ticket.title).replace(/'/g, "\\'")}');"
+                        class="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors" title="Excluir chat">
                     <i class="fas fa-trash text-xs"></i>
-                </button>
-                ` : ''}
+                </button>` : ''}
             </div>
         </div>
-        
-        <div class="text-xs text-gray-600 space-y-1 mb-2">
-            <div><span class="font-medium">Cliente:</span> ${escapeHtml(ticket.user.get_full_name)}</div>
-            <div><span class="font-medium">Setor:</span> ${ticket.sector ? escapeHtml(ticket.sector.name) : 'N/A'}</div>
-            ${ticket.origem ? `<div class="flex items-center gap-1 flex-wrap">
-                <span class="font-medium">Abertura:</span> ${escapeHtml(ticket.origem.name)}
-                ${ticket.origem.adabas ? `<span class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-mono text-[10px]" title="Código ADABAS">${escapeHtml(ticket.origem.adabas)}</span>` : ''}
-            </div>` : ''}
-            ${ticket.assigned_to ? `<div><span class="font-medium">Atendente:</span> ${escapeHtml(ticket.assigned_to.get_full_name)}</div>` : ''}
+        <div class="flex items-center gap-2 mb-2 min-w-0">
+            <span class="sp-avatar">${escapeHtml(spIniciais(cliente))}</span>
+            <div class="min-w-0 text-xs">
+                <p class="font-medium text-gray-800 truncate">${escapeHtml(cliente)}</p>
+                ${ticket.origem ? `<p class="text-gray-500 truncate">${escapeHtml(ticket.origem.name)}${ticket.origem.adabas ? ` · <span class="font-mono" title="Código ADABAS">${escapeHtml(ticket.origem.adabas)}</span>` : ''}</p>` : ''}
+            </div>
         </div>
-        
-        <div class="flex justify-between items-center text-xs">
-            <div class="flex items-center gap-2">
-                <span class="text-gray-500">${timeAgo}</span>
+        <div class="flex flex-wrap gap-1 mb-2 text-[11px]">
+            ${ticket.sector ? `<span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700"><i class="fas fa-building mr-1 opacity-60"></i>${escapeHtml(ticket.sector.name)}</span>` : ''}
+            ${ticket.category ? `<span class="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700"><i class="fas fa-tag mr-1 opacity-60"></i>${escapeHtml(ticket.category.name)}</span>` : ''}
+            ${ticket.assigned_to ? `<span class="px-2 py-0.5 rounded-full bg-violet-50 text-violet-700"><i class="fas fa-headset mr-1 opacity-60"></i>${escapeHtml(ticket.assigned_to.get_full_name)}</span>` : ''}
+        </div>
+        <div class="flex justify-between items-center gap-2 text-xs pt-2 border-t border-gray-100">
+            <div class="flex items-center gap-2 min-w-0">
+                <span class="text-gray-500 truncate">${timeAgo}</span>
                 ${timerHtml}
             </div>
             ${canAssign ? `
-                <button onclick="event.stopPropagation(); assignChatToMe(${ticket.id})" 
-                        class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs font-medium transition-colors">
+                <button onclick="event.stopPropagation(); assignChatToMe(${ticket.id})" data-rc-pop
+                        class="text-white px-2.5 py-1 rounded-full text-xs font-semibold flex-shrink-0" style="background:linear-gradient(135deg,#ff6b35,#f59e0b)">
                     <i class="fas fa-hand-paper mr-1"></i>Assumir
                 </button>
             ` : `
-                <i class="fas fa-external-link-alt text-blue-500 hover:text-blue-700"></i>
+                <span class="text-orange-500 text-xs font-semibold flex-shrink-0">Abrir <i class="fas fa-arrow-right text-[10px]"></i></span>
             `}
         </div>
     `;
-    
     return div;
 }
 
 // Função para calcular tempo decorrido e retornar HTML do cronômetro
 // Usa started_at (início do atendimento) se disponível, senão usa created_at
 function getTimerHtml(createdAt, closedAt, startedAt) {
-    // Prioriza started_at (quando o ticket foi aberto) sobre created_at
     const start = startedAt ? new Date(startedAt) : new Date(createdAt);
     const end = closedAt ? new Date(closedAt) : new Date();
     const diff = end - start;
-    
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    
     let timerClass = '';
     if (hours >= 24) timerClass = 'danger';
     else if (hours >= 4) timerClass = 'warning';
-    
     const timeStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
     return `<span class="timer-badge ${timerClass}" data-created="${createdAt}" data-closed="${closedAt || ''}" data-started="${startedAt || ''}">
         <i class="fas fa-clock"></i>${timeStr}
@@ -1351,76 +1123,42 @@ function updateTimers() {
         const closed = badge.dataset.closed;
         const started = badge.dataset.started;
         if (!created) return;
-        
-        // Usa started (início do atendimento) se disponível, senão usa created
         const start = started ? new Date(started) : new Date(created);
         const end = closed ? new Date(closed) : new Date();
         const diff = end - start;
-        
         const hours = Math.floor(diff / (1000 * 60 * 60));
         const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-        
         badge.classList.remove('warning', 'danger');
         if (hours >= 24) badge.classList.add('danger');
         else if (hours >= 4) badge.classList.add('warning');
-        
         const timeStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
         badge.innerHTML = `<i class="fas fa-clock"></i>${timeStr}`;
     });
 }
 
-// Atualizar cronômetros a cada minuto
 setInterval(updateTimers, 60000);
 
-// Toggle entre visualização kanban e lista
+// Quadro ou lista (a escolha fica guardada neste navegador)
 let currentView = 'kanban';
-function toggleView(view) {
-    currentView = view;
-    const kanbanView = document.getElementById('kanban-view');
-    const listView = document.getElementById('list-view');
-    const btnKanban = document.getElementById('btn-kanban');
-    const btnList = document.getElementById('btn-list');
-    const kanbanSectorFilterWrapper = document.getElementById('kanban-sector-filter-wrapper');
-    
-    if (view === 'kanban') {
-        kanbanView.classList.remove('hidden');
-        listView.classList.add('hidden');
-        if (kanbanSectorFilterWrapper) kanbanSectorFilterWrapper.classList.remove('hidden');
-        btnKanban.classList.remove('bg-gray-200', 'text-gray-700');
-        btnKanban.classList.add('bg-blue-500', 'text-white');
-        btnList.classList.remove('bg-blue-500', 'text-white');
-        btnList.classList.add('bg-gray-200', 'text-gray-700');
-    } else {
-        kanbanView.classList.add('hidden');
-        listView.classList.remove('hidden');
-        if (kanbanSectorFilterWrapper) kanbanSectorFilterWrapper.classList.add('hidden');
-        btnList.classList.remove('bg-gray-200', 'text-gray-700');
-        btnList.classList.add('bg-blue-500', 'text-white');
-        btnKanban.classList.remove('bg-blue-500', 'text-white');
-        btnKanban.classList.add('bg-gray-200', 'text-gray-700');
+function toggleView(view, semGuardar) {
+    currentView = view === 'list' ? 'list' : 'kanban';
+    document.getElementById('kanban-view').classList.toggle('hidden', currentView !== 'kanban');
+    document.getElementById('list-view').classList.toggle('hidden', currentView !== 'list');
+    document.getElementById('btn-kanban').setAttribute('aria-pressed', String(currentView === 'kanban'));
+    document.getElementById('btn-list').setAttribute('aria-pressed', String(currentView === 'list'));
+    if (!semGuardar) {
+        try { localStorage.setItem('suporte.visao', currentView); } catch (e) { /* sem armazenamento */ }
+        spAplicarFiltros();
     }
 }
 
-// Armazenar tickets para filtro
 let allTicketsData = [];
 
 function getKanbanFilteredTickets(tickets) {
-    const selectedSector = getFilterValue('kanbanSectorFilter');
-
-    if (!selectedSector) {
-        return tickets;
-    }
-
-    return tickets.filter(ticket => ticket.sector && String(ticket.sector.id) === selectedSector);
+    return tickets.filter(ticket => spPassa(ticket));
 }
 
-function applyKanbanFilter() {
-    if (allTicketsData.length > 0) {
-        renderTickets(allTicketsData);
-    } else {
-        updateTicketCounts([]);
-    }
-}
+function applyKanbanFilter() { spAplicarFiltros(); }
 
 function getFilterValue(selectId) {
     const el = document.getElementById(selectId);
@@ -1430,120 +1168,114 @@ function getFilterValue(selectId) {
 function setSelectOptions(selectId, items, defaultLabel, keepSpecialUnassigned = false) {
     const select = document.getElementById(selectId);
     if (!select) return;
-
     const currentValue = select.value;
     const options = [`<option value="">${defaultLabel}</option>`];
-
     if (keepSpecialUnassigned) {
         options.push('<option value="__unassigned__">Sem agente</option>');
     }
-
     items.forEach(item => {
-        options.push(`<option value="${item.id}">${escapeHtml(item.name)}</option>`);
+        options.push(`<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`);
     });
-
-    select.innerHTML = options.join('');
+    const html = options.join('');
+    if (select.dataset.spOpcoes === html) return;   // nada mudou: não mexe no select aberto
+    select.dataset.spOpcoes = html;
+    select.innerHTML = html;
     if ([...select.options].some(option => option.value === currentValue)) {
         select.value = currentValue;
     }
 }
 
+const spSetoresDaPagina = [{% for sector in user_sectors %}{id: '{{ sector.id }}', name: '{{ sector.name|escapejs }}'}{% if not forloop.last %}, {% endif %}{% endfor %}];
+
 function updateDynamicListFilters(tickets) {
-    const sectorsMap = new Map();
+    const sectorsMap = new Map(spSetoresDaPagina.map(s => [s.id, s]));
+    const origensMap = new Map();
     const agentsMap = new Map();
     const requestersMap = new Map();
-
     tickets.forEach(ticket => {
         if (ticket.sector && ticket.sector.id) {
-            sectorsMap.set(String(ticket.sector.id), {
-                id: String(ticket.sector.id),
-                name: ticket.sector.name || `Setor ${ticket.sector.id}`
+            sectorsMap.set(String(ticket.sector.id), { id: String(ticket.sector.id), name: ticket.sector.name || `Setor ${ticket.sector.id}` });
+        }
+        if (ticket.origem && ticket.origem.id) {
+            origensMap.set(String(ticket.origem.id), {
+                id: String(ticket.origem.id),
+                name: (ticket.origem.name || `Setor ${ticket.origem.id}`) + (ticket.origem.adabas ? ` (${ticket.origem.adabas})` : '')
             });
         }
-
         if (ticket.assigned_to && ticket.assigned_to.id) {
-            agentsMap.set(String(ticket.assigned_to.id), {
-                id: String(ticket.assigned_to.id),
-                name: ticket.assigned_to.get_full_name || `Agente ${ticket.assigned_to.id}`
-            });
+            agentsMap.set(String(ticket.assigned_to.id), { id: String(ticket.assigned_to.id), name: ticket.assigned_to.get_full_name || `Agente ${ticket.assigned_to.id}` });
         }
-
         if (ticket.user && ticket.user.id) {
-            requestersMap.set(String(ticket.user.id), {
-                id: String(ticket.user.id),
-                name: ticket.user.get_full_name || `Usuario ${ticket.user.id}`
-            });
+            requestersMap.set(String(ticket.user.id), { id: String(ticket.user.id), name: ticket.user.get_full_name || `Usuario ${ticket.user.id}` });
         }
     });
-
     const byName = (a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' });
-
-    setSelectOptions('listSectorFilter', [...sectorsMap.values()].sort(byName), 'Todas');
+    setSelectOptions('kanbanSectorFilter', [...sectorsMap.values()].sort(byName), 'Todos os setores');
+    setSelectOptions('listOrigemFilter', [...origensMap.values()].sort(byName), 'Todas');
     setSelectOptions('listAgentFilter', [...agentsMap.values()].sort(byName), 'Todos', true);
     setSelectOptions('listRequesterFilter', [...requestersMap.values()].sort(byName), 'Todos');
 }
 
-// Renderizar lista de tickets
-function renderListView(tickets) {
+// Lista: tabela no computador, cartões no celular. Os contadores dos atalhos e o resumo ficam aqui.
+function renderListView(tickets, animar) {
     const listContainer = document.getElementById('list-tickets');
+    const cardsContainer = document.getElementById('list-cards');
     if (!listContainer) return;
-    
-    // Armazenar todos os tickets para filtro
-    allTicketsData = tickets;
-    updateDynamicListFilters(tickets);
-    
-    // Aplicar filtros atuais
-    const statusFilter = getFilterValue('listStatusFilter');
-    const sectorFilter = getFilterValue('listSectorFilter');
-    const agentFilter = getFilterValue('listAgentFilter');
-    const requesterFilter = getFilterValue('listRequesterFilter');
 
-    const filteredTickets = tickets.filter(ticket => {
-        const matchesStatus = !statusFilter || ticket.status === statusFilter;
-        const matchesSector = !sectorFilter || (ticket.sector && String(ticket.sector.id) === sectorFilter);
-        const matchesAgent = !agentFilter || (
-            agentFilter === '__unassigned__'
-                ? !ticket.assigned_to
-                : (ticket.assigned_to && String(ticket.assigned_to.id) === agentFilter)
-        );
-        const matchesRequester = !requesterFilter || (ticket.user && String(ticket.user.id) === requesterFilter);
-        return matchesStatus && matchesSector && matchesAgent && matchesRequester;
+    const filteredTickets = tickets.filter(ticket => spPassa(ticket));
+
+    // Atalhos: contam com os outros filtros aplicados.
+    const base = tickets.filter(t => spPassa(t, { semAtalho: true }));
+    document.querySelectorAll('[data-sp-conta-atalho]').forEach(el => {
+        const n = base.filter(t => spCasaAtalho(t, el.dataset.spContaAtalho)).length;
+        if (el.textContent !== String(n)) el.textContent = n;
     });
-    
-    // Atualizar contador
+
+    const ativo = spFiltroAtivo();
     const countEl = document.getElementById('listFilterCount');
     if (countEl) {
-        const hasActiveFilter = [statusFilter, sectorFilter, agentFilter, requesterFilter].some(Boolean);
-        countEl.textContent = hasActiveFilter
-            ? `(${filteredTickets.length} de ${tickets.length})`
-            : `(${tickets.length} tickets)`;
+        countEl.textContent = ativo
+            ? `${filteredTickets.length} de ${tickets.length} chamados no filtro`
+            : `${tickets.length} chamados carregados`;
     }
-    
+    const limpar = document.getElementById('spLimpar');
+    if (limpar) limpar.classList.toggle('hidden', !ativo);
+    const vazio = document.getElementById('spVazio');
+    if (vazio) vazio.classList.toggle('hidden', !(ativo && tickets.length && !filteredTickets.length));
+
     const canDelete = {% if is_superadmin or is_supervisor_or_higher %}true{% else %}false{% endif %};
     const statusColors = {
         'AGUARDANDO': 'bg-red-100 text-red-800',
         'ABERTO': 'bg-red-100 text-red-800',
         'EM_ANDAMENTO': 'bg-yellow-100 text-yellow-800',
-        'FECHADO': 'bg-blue-100 text-blue-800',
         'FECHADO': 'bg-green-100 text-green-800'
     };
-    
     const priorityColors = {
         'baixa': 'bg-green-100 text-green-800',
         'media': 'bg-yellow-100 text-yellow-800',
         'alta': 'bg-orange-100 text-orange-800',
         'urgente': 'bg-red-100 text-red-800'
     };
-    
-    listContainer.innerHTML = filteredTickets.map(ticket => {
+    const acoes = (ticket) => `
+        ${ticket.can_assume ? `
+            <button onclick="assignChatToMe(${ticket.id})" class="text-orange-600 hover:text-orange-800 p-1" title="Assumir">
+                <i class="fas fa-hand-paper"></i>
+            </button>` : ''}
+        ${canDelete ? `
+            <button onclick="deleteTicket(${ticket.id}, '${escapeHtml(ticket.title).replace(/'/g, "\\'")}')" class="text-red-600 hover:text-red-800 p-1" title="Excluir">
+                <i class="fas fa-trash"></i>
+            </button>` : ''}`;
+
+    listContainer.innerHTML = filteredTickets.map((ticket, i) => {
         const timerHtml = getTimerHtml(ticket.created_at, ticket.closed_at, ticket.started_at);
         const statusClass = statusColors[ticket.status] || 'bg-gray-100 text-gray-800';
         const priorityClass = priorityColors[ticket.priority?.toLowerCase()] || 'bg-gray-100 text-gray-800';
-        
+        const anima = animar && i < 15 ? ` rc-sobe" style="--i: ${i}` : '';
         return `
-            <tr class="hover:bg-gray-50 cursor-pointer" onclick="openTicketModal(${ticket.id})">
+            <tr class="hover:bg-orange-50 cursor-pointer transition-colors${anima}" onclick="openTicketModal(${ticket.id})">
                 <td class="px-4 py-3">
-                    <div class="text-sm font-medium text-gray-900 truncate max-w-xs">${escapeHtml(ticket.title)}</div>
+                    <div class="text-sm font-semibold text-gray-900 truncate max-w-xs">${escapeHtml(ticket.title)}</div>
+                    ${ticket.protocol ? `<div class="text-[11px] font-mono text-gray-400">#${escapeHtml(ticket.protocol)}</div>` : ''}
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-600">${escapeHtml(ticket.user.get_full_name)}</td>
                 <td class="px-4 py-3 text-sm text-gray-600">${ticket.sector ? escapeHtml(ticket.sector.name) : '-'}</td>
@@ -1551,47 +1283,47 @@ function renderListView(tickets) {
                     ${ticket.origem ? `${escapeHtml(ticket.origem.name)}${ticket.origem.adabas ? ` <span class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-mono text-xs" title="Código ADABAS">${escapeHtml(ticket.origem.adabas)}</span>` : ''}` : '-'}
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-600">${ticket.category ? escapeHtml(ticket.category.name) : '-'}</td>
-                <td class="px-4 py-3">
-                    <span class="px-2 py-1 text-xs rounded-full ${priorityClass}">${ticket.get_priority_display || 'Normal'}</span>
-                </td>
-                <td class="px-4 py-3">
-                    <span class="px-2 py-1 text-xs rounded-full ${statusClass}">${ticket.get_status_display}</span>
-                </td>
+                <td class="px-4 py-3"><span class="px-2 py-1 text-xs rounded-full font-semibold ${priorityClass}">${ticket.get_priority_display || 'Normal'}</span></td>
+                <td class="px-4 py-3"><span class="px-2 py-1 text-xs rounded-full font-semibold ${statusClass}">${ticket.get_status_display}</span></td>
                 <td class="px-4 py-3 text-sm text-gray-600">${ticket.assigned_to ? escapeHtml(ticket.assigned_to.get_full_name) : '-'}</td>
                 <td class="px-4 py-3">${timerHtml}</td>
-                <td class="px-4 py-3">
-                    <div class="flex items-center gap-2" onclick="event.stopPropagation()">
-                        ${ticket.can_assume ? `
-                            <button onclick="assignChatToMe(${ticket.id})" 
-                                    class="text-blue-600 hover:text-blue-800" title="Assumir">
-                                <i class="fas fa-hand-paper"></i>
-                            </button>
-                        ` : ''}
-                        ${canDelete ? `
-                            <button onclick="deleteTicket(${ticket.id}, '${escapeHtml(ticket.title).replace(/'/g, "\\'")}')" 
-                                    class="text-red-600 hover:text-red-800" title="Excluir">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        ` : ''}
-                    </div>
-                </td>
-            </tr>
-        `;
+                <td class="px-4 py-3"><div class="flex items-center gap-2" onclick="event.stopPropagation()">${acoes(ticket)}</div></td>
+            </tr>`;
     }).join('');
-}
 
-// Função para aplicar filtro na lista
-function applyListFilter() {
-    if (allTicketsData.length > 0) {
-        renderListView(allTicketsData);
+    if (cardsContainer) {
+        cardsContainer.innerHTML = filteredTickets.map((ticket, i) => {
+            const statusClass = statusColors[ticket.status] || 'bg-gray-100 text-gray-800';
+            const priorityClass = priorityColors[ticket.priority?.toLowerCase()] || 'bg-gray-100 text-gray-800';
+            const anima = animar && i < 10 ? ` rc-sobe" style="--i: ${i}` : '';
+            return `
+            <article class="sp-card rc-post bg-white rounded-xl border border-gray-100 shadow-sm p-3 cursor-pointer${anima}" data-prio="${escapeHtml((ticket.priority || '').toLowerCase())}" onclick="openTicketModal(${ticket.id})">
+                <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                        ${ticket.protocol ? `<p class="text-[10px] font-mono text-gray-400">#${escapeHtml(ticket.protocol)}</p>` : ''}
+                        <h4 class="font-semibold text-sm text-gray-900 leading-snug break-words">${escapeHtml(ticket.title)}</h4>
+                    </div>
+                    <div class="flex items-center gap-1 flex-shrink-0" onclick="event.stopPropagation()">${acoes(ticket)}</div>
+                </div>
+                <p class="text-xs text-gray-600 mt-1 break-words">${escapeHtml(ticket.user.get_full_name)}${ticket.origem ? ` · ${escapeHtml(ticket.origem.name)}${ticket.origem.adabas ? ` (${escapeHtml(ticket.origem.adabas)})` : ''}` : ''}</p>
+                <div class="flex flex-wrap items-center gap-1 mt-2 text-[11px]">
+                    <span class="px-2 py-0.5 rounded-full font-semibold ${statusClass}">${ticket.get_status_display}</span>
+                    <span class="px-2 py-0.5 rounded-full font-semibold ${priorityClass}">${ticket.get_priority_display || 'Normal'}</span>
+                    ${ticket.category ? `<span class="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">${escapeHtml(ticket.category.name)}</span>` : ''}
+                    ${getTimerHtml(ticket.created_at, ticket.closed_at, ticket.started_at)}
+                </div>
+                ${ticket.assigned_to || ticket.sector ? `<p class="text-[11px] text-gray-500 mt-2 break-words">${ticket.sector ? escapeHtml(ticket.sector.name) : ''}${ticket.assigned_to ? ` · <i class="fas fa-headset"></i> ${escapeHtml(ticket.assigned_to.get_full_name)}` : ''}</p>` : ''}
+            </article>`;
+        }).join('') || '<div class="text-center text-gray-400 py-8 text-sm">Nenhum chamado</div>';
     }
 }
+
+function applyListFilter() { spAplicarFiltros(); }
 
 function deleteTicket(ticketId, ticketTitle) {
     if (!confirm(`Tem certeza que deseja excluir o chat "${ticketTitle}"?\n\nEsta ação não pode ser desfeita.`)) {
         return;
     }
-    
     fetch(`/projects/support/chat/${ticketId}/delete/`, {
         method: 'POST',
         headers: {
@@ -1602,7 +1334,8 @@ function deleteTicket(ticketId, ticketTitle) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            alert('✅ Chat excluído com sucesso!');
+            showToast('Chat excluído com sucesso!', 'success');
+            if (activeModalChatId && String(activeModalChatId) === String(ticketId)) closeTicketModal();
             loadSupportTickets();
         } else {
             alert('❌ Erro ao excluir chat: ' + (data.error || 'Erro desconhecido'));
@@ -1617,38 +1350,65 @@ function deleteTicket(ticketId, ticketTitle) {
 // Helper para escapar HTML e prevenir XSS
 function escapeHtml(text) {
     const div = document.createElement('div');
-    div.textContent = text;
+    div.textContent = text === undefined || text === null ? '' : text;
     return div.innerHTML;
 }
 
 function updateTicketCounts(tickets) {
-    let openTotal = 0;
-    let progressTotal = 0;
-    let closedTotal = 0;
-    
+    let openTotal = 0, progressTotal = 0, closedTotal = 0;
     tickets.forEach(ticket => {
-        if (ticket.status === 'AGUARDANDO' || ticket.status === 'ABERTO') {
-            openTotal++;
-        } else if (ticket.status === 'EM_ANDAMENTO') {
-            progressTotal++;
-        } else if (ticket.status === 'FECHADO') {
-            closedTotal++;
-        }
+        if (ticket.status === 'AGUARDANDO' || ticket.status === 'ABERTO') openTotal++;
+        else if (ticket.status === 'EM_ANDAMENTO') progressTotal++;
+        else if (ticket.status === 'FECHADO') closedTotal++;
     });
-
-    const openBadge = document.querySelector('#open-tickets')?.parentElement?.querySelector('.bg-red-200');
-    if (openBadge) openBadge.textContent = openTotal;
-
-    const progressBadge = document.querySelector('#progress-tickets')?.parentElement?.querySelector('.bg-yellow-200');
-    if (progressBadge) progressBadge.textContent = progressTotal;
-    
-    const closedCountEl = document.getElementById('closed-count');
-    if (closedCountEl) closedCountEl.textContent = closedTotal;
+    spMudaNumero('open-count', openTotal);
+    spMudaNumero('progress-count', progressTotal);
+    spMudaNumero('closed-count', closedTotal);
 }
 
+// Topo, atalhos, selects e busca: respondem na hora.
+(function () {
+    document.querySelectorAll('[data-sp-status]').forEach(botao => {
+        botao.addEventListener('click', () => {
+            spFiltro.status = botao.dataset.spStatus;
+            document.querySelectorAll('[data-sp-status]').forEach(b => b.setAttribute('aria-pressed', String(b === botao)));
+            spAplicarFiltros();
+        });
+    });
+    document.querySelectorAll('[data-sp-atalho]').forEach(botao => {
+        botao.addEventListener('click', () => {
+            spFiltro.atalho = spFiltro.atalho === botao.dataset.spAtalho ? '' : botao.dataset.spAtalho;
+            document.querySelectorAll('[data-sp-atalho]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.spAtalho === spFiltro.atalho)));
+            spAplicarFiltros();
+        });
+    });
+    document.querySelectorAll('[data-sp-filtro]').forEach(sel => sel.addEventListener('change', spAplicarFiltros));
+    const busca = document.getElementById('spBusca');
+    let espera = null;
+    if (busca) busca.addEventListener('input', () => { clearTimeout(espera); espera = setTimeout(spAplicarFiltros, 120); });
+    const limpar = document.getElementById('spLimpar');
+    if (limpar) limpar.addEventListener('click', () => {
+        spFiltro.status = ''; spFiltro.atalho = '';
+        document.querySelectorAll('[data-sp-status]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.spStatus === '')));
+        document.querySelectorAll('[data-sp-atalho]').forEach(b => b.setAttribute('aria-pressed', 'false'));
+        document.querySelectorAll('[data-sp-filtro]').forEach(sel => { sel.value = ''; });
+        if (busca) busca.value = '';
+        spAplicarFiltros();
+    });
+    let visao = 'kanban';
+    try { visao = localStorage.getItem('suporte.visao') || 'kanban'; } catch (e) { /* sem armazenamento */ }
+    toggleView(visao, true);
+})();
+
 function openTicketModal(ticketId) {
-    document.getElementById('ticketModal').classList.remove('hidden');
+    const modal = document.getElementById('ticketModal');
+    const mudouDeChamado = String(activeModalChatId) !== String(ticketId);
+    modal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
+    if (mudouDeChamado) {
+        document.getElementById('ticketModalContent').innerHTML = '<div class="h-full flex items-center justify-center text-gray-400"><i class="fas fa-circle-notch fa-spin text-2xl"></i></div>';
+        document.getElementById('ticketModalTitle').textContent = 'Carregando…';
+    }
 
     activeModalChatId = ticketId;
     fetchAndRenderTicketDetails(ticketId, true);
@@ -1709,7 +1469,8 @@ function pollOpenTicketMessages() {
                 if (!container) return;
 
                 const shouldAutoScroll = (container.scrollHeight - container.scrollTop - container.clientHeight) < 80;
-                container.insertAdjacentHTML('beforeend', renderChatMessages(data.messages));
+                if (!container.querySelector('.sp-msg')) container.innerHTML = '';
+                container.insertAdjacentHTML('beforeend', renderChatMessages(data.messages, true));
 
                 activeModalLastMessageId = Math.max(activeModalLastMessageId, ...data.messages.map(m => m.id));
 
@@ -1732,69 +1493,89 @@ function pollOpenTicketMessages() {
         });
 }
 
+function spAba(nome) {
+    document.querySelectorAll('[data-sp-aba]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.spAba === nome)));
+    document.querySelectorAll('[data-sp-painel]').forEach(p => p.classList.toggle('hidden', p.dataset.spPainel !== nome));
+    if (nome === 'chat') {
+        const c = document.getElementById('chatMessages');
+        if (c) c.scrollTop = c.scrollHeight;
+    }
+}
+
 function renderTicketDetails(data, forceScroll = false) {
     const content = document.getElementById('ticketModalContent');
     const modalTitle = document.getElementById('ticketModalTitle');
-    
-    // Verificar se o usuário é agente de suporte
+    const modalProtocolo = document.getElementById('ticketModalProtocolo');
+
     const isAgent = data.is_support_agent || false;
     const currentUserId = {{ request.user.id }};
     const isAssignedToMe = data.chat.assigned_to && data.chat.assigned_to.id === currentUserId;
     const canAssign = data.can_assume || false;  // Usa o valor calculado pelo backend
-    
+    const podeGerir = (data.is_support_agent || data.is_supervisor_or_higher) && data.chat.status !== 'FECHADO';
+    // Aba aberta no celular continua a mesma quando o chamado é redesenhado.
+    const abaAtual = (document.querySelector('[data-sp-aba][aria-selected="true"]') || {}).dataset?.spAba || 'chat';
+
     if (modalTitle) {
-        modalTitle.textContent = `Ticket #${data.chat.protocol || data.chat.id} - ${data.chat.title}`;
+        modalTitle.textContent = data.chat.title;
     }
+    if (modalProtocolo) {
+        modalProtocolo.textContent = `Chamado #${data.chat.protocol || data.chat.id}`;
+    }
+    const cor = getStatusColor(data.chat.status);
 
     content.innerHTML = `
-        <div class="flex h-full">
-            <!-- Chat (esquerda) -->
-            <div class="w-2/3 flex flex-col min-h-0 border-r bg-white">
-                <div class="px-4 py-3 border-b bg-gradient-to-r from-blue-50 to-indigo-50 flex items-center justify-between">
-                    <div>
-                        <p class="text-sm font-semibold text-gray-900">Conversa do Atendimento</p>
-                        <p class="text-xs text-gray-600">Acompanhe mensagens em tempo real</p>
+        <div class="flex flex-col md:flex-row h-full">
+            <div class="md:hidden flex border-b border-gray-100 bg-white flex-shrink-0" role="tablist">
+                <button type="button" data-sp-aba="chat" onclick="spAba('chat')" aria-selected="${abaAtual === 'chat'}" class="sp-aba flex-1 py-2.5 text-sm font-semibold text-gray-500 border-b-2 border-transparent"><i class="fas fa-comments mr-1"></i>Conversa</button>
+                <button type="button" data-sp-aba="info" onclick="spAba('info')" aria-selected="${abaAtual === 'info'}" class="sp-aba flex-1 py-2.5 text-sm font-semibold text-gray-500 border-b-2 border-transparent"><i class="fas fa-circle-info mr-1"></i>Detalhes e ações</button>
+            </div>
+
+            <!-- Conversa -->
+            <div data-sp-painel="chat" class="${abaAtual === 'chat' ? '' : 'hidden '}md:flex md:w-2/3 flex-1 md:flex-none flex flex-col min-h-0 md:border-r border-gray-100 bg-white">
+                <div class="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between gap-2 flex-shrink-0">
+                    <div class="min-w-0">
+                        <p class="text-sm font-semibold text-gray-900">Conversa do atendimento</p>
+                        <p class="text-xs text-gray-500 inline-flex items-center gap-1.5"><span class="inline-block w-1.5 h-1.5 rounded-full bg-green-500"></span>Mensagens em tempo real</p>
                     </div>
-                    <span id="ticketModalStatusBadge" class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-${getStatusColor(data.chat.status)}-100 text-${getStatusColor(data.chat.status)}-800">
+                    <span id="ticketModalStatusBadge" class="inline-block px-2.5 py-1 rounded-full text-xs font-semibold bg-${cor}-100 text-${cor}-800 flex-shrink-0">
                         ${data.chat.get_status_display}
                     </span>
                 </div>
 
-                <div class="flex-1 overflow-y-scroll p-4 min-h-0 whatsapp-wall" id="chatMessages" style="scrollbar-width: thin; scrollbar-color: #CBD5E0 #F7FAFC;">
+                <div class="flex-1 p-3 sm:p-4 min-h-0 whatsapp-wall" id="chatMessages">
                     ${renderChatMessages(data.messages)}
                 </div>
 
-                <div class="border-t p-4 flex-shrink-0 bg-white">
+                <div class="border-t border-gray-100 p-3 sm:p-4 flex-shrink-0 bg-white">
                     ${isAssignedToMe && data.chat.status === 'EM_ANDAMENTO' ? `
                     <div class="flex justify-start mb-3">
-                        <button onclick="resolveChat(${data.chat.id})" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-md text-sm transition-colors">
+                        <button onclick="resolveChat(${data.chat.id})" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-full text-sm font-semibold transition-colors">
                             <i class="fas fa-flag-checkered mr-2"></i>Finalizar Atendimento
                         </button>
                     </div>
                     ` : ''}
-                    <div class="flex space-x-2">
+                    <div class="flex items-center gap-2">
                         <input type="file" id="fileInput-${data.chat.id}" class="hidden" onchange="handleFileUpload(${data.chat.id}, this)">
-                        <button onclick="document.getElementById('fileInput-${data.chat.id}').click()" 
-                                class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded-md text-sm flex-shrink-0"
-                                title="Anexar arquivo">
+                        <button onclick="document.getElementById('fileInput-${data.chat.id}').click()"
+                                class="bg-gray-100 hover:bg-gray-200 text-gray-600 w-10 h-10 rounded-full text-sm flex-shrink-0" title="Anexar arquivo">
                             <i class="fas fa-paperclip"></i>
                         </button>
-                        <input type="text" id="messageInput" placeholder="Digite sua resposta ou cole uma imagem (Ctrl+V)..." 
-                               class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        <input type="text" id="messageInput" placeholder="Digite sua resposta ou cole uma imagem (Ctrl+V)..."
+                               class="sp-campo flex-1 min-w-0" style="border-radius: 9999px; padding: .6rem 1rem;"
                                onkeypress="if(event.key==='Enter') sendSupportMessage(${data.chat.id})"
                                onpaste="handlePaste(event, ${data.chat.id})">
-                        <button onclick="sendSupportMessage(${data.chat.id})" 
-                                class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-md text-sm whitespace-nowrap flex-shrink-0">
-                            <i class="fas fa-paper-plane mr-2"></i>Enviar
+                        <button onclick="sendSupportMessage(${data.chat.id})" data-rc-pop
+                                class="text-white h-10 px-4 sm:px-5 rounded-full text-sm font-semibold whitespace-nowrap flex-shrink-0" style="background:linear-gradient(135deg,#ff6b35,#f59e0b)" title="Enviar">
+                            <i class="fas fa-paper-plane sm:mr-2"></i><span class="hidden sm:inline">Enviar</span>
                         </button>
                     </div>
                     <div id="pastePreview-${data.chat.id}" class="mt-2 hidden">
-                        <div class="bg-gray-50 p-2 rounded-lg flex items-center justify-between">
+                        <div class="bg-gray-50 p-2 rounded-xl flex items-center justify-between">
                             <div class="flex items-center space-x-2">
-                                <img id="pasteImage-${data.chat.id}" class="h-16 w-16 object-cover rounded" alt="Preview">
+                                <img id="pasteImage-${data.chat.id}" class="h-16 w-16 object-cover rounded-lg" alt="Preview">
                                 <span class="text-sm text-gray-600">Imagem colada - Pronta para enviar</span>
                             </div>
-                            <button onclick="clearPastedImage(${data.chat.id})" class="text-red-500 hover:text-red-700">
+                            <button onclick="clearPastedImage(${data.chat.id})" class="text-red-500 hover:text-red-700 p-2">
                                 <i class="fas fa-times"></i>
                             </button>
                         </div>
@@ -1802,133 +1583,96 @@ function renderTicketDetails(data, forceScroll = false) {
                 </div>
             </div>
 
-            <!-- Sidebar (direita) -->
-            <div class="w-1/3 bg-gray-50 p-4 overflow-y-auto">
+            <!-- Detalhes e ações -->
+            <div data-sp-painel="info" class="${abaAtual === 'info' ? '' : 'hidden '}md:block md:w-1/3 flex-1 md:flex-none bg-gray-50 p-4 overflow-y-auto min-h-0">
                 <div class="space-y-3">
-                    <div class="support-info-card">
-                        <h5 class="text-xs font-bold text-blue-700 uppercase tracking-wide mb-3 flex items-center gap-2"><i class="fas fa-user-circle"></i>Dados do Cliente</h5>
-                        <div class="space-y-2">
-                            <div>
-                                <label class="block text-xs font-medium text-gray-700">Cliente</label>
-                                <p class="text-sm text-gray-900">${data.chat.user.get_full_name}</p>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-gray-700">Login</label>
-                                <p class="text-sm text-gray-900 font-mono bg-white px-2 py-1 rounded border">${data.chat.user.login_code || '-'}</p>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-gray-700">PDV</label>
-                                <p class="text-sm text-gray-900">${data.chat.user.pdv || '-'}</p>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-gray-700">CPF do Cliente</label>
-                                <p class="text-sm text-gray-900 font-mono">${data.chat.customer_cpf || '-'}</p>
-                            </div>
-                        </div>
+                    <div class="support-info-card rc-sobe" style="--i: 0">
+                        <h5 class="rc-secao-titulo text-xs font-bold text-gray-900 uppercase tracking-wide mb-3">
+                            <span class="rc-secao-icone" style="width:1.75rem;height:1.75rem;border-radius:.6rem;background:linear-gradient(135deg,#3b82f6,#6366f1)"><i class="fas fa-user text-xs"></i></span>Dados do Cliente
+                        </h5>
+                        <dl class="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                            <div class="col-span-2"><dt class="text-[11px] font-medium text-gray-500">Cliente</dt><dd class="text-gray-900 font-medium">${escapeHtml(data.chat.user.get_full_name)}</dd></div>
+                            <div><dt class="text-[11px] font-medium text-gray-500">Login</dt><dd class="text-gray-900 font-mono">${escapeHtml(data.chat.user.login_code || '-')}</dd></div>
+                            <div><dt class="text-[11px] font-medium text-gray-500">PDV</dt><dd class="text-gray-900">${escapeHtml(data.chat.user.pdv || '-')}</dd></div>
+                            <div class="col-span-2"><dt class="text-[11px] font-medium text-gray-500">CPF do Cliente</dt><dd class="text-gray-900 font-mono">${escapeHtml(data.chat.customer_cpf || '-')}</dd></div>
+                        </dl>
                     </div>
 
-                    <div class="support-info-card">
-                        <h5 class="text-xs font-bold text-indigo-700 uppercase tracking-wide mb-3 flex items-center gap-2"><i class="fas fa-headset"></i>Dados do Atendimento</h5>
-                        <div class="space-y-2">
+                    <div class="support-info-card rc-sobe" style="--i: 1">
+                        <h5 class="rc-secao-titulo text-xs font-bold text-gray-900 uppercase tracking-wide mb-3">
+                            <span class="rc-secao-icone" style="width:1.75rem;height:1.75rem;border-radius:.6rem;background:linear-gradient(135deg,#8b5cf6,#ec4899)"><i class="fas fa-headset text-xs"></i></span>Dados do Atendimento
+                        </h5>
+                        <div class="space-y-2.5 text-sm">
+                            <div><p class="text-[11px] font-medium text-gray-500">Setor</p><p class="text-gray-900">${data.chat.sector ? escapeHtml(data.chat.sector.name) : 'N/A'}</p></div>
                             <div>
-                                <label class="block text-xs font-medium text-gray-700">Setor</label>
-                                <p class="text-sm text-gray-900">${data.chat.sector ? data.chat.sector.name : 'N/A'}</p>
-                            </div>
-
-                            <div>
-                                <label class="block text-xs font-medium text-gray-700">Setor de abertura</label>
-                                <p class="text-sm text-gray-900 flex items-center gap-2 flex-wrap">
+                                <p class="text-[11px] font-medium text-gray-500">Setor de abertura</p>
+                                <p class="text-gray-900 flex items-center gap-2 flex-wrap">
                                     ${data.chat.origem ? escapeHtml(data.chat.origem.name) : 'N/A'}
                                     ${data.chat.origem && data.chat.origem.adabas ? `<span class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-mono text-xs" title="Código ADABAS">${escapeHtml(data.chat.origem.adabas)}</span>` : ''}
                                 </p>
                             </div>
-
-                            ${data.chat.category ? `
                             <div>
-                                <label class="block text-xs font-medium text-gray-700">Categoria</label>
+                                <p class="text-[11px] font-medium text-gray-500">Categoria</p>
                                 <div class="flex items-center justify-between gap-2">
-                                    <p class="text-sm text-gray-900">${data.chat.category.name}</p>
-                                    ${(data.is_support_agent || data.is_supervisor_or_higher) && data.chat.status !== 'FECHADO' ? `
-                                    <button onclick="openChangeCategoryModal(${data.chat.id}, ${data.chat.sector?.id || 'null'})" class="text-blue-500 hover:text-blue-700 text-xs" title="Alterar categoria">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                    ` : ''}
+                                    ${data.chat.category ? `<p class="text-gray-900">${escapeHtml(data.chat.category.name)}</p>` : (podeGerir ? '' : '<p class="text-gray-500">—</p>')}
+                                    ${podeGerir ? `
+                                    <button onclick="openChangeCategoryModal(${data.chat.id}, ${data.chat.sector?.id || 'null'})" class="text-blue-600 hover:text-blue-800 text-xs font-semibold" title="Alterar categoria">
+                                        ${data.chat.category ? '<i class="fas fa-edit"></i> Alterar' : '<i class="fas fa-plus mr-1"></i>Definir categoria'}
+                                    </button>` : ''}
                                 </div>
                             </div>
-                            ` : `
-                            ${(data.is_support_agent || data.is_supervisor_or_higher) && data.chat.status !== 'FECHADO' ? `
+                            <div><p class="text-[11px] font-medium text-gray-500">Prioridade</p><span class="priority-badge priority-${data.chat.priority}">${data.chat.get_priority_display}</span></div>
                             <div>
-                                <label class="block text-xs font-medium text-gray-700">Categoria</label>
-                                <button onclick="openChangeCategoryModal(${data.chat.id}, ${data.chat.sector?.id || 'null'})" class="text-blue-500 hover:text-blue-700 text-sm">
-                                    <i class="fas fa-plus mr-1"></i>Definir categoria
-                                </button>
-                            </div>
-                            ` : ''}
-                            `}
-
-                            <div>
-                                <label class="block text-xs font-medium text-gray-700">Prioridade</label>
-                                <span class="priority-badge priority-${data.chat.priority}">${data.chat.get_priority_display}</span>
-                            </div>
-
-                            <div>
-                                <label class="block text-xs font-medium text-gray-700">Atendente</label>
-                                ${data.chat.assigned_to ? `
+                                <p class="text-[11px] font-medium text-gray-500">Atendente</p>
                                 <div class="flex items-center justify-between gap-2">
-                                    <p class="text-sm text-gray-900">${data.chat.assigned_to.get_full_name} ${isAssignedToMe ? '<span class="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">(Você)</span>' : ''}</p>
-                                    ${(data.is_support_agent || data.is_supervisor_or_higher) && data.chat.status !== 'FECHADO' ? `
-                                    <button onclick="openTransferModal(${data.chat.id})" class="text-orange-500 hover:text-orange-700 text-xs" title="Transferir">
-                                        <i class="fas fa-exchange-alt"></i>
-                                    </button>
-                                    ` : ''}
+                                    ${data.chat.assigned_to
+                                        ? `<p class="text-gray-900">${escapeHtml(data.chat.assigned_to.get_full_name)} ${isAssignedToMe ? '<span class="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full">(Você)</span>' : ''}</p>`
+                                        : (podeGerir ? '' : '<p class="text-gray-500">Não atribuído</p>')}
+                                    ${podeGerir ? `
+                                    <button onclick="openTransferModal(${data.chat.id})" class="${data.chat.assigned_to ? 'text-orange-600 hover:text-orange-800' : 'text-blue-600 hover:text-blue-800'} text-xs font-semibold" title="${data.chat.assigned_to ? 'Transferir' : 'Atribuir agente'}">
+                                        ${data.chat.assigned_to ? '<i class="fas fa-exchange-alt"></i> Transferir' : '<i class="fas fa-user-plus mr-1"></i>Atribuir agente'}
+                                    </button>` : ''}
                                 </div>
-                                ` : `
-                                ${(data.is_support_agent || data.is_supervisor_or_higher) && data.chat.status !== 'FECHADO' ? `
-                                <button onclick="openTransferModal(${data.chat.id})" class="text-blue-500 hover:text-blue-700 text-sm">
-                                    <i class="fas fa-user-plus mr-1"></i>Atribuir agente
-                                </button>
-                                ` : '<p class="text-sm text-gray-500">Não atribuído</p>'}
-                                `}
                             </div>
                         </div>
                     </div>
 
-                    <div class="support-info-card">
-                        <h5 class="text-xs font-bold text-emerald-700 uppercase tracking-wide mb-3 flex items-center gap-2"><i class="fas fa-bolt"></i>Ações</h5>
+                    <div class="support-info-card rc-sobe" style="--i: 2">
+                        <h5 class="rc-secao-titulo text-xs font-bold text-gray-900 uppercase tracking-wide mb-3">
+                            <span class="rc-secao-icone" style="width:1.75rem;height:1.75rem;border-radius:.6rem;background:linear-gradient(135deg,#10b981,#22c55e)"><i class="fas fa-bolt text-xs"></i></span>Ações
+                        </h5>
                         <div class="space-y-2">
                             ${data.impulso && data.impulso.pode_puxar ? `
-                            <button onclick="pullToImpulso(${data.chat.id})" data-puxar-impulso class="w-full bg-violet-600 hover:bg-violet-700 text-white py-2 px-4 rounded text-sm transition-colors">
+                            <button onclick="pullToImpulso(${data.chat.id})" data-puxar-impulso class="w-full bg-violet-600 hover:bg-violet-700 text-white py-2.5 px-4 rounded-xl text-sm font-semibold transition-colors">
                                 <i class="fas fa-rocket mr-2"></i>Puxar para impulso e assumir
                             </button>
                             ` : ''}
                             ${data.impulso && data.impulso.meta_url ? `
-                            <a href="${data.impulso.meta_url}" data-meta-impulso class="block w-full text-center border border-violet-200 text-violet-700 hover:bg-violet-50 py-2 px-4 rounded text-sm transition-colors">
+                            <a href="${data.impulso.meta_url}" data-meta-impulso class="block w-full text-center border border-violet-200 text-violet-700 hover:bg-violet-50 py-2.5 px-4 rounded-xl text-sm font-semibold transition-colors">
                                 <i class="fas fa-rocket mr-2"></i>Ver no Impulso (fecha junto com o chamado)
                             </a>
                             ` : ''}
                             ${canAssign ? `
-                            <button onclick="assignToMe(${data.chat.id})" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded text-sm transition-colors">
+                            <button onclick="assignToMe(${data.chat.id})" class="w-full text-white py-2.5 px-4 rounded-xl text-sm font-semibold" style="background:linear-gradient(135deg,#ff6b35,#f59e0b)">
                                 <i class="fas fa-hand-paper mr-2"></i>Assumir Atendimento
                             </button>
                             ` : ''}
-
                             ${isAssignedToMe && (data.chat.status === 'AGUARDANDO' || data.chat.status === 'ABERTO') ? `
-                            <button onclick="startChat(${data.chat.id})" class="w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded text-sm transition-colors">
+                            <button onclick="startChat(${data.chat.id})" class="w-full bg-green-600 hover:bg-green-700 text-white py-2.5 px-4 rounded-xl text-sm font-semibold transition-colors">
                                 <i class="fas fa-play-circle mr-2"></i>Começar Atendimento
                             </button>
                             ` : ''}
-
                             ${isAssignedToMe && data.chat.status === 'EM_ANDAMENTO' ? `
-                            <button onclick="resolveChat(${data.chat.id})" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-4 rounded text-sm transition-colors">
+                            <button onclick="resolveChat(${data.chat.id})" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-4 rounded-xl text-sm font-semibold transition-colors">
                                 <i class="fas fa-check-circle mr-2"></i>Finalizar Atendimento
                             </button>
                             ` : ''}
-
                             ${(data.is_superadmin || data.is_supervisor_or_higher) ? `
-                            <button onclick="deleteTicket(${data.chat.id}, '${data.chat.title.replace(/'/g, "\\'").replace(/"/g, '\\&quot;')}'); closeTicketModal();" class="w-full bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded text-sm transition-colors">
+                            <button onclick="deleteTicket(${data.chat.id}, '${escapeHtml(data.chat.title).replace(/'/g, "\\'")}');" class="w-full border border-red-200 text-red-600 hover:bg-red-50 py-2.5 px-4 rounded-xl text-sm font-semibold transition-colors">
                                 <i class="fas fa-trash mr-2"></i>Excluir Ticket
                             </button>
                             ` : ''}
+                            ${!canAssign && !podeGerir && !(data.is_superadmin || data.is_supervisor_or_higher) && !(data.impulso && (data.impulso.pode_puxar || data.impulso.meta_url)) ? '<p class="text-xs text-gray-500">Nenhuma ação disponível para você neste chamado.</p>' : ''}
                         </div>
                     </div>
                 </div>
@@ -1950,48 +1694,42 @@ function renderTicketDetails(data, forceScroll = false) {
     }
 }
 
-function renderChatMessages(messages) {
+function renderChatMessages(messages, animar) {
+    if (!messages || !messages.length) {
+        return '<div class="m-auto text-center text-gray-500 text-sm py-10"><i class="far fa-comments text-3xl mb-2 block opacity-60"></i>Nenhuma mensagem ainda.</div>';
+    }
     return messages.map(msg => {
-        // Renderizar arquivos se existirem
         let filesHtml = '';
         if (msg.files && msg.files.length > 0) {
             filesHtml = msg.files.map(file => {
+                const url = escapeHtml(file.url);
                 if (file.type === 'IMAGE') {
-                    return `<a href="${file.url}" target="_blank" class="block mt-2">
-                        <img src="${file.url}" class="max-w-full rounded" style="max-height: 200px;" alt="${file.name}">
+                    return `<a href="${url}" target="_blank" class="block mt-2">
+                        <img src="${url}" class="max-w-full rounded-lg" style="max-height: 200px;" alt="${escapeHtml(file.name)}">
                     </a>`;
                 } else if (file.type === 'VIDEO') {
-                    return `<video src="${file.url}" controls class="max-w-full rounded mt-2" style="max-height: 200px;"></video>`;
+                    return `<video src="${url}" controls class="max-w-full rounded-lg mt-2" style="max-height: 200px;"></video>`;
                 } else if (file.type === 'AUDIO') {
-                    return `<audio src="${file.url}" controls class="w-full mt-2"></audio>`;
-                } else {
-                    return `<a href="${file.url}" target="_blank" class="flex items-center mt-2 hover:underline ${msg.is_own ? 'text-gray-800' : 'text-blue-600'}">
-                        <i class="fas fa-file mr-2"></i>${file.name} (${formatFileSize(file.size)})
-                    </a>`;
+                    return `<audio src="${url}" controls class="w-full mt-2"></audio>`;
                 }
+                return `<a href="${url}" target="_blank" class="flex items-center mt-2 hover:underline ${msg.is_own ? '' : 'text-blue-600'}">
+                    <i class="fas fa-file mr-2"></i>${escapeHtml(file.name)} (${formatFileSize(file.size)})
+                </a>`;
             }).join('');
         }
-
-        const senderInitial = (msg.user && msg.user.name ? msg.user.name.charAt(0).toUpperCase() : 'U');
-        const rowStyle = msg.is_own
-            ? 'display:flex; justify-content:flex-end; align-items:flex-end; gap:8px; width:100%; margin-bottom:10px;'
-            : 'display:flex; justify-content:flex-start; align-items:flex-end; gap:8px; width:100%; margin-bottom:10px;';
-        const bubbleStyle = msg.is_own
-            ? 'display:inline-block; max-width:78%; background:#DCF8C6; color:#1F2937; border:1px solid #CDEBB2; border-radius:16px 6px 16px 16px; padding:10px 12px; box-shadow:0 1px 1px rgba(0,0,0,.12); line-height:1.45; word-break:break-word;'
-            : 'display:inline-block; max-width:78%; background:#ffffff; color:#111827; border:1px solid #E5E7EB; border-radius:6px 16px 16px 16px; padding:10px 12px; box-shadow:0 1px 1px rgba(0,0,0,.12); line-height:1.45; word-break:break-word;';
-        const metaStyle = msg.is_own
-            ? 'margin-top:4px; font-size:10px; opacity:.7; display:flex; justify-content:flex-end; gap:6px; align-items:center;'
-            : 'margin-top:4px; font-size:10px; opacity:.7; display:flex; justify-content:flex-start; gap:6px; align-items:center;';
-
+        const nome = (msg.user && msg.user.name) || '';
+        const senderInitial = nome ? nome.charAt(0).toUpperCase() : 'U';
+        const classes = ['sp-msg', msg.is_own ? 'eu' : 'outro', msg.is_internal ? 'interna' : '', animar && !spCalmo ? 'rc-sobe' : ''].join(' ');
         return `
-            <div style="${rowStyle}">
-                ${!msg.is_own ? `<span class="chat-avatar-dot" title="${escapeHtml(msg.user.name)}">${senderInitial}</span>` : ''}
-                <div style="${bubbleStyle}">
-                    <div style="white-space:pre-wrap; font-size:13px;">${escapeHtml(msg.message)}</div>
+            <div class="${classes}">
+                ${!msg.is_own ? `<span class="chat-avatar-dot" title="${escapeHtml(nome)}">${escapeHtml(senderInitial)}</span>` : ''}
+                <div class="sp-balao">
+                    ${msg.is_internal ? '<div class="text-[10px] font-bold uppercase tracking-wide mb-1"><i class="fas fa-lock mr-1"></i>Nota interna</div>' : ''}
+                    <div class="sp-balao-texto">${escapeHtml(msg.message)}</div>
                     ${filesHtml}
-                    <div style="${metaStyle}">
-                        <span>${msg.user.name}</span>
-                        <span>${msg.created_at}</span>
+                    <div class="sp-balao-meta">
+                        <span>${escapeHtml(nome)}</span>
+                        <span>${escapeHtml(msg.created_at)}</span>
                     </div>
                 </div>
             </div>
@@ -2012,7 +1750,6 @@ function getStatusColor(status) {
         'AGUARDANDO': 'red',
         'ABERTO': 'red',
         'EM_ANDAMENTO': 'yellow',
-        'FECHADO': 'blue',
         'FECHADO': 'green'
     };
     return colors[status] || 'gray';
@@ -3024,19 +2761,23 @@ function deleteAgent(agentId) {
     });
 }
 
-function showToast(message, type = 'info') {
+function showToast(message, type = 'info', duracao = 3500) {
+    // Texto sempre como texto: a mensagem do chat chega aqui pelo polling.
+    let pilha = document.getElementById('spToasts');
+    if (!pilha) { pilha = document.createElement('div'); pilha.id = 'spToasts'; document.body.appendChild(pilha); }
     const toast = document.createElement('div');
-    toast.className = `fixed bottom-4 right-4 z-50 px-4 py-3 rounded-lg text-white shadow-lg transition-all duration-300 ${
-        type === 'error' ? 'bg-red-500' : type === 'success' ? 'bg-green-500' : 'bg-blue-500'
-    }`;
-    toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'} mr-2"></i>${message}`;
-    document.body.appendChild(toast);
-    
+    toast.className = 'sp-toast ' + (type === 'error' ? 'bg-red-500' : type === 'success' ? 'bg-emerald-500' : 'bg-gray-800');
+    const icone = document.createElement('i');
+    icone.className = 'fas mt-0.5 fa-' + (type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle');
+    const texto = document.createElement('span');
+    texto.textContent = message;
+    toast.append(icone, texto);
+    pilha.appendChild(toast);
+    while (pilha.children.length > 4) pilha.firstElementChild.remove();
     setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateY(100%)';
-        setTimeout(() => document.body.removeChild(toast), 300);
-    }, 3000);
+        toast.classList.add('sai');
+        setTimeout(() => toast.remove(), 300);
+    }, duracao);
 }
 
 // ===== PESQUISA DE SATISFAÇÃO =====
@@ -3157,7 +2898,8 @@ function executeTicketAction(chatId, action) {
     .then(data => {
         if (data.success) {
             showToast(successMsg, 'success');
-            setTimeout(() => location.reload(), 1500);
+            closeTicketModal();
+            loadSupportTickets();
         } else {
             alert('Erro: ' + data.error);
         }
