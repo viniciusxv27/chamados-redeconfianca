@@ -40,7 +40,7 @@
     </div>
 </section>
 
-<div class="mg-aviso info" style="margin-bottom:14px"><i class="fas fa-info-circle"></i><div>A nota da <b>Gestão da Agenda Semanal</b> ({{ por_chave.agenda.pontos_txt }}/20) vem do check-list diário da loja e da Rotina Gerencial. As missões incluídas à mão organizam o dia e entram nos números da visão geral, mas não somam pontos enquanto a validação delas não for definida.</div></div>
+<div class="mg-aviso info" style="margin-bottom:14px"><i class="fas fa-info-circle"></i><div>A nota da <b>Gestão da Agenda Semanal</b> ({{ por_chave.agenda.pontos_txt }}/20) vem do check-list diário da loja e da Rotina ADM. As missões incluídas à mão organizam o dia e entram nos números da visão geral, mas não somam pontos enquanto a validação delas não for definida.</div></div>
 
 <div class="mg-hoje">
     <section class="mg-card" data-rc-revela>
@@ -50,10 +50,10 @@
         {% else %}<div class="mg-vazio">A loja ainda não tem check-list montado.</div>{% endif %}
     </section>
     <section class="mg-card" data-rc-revela>
-        <div class="mg-card-cab"><h2><i class="fas fa-user-clock"></i>Rotina Gerencial · hoje</h2><a class="mg-link" href="{% url 'rotina:minha' %}">Abrir a rotina</a></div>
+        <div class="mg-card-cab"><h2><i class="fas fa-user-clock"></i>Rotina ADM · hoje</h2><a class="mg-link" href="{% url 'rotina:minha' %}">Abrir a rotina</a></div>
         {% if rotina_hoje and rotina_hoje.itens %}
         <ul class="mg-lista">{% for i in rotina_hoje.itens %}<li><span>{% if i.feita %}<i class="fas fa-check-circle mg-feito"></i>{% else %}<i class="far fa-circle mg-falta"></i>{% endif %} {{ i.atividade.titulo }}</span><span>{{ i.atividade.inicio|time:'H:i' }}–{{ i.atividade.fim|time:'H:i' }}</span></li>{% endfor %}</ul>
-        {% else %}<div class="mg-vazio">{% if rotina_hoje %}Nenhuma atividade da Rotina Gerencial hoje.{% else %}Sem Rotina Gerencial ativa.{% endif %}</div>{% endif %}
+        {% else %}<div class="mg-vazio">{% if rotina_hoje %}Nenhuma atividade da Rotina ADM hoje.{% else %}Sem Rotina ADM ativa.{% endif %}</div>{% endif %}
     </section>
 </div>
 {% endblock %}

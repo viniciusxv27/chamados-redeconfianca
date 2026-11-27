@@ -4,7 +4,7 @@
 <header class="ra-topo">
     <div class="ra-titulo">
         <span class="ra-escudo"><i class="fas fa-shield-alt"></i></span>
-        <div><h1>Rotina ADM</h1><p>Central operacional da loja{% if loja %} · {{ loja.name }}{% endif %}</p></div>
+        <div><h1>Visão Guardião</h1><p>Central operacional da loja{% if loja %} · {{ loja.name }}{% endif %}</p></div>
     </div>
     <div class="ra-acoes">
         <div class="ra-data">
@@ -180,11 +180,11 @@ Compacto desde 12/11/2026: só os números; as listas recentes abrem no "Ver det
         {% endif %}
     </article>
 
-    {# ── Agenda semanal (Rotina Gerencial) ── #}
+    {# ── Agenda semanal (Rotina ADM) ── #}
     <article class="ra-card ra-secao">
         <div class="ra-secao-cabeca">
             <div class="ra-secao-titulo"><span class="ic" style="background:var(--ra-vermelho-claro);color:var(--ra-vermelho)"><i class="far fa-calendar-days"></i></span>
-                <div><h2>Agenda semanal</h2><p>Da Rotina Gerencial{% if pessoa != request.user %} de {{ pessoa.full_name }}{% endif %}{% if agenda %} · {{ agenda.feitas }} de {{ agenda.total }} concluída{{ agenda.total|pluralize }}{% endif %}</p></div></div>
+                <div><h2>Agenda semanal</h2><p>Da Rotina ADM{% if pessoa != request.user %} de {{ pessoa.full_name }}{% endif %}{% if agenda %} · {{ agenda.feitas }} de {{ agenda.total }} concluída{{ agenda.total|pluralize }}{% endif %}</p></div></div>
             <div class="ra-semana">
                 <a href="?{% if gestor %}loja={{ loja.id }}&{% endif %}{% if request.GET.pessoa %}pessoa={{ request.GET.pessoa }}&{% endif %}semana={{ semana_anterior }}" aria-label="Semana anterior"><i class="fas fa-chevron-left"></i></a>
                 <span>{{ segunda|date:"d/m" }} a {% if agenda %}{{ agenda.fim|date:"d/m/Y" }}{% else %}{{ segunda|date:"Y" }}{% endif %}</span>
@@ -201,7 +201,7 @@ Compacto desde 12/11/2026: só os números; as listas recentes abrem no "Ver det
         </form>
         {% endif %}
         {% if agenda is None %}
-        <div class="ra-vazio"><i class="far fa-calendar-xmark"></i>{% if pessoa == request.user %}Você ainda não tem Rotina Gerencial.{% else %}{{ pessoa.full_name }} não tem Rotina Gerencial ativa.{% endif %}</div>
+        <div class="ra-vazio"><i class="far fa-calendar-xmark"></i>{% if pessoa == request.user %}Você ainda não tem Rotina ADM.{% else %}{{ pessoa.full_name }} não tem Rotina ADM ativa.{% endif %}</div>
         {% else %}
         {% comment %}Começa no dia (hoje, ou o 1º dia de outra semana) e expande para a semana — 11/11/2026.{% endcomment %}
         <div class="ra-agenda-barra">
@@ -231,7 +231,7 @@ Compacto desde 12/11/2026: só os números; as listas recentes abrem no "Ver det
             </div>
             {% endfor %}
         </div>
-        {% if pessoa == request.user %}<p style="margin:10px 0 0;text-align:right"><a class="ra-link" href="{% url 'rotina:minha' %}">Abrir minha Rotina Gerencial <i class="fas fa-arrow-right text-[10px]"></i></a></p>{% endif %}
+        {% if pessoa == request.user %}<p style="margin:10px 0 0;text-align:right"><a class="ra-link" href="{% url 'rotina:minha' %}">Abrir minha Rotina ADM <i class="fas fa-arrow-right text-[10px]"></i></a></p>{% endif %}
         {% endif %}
     </article>
 </section>

@@ -188,7 +188,7 @@ class MissaoAgenda(models.Model):
     STATUS = [(ATRIBUIDA, 'Missão Atribuída'), (EM_ACAO, 'Missão em Ação'), (CUMPRIDA, 'Missão Cumprida')]
     GERENTE = 'GERENTE'
     LIDERANCA = 'LIDERANCA'
-    ORIGENS = [(GERENTE, 'Demanda do GL'), (LIDERANCA, 'Demanda da liderança')]
+    ORIGENS = [(GERENTE, 'Demanda do Gerente'), (LIDERANCA, 'Demanda da liderança')]
 
     pessoa = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
                                related_name='missoes_guardiao', verbose_name='Guardião')

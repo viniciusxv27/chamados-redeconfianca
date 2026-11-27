@@ -71,7 +71,7 @@
             {% elif m.chave == 'agenda' and m.detalhe %}
                 <ul class="mg-mini-lista">
                     <li><span>Check-list diário da loja (até o horário)</span><span>{{ m.detalhe.check_ok }} de {{ m.detalhe.check_prev }}</span></li>
-                    <li><span>Rotina Gerencial (concluída no dia){% if not m.detalhe.tem_rotina %} · sem rotina ativa{% endif %}</span><span>{{ m.detalhe.rot_ok }} de {{ m.detalhe.rot_prev }}</span></li>
+                    <li><span>Rotina ADM (concluída no dia){% if not m.detalhe.tem_rotina %} · sem rotina ativa{% endif %}</span><span>{{ m.detalhe.rot_ok }} de {{ m.detalhe.rot_prev }}</span></li>
                 </ul>
             {% elif m.chave == 'melhoria' %}
                 <a class="mg-link" href="/impulso/inovar/nova/">Enviar uma ideia no Inovar <i class="fas fa-chevron-right"></i></a>

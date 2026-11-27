@@ -53,7 +53,7 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('titulo', models.CharField(max_length=200, verbose_name='Missão')),
-                ('origem', models.CharField(choices=[('GERENTE', 'Demanda do GL'), ('LIDERANCA', 'Demanda da liderança')], default='GERENTE', max_length=10, verbose_name='Quem pediu')),
+                ('origem', models.CharField(choices=[('GERENTE', 'Demanda do Gerente'), ('LIDERANCA', 'Demanda da liderança')], default='GERENTE', max_length=10, verbose_name='Quem pediu')),
                 ('prazo', models.DateField(verbose_name='Prazo')),
                 ('status', models.CharField(choices=[('ATRIBUIDA', 'Missão Atribuída'), ('EM_ACAO', 'Missão em Ação'), ('CUMPRIDA', 'Missão Cumprida')], db_index=True, default='ATRIBUIDA', max_length=10)),
                 ('cumprida_em', models.DateTimeField(blank=True, null=True)),
