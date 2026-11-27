@@ -203,6 +203,8 @@ def lista(request):
         'status_choices': Fibra.STATUS_CHOICES,
         'situacoes': [(c['key'], c['label'], c['count']) for c in colunas],
         'total_lista': sum((f.valor or 0 for f in fibras)),
+        # Contadores por STATUS, como a lista sempre contou (a "Não localizado" do kanban fica só no filtro).
+        'por_status': _por_status(fibras),
         'validacao': quadro.em_cache('validacao', lambda: _validacao_do_quadro(qs, de, ate, is_ilha),
                                      qs=qs, extra=f'ilha={is_ilha}'),
         'cruzar_ini': cruzar_ini,
@@ -211,6 +213,15 @@ def lista(request):
         'inconsistencias_count': len(inconsistencias),
         **ctx_periodo,
     })
+
+
+def _por_status(fibras):
+    soma = {k: [0, 0] for k, _l in Fibra.STATUS_CHOICES}
+    for f in fibras:
+        if f.status in soma:
+            soma[f.status][0] += 1
+            soma[f.status][1] += f.valor or 0
+    return [{'key': k, 'label': l, 'count': soma[k][0], 'total': soma[k][1]} for k, l in Fibra.STATUS_CHOICES]
 
 
 @login_required

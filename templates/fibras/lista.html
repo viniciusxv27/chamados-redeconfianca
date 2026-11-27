@@ -50,9 +50,9 @@ html.dark .fb-vk .fb-vk-topo i { background: var(--fb-campo-2); }
 }
 
 /* Contadores por situação (clique filtra a tabela na hora) */
-.fb .fb-kpis.kb { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.fb .fb-kpis.kb { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .fb .fb-kpis.kb .fb-kpi { cursor: pointer; }
-@media (max-width: 1280px) { .fb .fb-kpis.kb { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 1280px) { .fb .fb-kpis.kb { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 767px) {
   .fb .fb-kpis.kb { display: flex; overflow-x: auto; scroll-snap-type: x proximity; gap: 10px; margin: 0 -12px 16px; padding: 4px 12px 6px; scrollbar-width: none; }
   .fb .fb-kpis.kb::-webkit-scrollbar { display: none; }
@@ -235,14 +235,14 @@ html.dark .fb-novo { color: #A5B4FC; }
   </section>
   {% endwith %}
 
-  {# Contadores por situação: status, ou "Não localizado" (fora da última planilha). Clique filtra a tabela. #}
-  <div class="fb-kpis kb" id="fbKpis" role="group" aria-label="Filtrar por situação (instantâneo)">
-    <button type="button" class="fb-kpi destaque" data-chip="" aria-pressed="true" title="Todas as situações">
+  {# Contadores por status (os mesmos números da lista de antes). Clique filtra a tabela. #}
+  <div class="fb-kpis kb" id="fbKpis" role="group" aria-label="Filtrar por status (instantâneo)">
+    <button type="button" class="fb-kpi destaque" data-chip="" aria-pressed="true" title="Todos os status">
       <div class="fb-kpi-topo"><span>Total</span><i class="fas fa-layer-group" aria-hidden="true"></i></div>
       <b data-kpi-qtd>{{ fibras|length }}</b>
       <small data-kpi-valor>R$ {{ total_lista|floatformat:"2g" }}</small>
     </button>
-    {% for col in colunas %}
+    {% for col in por_status %}
     <button type="button" class="fb-kpi" data-st="{{ col.key }}" data-chip="{{ col.key }}" aria-pressed="false" style="animation-delay: {{ forloop.counter }}0ms" title="Mostrar só: {{ col.label }}">
       <div class="fb-kpi-topo"><span>{{ col.label }}</span>
         <i class="fas {% if col.key == 'agendado' %}fa-calendar-check{% elif col.key == 'pendente' %}fa-hourglass-half{% elif col.key == 'problema' %}fa-triangle-exclamation{% elif col.key == 'instalado' %}fa-circle-check{% elif col.key == 'cancelado' %}fa-ban{% else %}fa-circle-question{% endif %}" aria-hidden="true"></i>
@@ -396,7 +396,7 @@ html.dark .fb-novo { color: #A5B4FC; }
   var busca = document.getElementById('fbBusca');
   var resultado = document.getElementById('fbResultado');
   var kpis = document.getElementById('fbKpis');
-  var stAtivo = '';   /* situação (status ou "nao_localizado") do contador clicado */
+  var stAtivo = '';   /* status do contador clicado */
   var vFiltro = '';   /* "tipo|valor" do indicador da validação clicado (vazio = sem filtro) */
   linhas.forEach(function (tr) { tr._busca = FB.normalizar(tr.dataset.busca); });
 
@@ -409,22 +409,22 @@ html.dark .fb-novo { color: #A5B4FC; }
 
   function aplicar() {
     var termos = FB.normalizar(busca.value.trim()).split(/\s+/).filter(Boolean);
-    var vis = 0, soma = 0, porCol = {}, totQ = 0, totV = 0;
+    var vis = 0, soma = 0, porSt = {}, totQ = 0, totV = 0;
     linhas.forEach(function (tr) {
       var casa = passaValidacao(tr) && termos.every(function (t) { return tr._busca.indexOf(t) !== -1; });
       var v = parseFloat(tr.dataset.valor) || 0;
       if (casa) {
-        var c = porCol[tr.dataset.col] || (porCol[tr.dataset.col] = { q: 0, v: 0 });
+        var c = porSt[tr.dataset.st] || (porSt[tr.dataset.st] = { q: 0, v: 0 });
         c.q++; c.v += v; totQ++; totV += v;
       }
-      var ok = casa && (!stAtivo || tr.dataset.col === stAtivo);
+      var ok = casa && (!stAtivo || tr.dataset.st === stAtivo);
       tr.hidden = !ok;
       if (ok) { vis++; soma += v; }
     });
     if (semRes) semRes.hidden = !(linhas.length && vis === 0);
     if (kpis) {
       kpis.querySelectorAll('[data-chip]').forEach(function (k) {
-        var chave = k.dataset.chip, d = chave ? (porCol[chave] || { q: 0, v: 0 }) : { q: totQ, v: totV };
+        var chave = k.dataset.chip, d = chave ? (porSt[chave] || { q: 0, v: 0 }) : { q: totQ, v: totV };
         k.querySelector('[data-kpi-qtd]').textContent = FB.int(d.q);
         k.querySelector('[data-kpi-valor]').textContent = FB.brl(d.v);
         var bar = k.querySelector('.fb-kpi-bar span');
