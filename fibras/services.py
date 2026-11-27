@@ -75,7 +75,8 @@ def fetch_fibras_from_mysql(
                     `data_da_venda`,
                     `pilar`,
                     `Serviço_Técnico`,
-                    `Venda_ativa`
+                    `Venda_ativa`,
+                    `Documento_do_cliente`
                 FROM vendas_servicos
                 WHERE YEAR(data_da_venda) = %s
                   AND MONTH(data_da_venda) = %s
@@ -87,7 +88,7 @@ def fetch_fibras_from_mysql(
             cols = [
                 'numero_da_venda', 'numero_protocolo', 'cpf', 'cliente', 'endereco', 'numero_acesso',
                 'plano', 'valor', 'pdv', 'vendedor', 'data_da_venda',
-                'pilar', 'servico_tecnico', 'venda_ativa',
+                'pilar', 'servico_tecnico', 'venda_ativa', 'documento',
             ]
             for row in cur.fetchall():
                 rows.append(dict(zip(cols, row)))
@@ -124,7 +125,7 @@ def fetch_fibras_by_protocols(protocols: Iterable[str]) -> list[dict]:
     cols = [
         'numero_da_venda', 'numero_protocolo', 'cpf', 'cliente', 'endereco', 'numero_acesso',
         'plano', 'valor', 'pdv', 'vendedor', 'data_da_venda',
-        'pilar', 'servico_tecnico', 'venda_ativa',
+        'pilar', 'servico_tecnico', 'venda_ativa', 'documento',
     ]
     try:
         with conn.cursor() as cur:
@@ -148,7 +149,8 @@ def fetch_fibras_by_protocols(protocols: Iterable[str]) -> list[dict]:
                         `data_da_venda`,
                         `pilar`,
                         `Serviço_Técnico`,
-                        `Venda_ativa`
+                        `Venda_ativa`,
+                        `Documento_do_cliente`
                     FROM vendas_servicos
                     WHERE `Nº_protocolo` IN ({placeholders})
                     """,
@@ -169,7 +171,8 @@ def _campos_do_mysql(r: dict) -> dict:
     """Os campos da Fibra que vêm do Vivo GO (sem status: esse é da ilha)."""
     return {
         'numero_protocolo': (str(r.get('numero_protocolo') or '')).strip(),
-        'cpf': (r.get('cpf') or '').strip() if r.get('cpf') else '',
+        # Venda B2B vem do Vivo GO sem CPF: o CNPJ está em Documento_do_cliente (27/11/2026).
+        'cpf': (str(r.get('cpf') or r.get('documento') or '')).strip(),
         'cliente': (r.get('cliente') or '').strip() if r.get('cliente') else '',
         'endereco': (r.get('endereco') or '').strip() if r.get('endereco') else '',
         'numero_acesso': (str(r.get('numero_acesso') or '')).strip(),
@@ -328,7 +331,9 @@ _PLANILHA_STATUS_MAP = (
     ('1.',          Fibra.STATUS_INSTALADO),   # 1.1 INSTALADA
     ('3.5',         Fibra.STATUS_AGENDADO),    # 3.5 AGENDADA
     ('3.8',         Fibra.STATUS_CANCELADO),   # 3.8 CANCELADA
-    ('3.6',         Fibra.STATUS_PROBLEMA),    # 3.6 NENHUM REGISTRO ENCONTRADO NO WFM
+    ('3.6',         Fibra.STATUS_PROBLEMA),    # 3.6 ENCERRADA (antes: NENHUM REGISTRO ENCONTRADO NO WFM) — Problema
+    ('3.7',         Fibra.STATUS_CANCELADO),   # 3.7 CANCELADA
+    ('3.0',         Fibra.STATUS_PENDENTE),    # 3.0 PENDENTE INSTALAÇÃO
     ('3.4',         Fibra.STATUS_PROBLEMA),    # 3.4 PENDENTE TECNICA
     ('3.1',         Fibra.STATUS_PENDENTE),    # 3.1 PENDENTE ENRIQUECIMENTO
     ('3.2',         Fibra.STATUS_PENDENTE),    # 3.2 PENDENTE AGENDAMENTO
@@ -343,6 +348,7 @@ _PLANILHA_STATUS_MAP = (
     ('FRAUDE',      Fibra.STATUS_CANCELADO),
     ('PENDENTE',    Fibra.STATUS_PENDENTE),
     ('AGUARDAN',    Fibra.STATUS_PENDENTE),
+    ('ENCERRAD',    Fibra.STATUS_PROBLEMA),    # "ENCERRADA" é Problema (pedido de 27/11/2026)
     ('NENHUM',      Fibra.STATUS_PROBLEMA),
     ('PROBLEM',     Fibra.STATUS_PROBLEMA),
     ('IMPRODUT',    Fibra.STATUS_PROBLEMA),

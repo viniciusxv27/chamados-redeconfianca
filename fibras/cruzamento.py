@@ -17,7 +17,7 @@ Fases do cruzamento (cada ORDEM da Esteira só pode ser usada uma vez):
 Protocolo aproximado em outra loja (ou fora da tolerância de data) NÃO é vinculado:
 fica "Não localizada" com observação detalhada (loja/data de cada base).
 Sobras:  Base de Vendas -> "Não localizada"   |   Esteira Vivo -> "Venda não lançada"
-Vendas B2B (protocolo com letras e números + CNPJ no CPF/CNPJ) ficam fora do pareamento.
+Vendas B2B (CNPJ no CPF/CNPJ e protocolo fora do padrão ORDEM) ficam fora do pareamento.
 """
 from __future__ import annotations
 
@@ -102,7 +102,7 @@ def limpar_protocolo(valor) -> str:
 def formato_protocolo(p: str) -> str:
     if not p:
         return "Vazio"
-    if re.fullmatch(r"7\d{9}", p):
+    if re.fullmatch(r"[78]\d{9}", p):
         return "Padrão ORDEM"
     if re.fullmatch(r"(1[1-9]|[2-9]\d)9\d{8}", p):
         return "Parece telefone"
@@ -116,8 +116,14 @@ def eh_cnpj(valor) -> bool:
 
 
 def eh_b2b(prot: str, documento) -> bool:
-    """Protocolo com letras e números e cliente com CNPJ."""
-    return bool(re.search(r"[A-Z]", prot)) and bool(re.search(r"\d", prot)) and eh_cnpj(documento)
+    """Cliente com CNPJ e protocolo que não é ORDEM da Esteira (27/11/2026).
+
+    A Esteira Vivo só traz B2C, e no Vivo GO a venda B2B vem com o CNPJ e um protocolo próprio
+    (S000007529271, 8a8bca3632351, ou só números fora do padrão). Antes era preciso ter letra no
+    protocolo, e as B2B com protocolo numérico caíam em "Não localizada". CNPJ com protocolo no
+    padrão ORDEM (7 ou 8 + 9 dígitos) continua cruzando normalmente.
+    """
+    return eh_cnpj(documento) and not re.fullmatch(r"[78]\d{9}", prot or "")
 
 
 # --------------------------------------------------------------------------- #

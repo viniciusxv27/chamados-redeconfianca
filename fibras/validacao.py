@@ -451,8 +451,18 @@ def executar(param: dict | None = None, *, by_user=None, origem='manual', notifi
             f = fibras.get(linhas.at[i, 'linha_go'])
             if not f:
                 continue
-            ordem = str(r['ORDEM VINCULADA'] or '')
             f.cruzamento = cruz
+            if f.ordem_manual and str(r['ASSERTIVIDADE']) != cz.MANUAL:
+                # Vínculo feito à mão manda (27/11/2026): se a ORDEM informada não veio nesta Esteira (ou já
+                # estava em outra venda), o vínculo fica como a pessoa deixou, em vez de o motor refazê-lo.
+                f.status_cruzamento = cz.LOCALIZADA
+                f.assertividade = cz.MANUAL
+                f.ordem_vinculada = f.ordem_manual[:40]
+                f.metodo_cruzamento = 'Ajuste manual'
+                f.motivo_cruzamento = (f'Vínculo informado à mão, mantido: a ORDEM {f.ordem_manual} '
+                                       'não veio nesta Esteira Vivo (ou já está em outra venda).')
+                continue
+            ordem = str(r['ORDEM VINCULADA'] or '')
             f.adabas = str(r['LOJA ADABAS'] or '')[:40]
             f.protocolo_tratado = str(r['PROTOCOLO TRATADO'] or '')[:60]
             f.formato_protocolo = str(r['FORMATO PROTOCOLO'] or '')[:60]

@@ -128,13 +128,29 @@ def ultimo_import():
     return em_cache('ultimo_import', lambda: Fibra.objects.aggregate(m=Max('last_planilha_at'))['m'] or False) or None
 
 
+def e_b2b(f):
+    """Venda B2B: marcada pelo cruzamento ou cliente com CNPJ e protocolo fora do padrão ORDEM."""
+    import re
+    if f.status_cruzamento == 'Venda B2B':
+        return True
+    doc = re.sub(r'\D', '', f.cpf or '')
+    prot = re.sub(r'[^0-9A-Za-z]', '', (f.numero_protocolo or '').lstrip("'")).upper().rstrip('A')
+    return len(doc) == 14 and not re.fullmatch(r'[78]\d{9}', prot)
+
+
 def e_nao_localizado(f, ultimo):
-    """Venda de Fixa, nem cancelada nem instalada, que a última planilha não trouxe."""
+    """Venda de Fixa, nem cancelada nem instalada, que a última planilha não trouxe.
+
+    O que foi decidido à mão manda (27/11/2026): status posto à mão ou ORDEM vinculada à mão deixam a
+    venda no status dela. B2B também: a Esteira Vivo só traz B2C, então nunca "acharia" a venda.
+    """
     from .models import Fibra
     pilar = (f.pilar or '').lower()
     if pilar and 'fixa' not in pilar:
         return False
     if f.status in (Fibra.STATUS_CANCELADO, Fibra.STATUS_INSTALADO):
+        return False
+    if f.status_manual or f.ordem_manual or e_b2b(f):
         return False
     if ultimo:
         return f.last_planilha_at is None or f.last_planilha_at < ultimo
@@ -160,7 +176,8 @@ def carregar(qs, user):
     from .models import FibraIncidente
 
     def _buscar():
-        itens = list(qs.order_by('ordem_planilha', '-data_da_venda', '-id'))
+        itens = list(qs.select_related('status_manual_por', 'agendamento_manual_por')
+                     .order_by('ordem_planilha', '-data_da_venda', '-id'))
         ultimos = {}
         ids = [f.id for f in itens]
         for i in range(0, len(ids), 2000):
@@ -219,8 +236,11 @@ def colunas(itens, status_choices):
     """As colunas do kanban: uma por status + "Não localizado", sem a venda aparecer em duas."""
     ultimo = ultimo_import()
     nao, por_status = [], {k: [] for k, _ in status_choices}
+    rotulos = dict(status_choices)
     for f in itens:
         f.coluna = NAO_LOCALIZADO if e_nao_localizado(f, ultimo) else f.status
+        f.e_b2b = e_b2b(f)
+        f.porque, f.porque_detalhes = explicar(f, ultimo, rotulos)
         if f.coluna == NAO_LOCALIZADO:
             nao.append(f)
         else:
@@ -234,6 +254,82 @@ def colunas(itens, status_choices):
     saida.append({'key': NAO_LOCALIZADO, 'label': ROTULO_NAO_LOCALIZADO, 'items': nao, 'count': len(nao),
                   'total': sum((x.valor or Decimal('0') for x in nao), Decimal('0'))})
     return saida
+
+
+def _quem(user):
+    if not user:
+        return 'alguém'
+    return (user.get_full_name() or user.get_username()).strip() or 'alguém'
+
+
+def _quando(dt):
+    from django.utils import timezone
+    return timezone.localtime(dt).strftime('%d/%m/%Y %H:%M') if dt else ''
+
+
+def explicar(f, ultimo, rotulos):
+    """Por que a venda está nesta categoria: uma frase e os detalhes (27/11/2026).
+
+    A ordem das regras é a mesma de quem decide: à mão > B2B > Esteira Vivo > Vivo GO.
+    """
+    from .models import Fibra
+    from .services import _map_planilha_status
+
+    st = rotulos.get(f.status, f.status)
+    raw = (f.status_planilha_raw or '').strip()
+    det = []
+    if f.coluna == NAO_LOCALIZADO:
+        if f.last_planilha_at is None:
+            frase = 'Não localizado: a venda nunca casou com uma ORDEM da Esteira Vivo'
+        else:
+            frase = (f'Não localizado: não veio na última Esteira Vivo ({_quando(ultimo)}); '
+                     f'a última vez foi em {_quando(f.last_planilha_at)}')
+        frase += f'. Status guardado: {st}.'
+    elif f.status_manual:
+        frase = f'{st} posto à mão por {_quem(f.status_manual_por)}'
+        if f.status_manual_em:
+            frase += f' em {_quando(f.status_manual_em)}'
+        frase += '. A Esteira e o Vivo GO não trocam.'
+        if raw and _map_planilha_status(raw) not in (None, f.status):
+            det.append(f'A Esteira Vivo diz "{raw}" (seria {rotulos.get(_map_planilha_status(raw), "")}).')
+    elif f.e_b2b:
+        frase = (f'{st}: venda B2B (cliente com CNPJ). A Esteira Vivo só traz B2C; o status é o de entrada '
+                 'do Vivo GO ou o que a Ilha der.')
+    elif f.ordem_vinculada and raw:
+        frase = f'{st}: a ORDEM {f.ordem_vinculada} está em "{raw}" na Esteira Vivo.'
+    elif f.status == Fibra.STATUS_CANCELADO:
+        frase = 'Cancelado sem ORDEM na Esteira Vivo: a venda veio cancelada (inativa) do Vivo GO.'
+    else:
+        frase = (f'{st}: status de entrada do Vivo GO (toda venda nova entra como Agendado); '
+                 'ainda sem ORDEM da Esteira Vivo vinculada.')
+
+    if f.ordem_manual:
+        det.append(f'ORDEM {f.ordem_manual} vinculada à mão na Validação: o cruzamento não refaz.')
+    if f.status_cruzamento:
+        txt = f'Cruzamento: {f.status_cruzamento}'
+        if f.assertividade:
+            txt += f' · assertividade {f.assertividade}'
+        if f.metodo_cruzamento:
+            txt += f' ({f.metodo_cruzamento})'
+        if f.motivo_cruzamento:
+            txt += f'. {f.motivo_cruzamento}'
+        det.append(txt)
+    if f.observacao_cruzamento and f.observacao_cruzamento not in (f.motivo_cruzamento or ''):
+        det.append(f'Observação: {f.observacao_cruzamento}')
+    if f.comentario_cruzamento:
+        det.append(f'Comentário: {f.comentario_cruzamento}')
+    if f.motivo_planilha:
+        det.append(f'Motivo na Esteira Vivo: {f.motivo_planilha}')
+    if f.agendamento_manual:
+        txt = f'Agendamento posto à mão por {_quem(f.agendamento_manual_por)}'
+        if f.agendamento_manual_em:
+            txt += f' em {_quando(f.agendamento_manual_em)}'
+        det.append(txt + ': a Esteira não troca.')
+    elif f.data_agendamento and f.ordem_vinculada:
+        det.append('Agendamento vem da DATA_AGENDA da Esteira Vivo.')
+    if f.conferencia_endereco and f.conferencia_endereco != 'Confere':
+        det.append(f'Endereço: {f.detalhe_endereco or f.conferencia_endereco}')
+    return frase, det
 
 
 def invalida_quadro(fn):
