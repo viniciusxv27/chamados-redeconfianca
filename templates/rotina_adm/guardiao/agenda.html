@@ -44,10 +44,19 @@
 
 <div class="mg-hoje">
     <section class="mg-card" data-rc-revela>
-        <div class="mg-card-cab"><h2><i class="fas fa-store"></i>Check-list de abertura · hoje</h2><a class="mg-link" href="{% url 'rotina_adm:painel' %}{% if gestor and loja %}?loja={{ loja.id }}{% endif %}">Marcar na central</a></div>
+        <div class="mg-card-cab"><h2><i class="fas fa-store"></i>Check-list de abertura · hoje</h2>{% if checklist_hoje %}<span class="mg-check-conta" data-check-conta>{{ checklist_feitos }} de {{ checklist_hoje|length }}</span>{% endif %}</div>
         {% if checklist_hoje %}
-        <ul class="mg-lista">{% for l in checklist_hoje %}<li><span>{% if l.marcacao %}<i class="fas fa-check-circle mg-feito"></i>{% else %}<i class="far fa-circle mg-falta"></i>{% endif %} {{ l.item.titulo }}</span><span>{% if l.marcacao %}{{ l.marcacao.feito_em|time:'H:i' }}{% elif l.item.horario %}até {{ l.item.horario|time:'H:i' }}{% endif %}</span></li>{% endfor %}</ul>
-        {% else %}<div class="mg-vazio">A loja ainda não tem check-list montado.</div>{% endif %}
+        {% comment %}Marca aqui mesmo (27/11/2026), pela mesma rota da central (checklist_marcar): só a loja da pessoa, Gestor e SUPERADMIN.{% endcomment %}
+        <ul class="mg-lista mg-check" data-check data-url="{% url 'rotina_adm:checklist_marcar' 0 %}">{% for l in checklist_hoje %}
+            <li class="{% if l.marcacao %}feito{% elif l.atrasado %}atrasado{% endif %}" data-item="{{ l.item.id }}" data-horario="{% if l.item.horario %}até {{ l.item.horario|time:'H:i' }}{% endif %}">
+                <button type="button" class="mg-check-item" aria-pressed="{% if l.marcacao %}true{% else %}false{% endif %}" {% if not pode_marcar %}disabled{% endif %}>
+                    <i class="{% if l.marcacao %}fas fa-check-circle{% else %}far fa-circle{% endif %}"></i><span>{{ l.item.titulo }}</span>
+                </button>
+                <span class="hora">{% if l.marcacao %}{{ l.marcacao.feito_em|time:'H:i' }}{% elif l.item.horario %}até {{ l.item.horario|time:'H:i' }}{% endif %}</span>
+            </li>{% endfor %}
+        </ul>
+        {% if not pode_marcar %}<div class="mg-vazio" style="border-top:1px solid var(--mg-borda)">Só a loja de {{ pessoa.get_full_name|default:pessoa.username }} marca este check-list.</div>{% endif %}
+        {% else %}<div class="mg-vazio">A loja ainda não tem check-list montado.{% if gestor and loja %} <a class="mg-link" href="{% url 'rotina_adm:checklist_editar' %}?loja={{ loja.id }}">Montar o check-list</a>{% endif %}</div>{% endif %}
     </section>
     <section class="mg-card" data-rc-revela>
         <div class="mg-card-cab"><h2><i class="fas fa-user-clock"></i>Rotina ADM · hoje</h2><a class="mg-link" href="{% url 'rotina:minha' %}">Abrir a rotina</a></div>
@@ -56,4 +65,45 @@
         {% else %}<div class="mg-vazio">{% if rotina_hoje %}Nenhuma atividade da Rotina ADM hoje.{% else %}Sem Rotina ADM ativa.{% endif %}</div>{% endif %}
     </section>
 </div>
+{% if checklist_hoje and pode_marcar %}
+<script>
+(function () {
+    'use strict';
+    var lista = document.querySelector('[data-check]');
+    if (!lista) { return; }
+    var conta = document.querySelector('[data-check-conta]');
+    var csrf = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
+    function pintar(li, feito, hora) {
+        li.classList.toggle('feito', feito);
+        if (feito) { li.classList.remove('atrasado'); }
+        var b = li.querySelector('.mg-check-item');
+        b.setAttribute('aria-pressed', feito ? 'true' : 'false');
+        b.querySelector('i').className = feito ? 'fas fa-check-circle' : 'far fa-circle';
+        li.querySelector('.hora').textContent = feito ? (hora || '') : li.dataset.horario;
+        if (conta) { conta.textContent = lista.querySelectorAll('li.feito').length + ' de ' + lista.children.length; }
+    }
+    lista.addEventListener('click', function (e) {
+        var b = e.target.closest('.mg-check-item');
+        if (!b || b.disabled) { return; }
+        var li = b.closest('li'), feito = !li.classList.contains('feito'), antes = li.querySelector('.hora').textContent;
+        b.disabled = true;
+        pintar(li, feito, feito ? 'salvando…' : '');
+        fetch(lista.dataset.url.replace('/0/', '/' + li.dataset.item + '/'), {
+            method: 'POST', credentials: 'same-origin',
+            headers: {'X-CSRFToken': csrf, 'Content-Type': 'application/json'}, body: JSON.stringify({feito: feito})
+        }).then(function (r) { return r.json(); }).catch(function () { return {ok: false, erro: 'Sem conexão — tente de novo.'}; })
+          .then(function (j) {
+              b.disabled = false;
+              if (!j || !j.ok) {
+                  pintar(li, !feito, antes);
+                  li.querySelector('.hora').textContent = antes;
+                  alert((j && j.erro) || 'Não deu para salvar.');
+                  return;
+              }
+              pintar(li, j.feito, j.hora);
+          });
+    });
+})();
+</script>
+{% endif %}
 {% endblock %}

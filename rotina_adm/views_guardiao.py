@@ -124,6 +124,7 @@ def guardiao_tela(request, aba='visao'):
         hoje = timezone.localdate()
         if dados['loja'] is not None:
             contexto['checklist_hoje'] = servicos.itens_do_dia(dados['loja'], hoje)
+            contexto['checklist_feitos'] = sum(1 for l in contexto['checklist_hoje'] if l['marcacao'])
         agenda = servicos.agenda_da_semana(pessoa, hoje - timedelta(days=hoje.weekday()))
         contexto['rotina_hoje'] = next((d for d in agenda['dias'] if d['hoje']), None) if agenda else None
     if not dados['loja']:

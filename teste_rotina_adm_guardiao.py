@@ -402,6 +402,28 @@ def rodar():
         t('dono exclui a missão', not MissaoAgenda.objects.filter(pk=m.pk).exists())
         resp = c_bia.get('/rotina-adm/guardiao/agenda/')
         t('agenda mostra a missão atribuída pelo gestor', 'Zz do gestor' in resp.content.decode())
+
+        # Check-list de abertura marcável na Agenda (27/11/2026)
+        item_b = ItemChecklist.objects.create(loja=outra, titulo='Zz conferir vitrine', horario=time(23, 59), ordem=1)
+        html = c_bia.get('/rotina-adm/guardiao/agenda/').content.decode()
+        bloco = html[html.find('data-check '):][:1500]
+        t('agenda mostra o check-list de abertura com botão de marcar', f'data-item="{item_b.id}"' in bloco
+          and 'mg-check-item' in bloco and 'disabled' not in bloco.split('</ul>')[0], bloco[:300])
+        t('agenda mostra o contador do check-list', '0 de 1' in html)
+        t('agenda aponta para a rota de marcar da central', '/rotina-adm/checklist/0/marcar/' in bloco)
+        r = c_bia.post(f'/rotina-adm/checklist/{item_b.id}/marcar/', data='{"feito": true}', content_type='application/json')
+        t('Guardião marca o item pela agenda', r.status_code == 200 and r.json().get('feito') is True
+          and MarcacaoChecklist.objects.filter(item=item_b, data=hoje).exists())
+        html = c_bia.get('/rotina-adm/guardiao/agenda/').content.decode()
+        t('item marcado aparece feito na agenda', 'class="feito"' in html and '1 de 1' in html)
+        r = c_ana.post(f'/rotina-adm/checklist/{item_b.id}/marcar/', data='{"feito": false}', content_type='application/json')
+        t('outra loja não desmarca', r.status_code == 403 and MarcacaoChecklist.objects.filter(item=item_b, data=hoje).exists())
+        html = c_gil.get(f'/rotina-adm/guardiao/agenda/?pessoa={bia.id}').content.decode()
+        bloco = html[html.find('data-check '):][:1500]
+        t('Gestor também marca pela agenda do Guardião', f'data-item="{item_b.id}"' in bloco
+          and 'disabled' not in bloco.split('</ul>')[0])
+        r = c_bia.post(f'/rotina-adm/checklist/{item_b.id}/marcar/', data='{"feito": false}', content_type='application/json')
+        t('Guardião desmarca pela agenda', r.status_code == 200 and not MarcacaoChecklist.objects.filter(item=item_b, data=hoje).exists())
         resp = c_gil.get('/rotina-adm/guardiao/destaque/?mes=2026-10')
         t('Guardiões em Destaque lista a ana', 'Ana Zz' in resp.content.decode())
         # Destaque visual (27/11/2026): Faixas ao lado do pódio e a classificação em barras com a pessoa em foco.
