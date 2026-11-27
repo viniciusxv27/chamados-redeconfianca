@@ -73,11 +73,14 @@ t('IQ da Móvel vira multiplicador 1,05', abs(pil['Móvel']['iq_multiplicador'] 
 t('subtotal bate com REMUNERÇÃO COM IQ',
   abs(p['totais']['total_pilares_com_iq'] - 1782.5) < 0.01, p['totais'].get('total_pilares_com_iq'))
 
-print('\n== A TELA SEM A BARRA ==')
+print('\n== A BARRA DO ATINGIMENTO ==')
+t('largura acompanha a carteira', abs(pil['Móvel']['carteira_barra'] - 93.41) < 0.01, pil['Móvel'].get('carteira_barra'))
+linha['%ATING_SEG_1'] = 1.96
+t('e satura em 100', process_coordenador_commission_data(linha)['pilares'][5]['carteira_barra'] == 100.0)
 with open('templates/users/commission.html', encoding='utf-8') as f:
     tela = f.read()
 t('rótulo ATING CARTEIRA continua', 'ATING CARTEIRA:' in tela)
-t('barra do atingimento saiu', 'carteira_barra' not in tela)
+t('a tela desenha a barra', 'pilar.carteira_barra|unlocalize' in tela)
 
 print(f'\n{ok} OK / {fail} falhas')
 sys.exit(1 if fail else 0)

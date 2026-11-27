@@ -2031,6 +2031,11 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
         valid_values = [v for v in ating_values if v > 0]
         pilar_data['media'] = sum(valid_values) / len(valid_values) if valid_values else 0
 
+        # Largura da barra do atingimento da loja. O valor real passa de 100%
+        # com frequência (196% no Seguro), então a barra satura em 100 para não
+        # estourar o cartão — o número cheio continua no rótulo embaixo dela.
+        pilar_data['carteira_barra'] = round(min(100.0, max(0.0, pilar_data['carteira'])), 2)
+
         # Id. Hunter do pilar, para o template não precisar de um if por pilar.
         pilar_data['hunter'] = (data.get(f'H_{pilar["nome"].upper()}')
                                 or data.get(f'H_{key}') or '')
@@ -2641,6 +2646,7 @@ def process_coordenador_commission_data(data, metas_pilar=None):
         pilar_data['carteira'] = pilar_data['pct_1']
         pilar_data['carteira_sem_dado'] = not e_numero(data.get(f'%ATING_{key}_1'))
         pilar_data['hunter'] = pilar_data['habilitado']
+        pilar_data['carteira_barra'] = round(min(100.0, max(0.0, pilar_data['carteira'])), 2)
 
         ating_values = [pilar_data['pct_3'], pilar_data['pct_2'], pilar_data['pct_1']]
         valid_values = [v for v in ating_values if v > 0]
