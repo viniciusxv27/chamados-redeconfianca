@@ -28,7 +28,8 @@ def marketplace_view(request):
     # Filtros
     category_filter = request.GET.get('category')
     search = request.GET.get('search', '')
-    ordering = request.GET.get('ordering', 'relevance')
+    # Padrão: mais recentes primeiro (27/11/2026).
+    ordering = request.GET.get('ordering') or 'recent'
     
     # Excluído na gestão some daqui; a contagem de resgates vem anotada (estoque restante
     # sem uma consulta por cartão).
@@ -47,7 +48,9 @@ def marketplace_view(request):
         'recent': ('-created_at',),
         'relevance': ('-has_discount', '-priority', 'name'),
     }
-    order_fields = ordering_map.get(ordering, ordering_map['relevance'])
+    if ordering not in ordering_map:
+        ordering = 'recent'
+    order_fields = ordering_map[ordering]
     prizes = prizes.order_by(*order_fields)
     
     # Paginação

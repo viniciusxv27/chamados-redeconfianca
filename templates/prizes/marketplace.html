@@ -65,8 +65,8 @@
             </div>
             <select name="ordering" onchange="this.form.submit()" aria-label="Ordenar"
                     class="sm:w-52 px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm focus:border-orange-400 focus:outline-none">
-                <option value="relevance" {% if current_ordering == 'relevance' or not current_ordering %}selected{% endif %}>Mais relevantes</option>
-                <option value="recent" {% if current_ordering == 'recent' %}selected{% endif %}>Mais recentes</option>
+                <option value="recent" {% if current_ordering == 'recent' or not current_ordering %}selected{% endif %}>Mais recentes</option>
+                <option value="relevance" {% if current_ordering == 'relevance' %}selected{% endif %}>Mais relevantes</option>
                 <option value="value_asc" {% if current_ordering == 'value_asc' %}selected{% endif %}>Menor valor</option>
                 <option value="value_desc" {% if current_ordering == 'value_desc' %}selected{% endif %}>Maior valor</option>
             </select>
