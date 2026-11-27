@@ -142,7 +142,7 @@ def _meus_contracheques(user, args):
     linhas = []
     for p in itens:
         assinado = 'assinado' if getattr(p, 'signed_at', None) else 'não assinado'
-        linhas.append(f'{p.month:02d}/{p.year} · líquido R$ {p.net_pay} · {assinado}')
+        linhas.append(f'{p.period_display} · líquido R$ {p.net_pay} · {assinado}')
     return '\n'.join(linhas)
 
 

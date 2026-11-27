@@ -308,7 +308,9 @@ def api_import_payslip(request):
     except User.DoesNotExist:
         return JsonResponse({'error': 'Usuário não encontrado.'}, status=404)
 
-    month = int(month)
+    month = Payslip.mes_valido(month)
+    if month is None:
+        return JsonResponse({'error': 'Mês inválido.'}, status=400)
     year = int(year)
 
     # Verificar duplicidade
@@ -444,7 +446,9 @@ def api_bulk_import(request):
     if not month or not year or not files:
         return JsonResponse({'error': 'Informe mês, ano e selecione os arquivos.'}, status=400)
 
-    month = int(month)
+    month = Payslip.mes_valido(month)
+    if month is None:
+        return JsonResponse({'error': 'Mês inválido.'}, status=400)
     year = int(year)
     results = []
     unmatched_names = []
@@ -584,6 +588,8 @@ def api_reimport_full_month_pdf(request):
         year = int(year)
     except (TypeError, ValueError):
         return JsonResponse({'error': 'Mês/ano inválidos.'}, status=400)
+    if Payslip.mes_valido(month) is None:
+        return JsonResponse({'error': 'Mês inválido.'}, status=400)
 
     file_name = (pdf_file.name or '').lower()
     if not file_name.endswith('.pdf'):
@@ -869,7 +875,7 @@ def api_bulk_delete(request):
     count = payslips.count()
 
     if count == 0:
-        return JsonResponse({'error': f'Nenhum contracheque encontrado para {month:02d}/{year}.'}, status=404)
+        return JsonResponse({'error': f'Nenhum contracheque encontrado para {dict(Payslip.MONTH_CHOICES).get(month, month)}/{year}.'}, status=404)
 
     # Excluir arquivos PDF
     for ps in payslips:

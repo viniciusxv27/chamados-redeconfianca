@@ -27,7 +27,21 @@ class Payslip(models.Model):
         (1, 'Janeiro'), (2, 'Fevereiro'), (3, 'Março'), (4, 'Abril'),
         (5, 'Maio'), (6, 'Junho'), (7, 'Julho'), (8, 'Agosto'),
         (9, 'Setembro'), (10, 'Outubro'), (11, 'Novembro'), (12, 'Dezembro'),
+        # Parcelas do 13º: valores próprios para não colidir com novembro e
+        # dezembro na unicidade (user, month, year).
+        (13, 'Primeira Parcela 13º'), (14, 'Segunda Parcela 13º'),
     ]
+    PRIMEIRA_PARCELA_13 = 13
+    SEGUNDA_PARCELA_13 = 14
+
+    @classmethod
+    def mes_valido(cls, valor):
+        """Converte o mês vindo do formulário; None se não for uma opção."""
+        try:
+            mes = int(valor)
+        except (TypeError, ValueError):
+            return None
+        return mes if mes in dict(cls.MONTH_CHOICES) else None
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -105,6 +119,10 @@ class Payslip(models.Model):
     @property
     def month_name(self):
         return dict(self.MONTH_CHOICES).get(self.month, str(self.month))
+
+    @property
+    def is_decimo_terceiro(self):
+        return self.month in (self.PRIMEIRA_PARCELA_13, self.SEGUNDA_PARCELA_13)
 
     @property
     def period_display(self):
