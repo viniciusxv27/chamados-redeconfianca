@@ -2031,11 +2031,6 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
         valid_values = [v for v in ating_values if v > 0]
         pilar_data['media'] = sum(valid_values) / len(valid_values) if valid_values else 0
 
-        # Largura da barra do atingimento da loja. O valor real passa de 100%
-        # com frequência (196% no Seguro), então a barra satura em 100 para não
-        # estourar o cartão — o número cheio continua no rótulo embaixo dela.
-        pilar_data['carteira_barra'] = round(min(100.0, max(0.0, pilar_data['carteira'])), 2)
-
         # Id. Hunter do pilar, para o template não precisar de um if por pilar.
         pilar_data['hunter'] = (data.get(f'H_{pilar["nome"].upper()}')
                                 or data.get(f'H_{key}') or '')
@@ -2637,7 +2632,16 @@ def process_coordenador_commission_data(data, metas_pilar=None):
             'pago': pilar_metas.get('pago', 0),
             'exclusao': pilar_metas.get('exclusao', 0),
         }
-        
+        # ATING CARTEIRA do coordenador. A aba COO/SNP não tem ATING_CART_{PILAR}:
+        # a carteira do coordenador é o próprio atingimento do mês de referência
+        # (%ATING_{PILAR}_1) — é esse número que a aba do gerente copia no
+        # ATING_CART_{PILAR} (09/2026: ATING_CART_MOVEL 0,9341 dos gerentes do
+        # ARIEL = %ATING_MOVEL_1 do ARIEL). Sem essas chaves o cartão do pilar em
+        # commission.html caía no |default:0 e mostrava 0,0%.
+        pilar_data['carteira'] = pilar_data['pct_1']
+        pilar_data['carteira_sem_dado'] = not e_numero(data.get(f'%ATING_{key}_1'))
+        pilar_data['hunter'] = pilar_data['habilitado']
+
         ating_values = [pilar_data['pct_3'], pilar_data['pct_2'], pilar_data['pct_1']]
         valid_values = [v for v in ating_values if v > 0]
         pilar_data['media'] = sum(valid_values) / len(valid_values) if valid_values else 0
@@ -2736,7 +2740,41 @@ def process_coordenador_commission_data(data, metas_pilar=None):
         'remuneracao_final': safe_float(data.get(' REMUNERAÇÃO FINAL COO/SNP')),  # Nota: tem espaço no início
         'cargo_label': 'Coordenador',
     }
-    
+
+    # Coluna "Total" do Detalhamento por Pilar (commission.html lê
+    # pilares.N.soma_com_iq e totais.total_pilares_com_iq). A aba COO/SNP não
+    # traz IQ em percentual como a do CN/gerente: traz o acelerador e o deflator
+    # já em reais (IQ_ACELADOR MÓVEL, IQ_DEFLATOR FIXA...). Então o total do
+    # pilar é comissão + Hunter, mais o acelerador e menos o deflator em Móvel e
+    # Fixa — a soma bate com REMUNERÇÃO COM IQ da planilha. Sem isso a coluna
+    # caía no 0 do template.
+    com = processed['comissoes']
+    acel = processed['aceleradores']
+    for i, pilar_key in enumerate(['movel', 'fixa', 'smartphone', 'eletronicos',
+                                   'essenciais', 'seguro', 'sva']):
+        if pilar_key in ('eletronicos', 'essenciais'):
+            com_valor = com.get(f'{pilar_key}_a', 0) + com.get(f'{pilar_key}_b', 0)
+        else:
+            com_valor = com.get(pilar_key, 0)
+        soma = com_valor + processed['hunter'].get(pilar_key, 0)
+        if pilar_key in ('movel', 'fixa'):
+            ajuste_iq = (acel[f'iq_acelerador_{pilar_key}']
+                         - abs(acel[f'iq_deflator_{pilar_key}']))
+            # Multiplicador efetivo (1,00 = sem IQ), no formato do CN (100 = 1,00).
+            iq_mult = (soma + ajuste_iq) / soma * 100 if soma else 100
+        else:
+            ajuste_iq = 0
+            iq_mult = None
+        processed['pilares'][i].update({
+            'soma': soma,
+            'soma_com_iq': soma + ajuste_iq,
+            'ajuste_iq': ajuste_iq,
+            'iq_multiplicador': iq_mult,
+        })
+    processed['totais']['total_pilares'] = sum(p['soma'] for p in processed['pilares'])
+    processed['totais']['total_pilares_com_iq'] = sum(
+        p['soma_com_iq'] for p in processed['pilares'])
+
     processed['habilitados'] = {
         'pilares_67': data.get('M|F|T|A'),
     }
