@@ -93,7 +93,7 @@ def exige(*chaves):
                         or request.content_type == 'application/json'):
                     return JsonResponse({'ok': False, 'error': aviso, 'erro': aviso}, status=403)
                 messages.error(request, aviso)
-                return redirect('fibras:kanban' if pode(u, 'modulo.ver') else 'home')
+                return redirect('fibras:lista' if pode(u, 'modulo.ver') else 'home')
             return view(request, *args, **kwargs)
         return _view
     return decorador

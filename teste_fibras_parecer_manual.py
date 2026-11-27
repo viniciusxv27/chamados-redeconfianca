@@ -111,7 +111,7 @@ try:
     t('lê dd/mm/aaaa e aaaa-mm-dd', fm.data_agendamento == date(2031, 4, 9) and fa.data_agendamento == date(2031, 4, 10),
       (fm.data_agendamento, fa.data_agendamento))
     t('guardada também na Esteira', EsteiraVenda.objects.get(ordem='7311111111').data_agenda == date(2031, 4, 9))
-    lista = ci.get('/fibras/lista/?de=2031-04-01&ate=2031-04-30').content.decode()
+    lista = ci.get('/fibras/?de=2031-04-01&ate=2031-04-30').content.decode()
     t('lista tem a coluna Agendamento com a data', 'data-ord="agenda"' in lista and '09/04/2031' in lista
       and 'data-agenda="2031-04-09"' in lista)
     t('detalhe mostra a data de agendamento', '09/04/2031' in ci.get(f'/fibras/{fm.pk}/').content.decode())
@@ -121,7 +121,7 @@ try:
     t('lista mostra o CPF sem pontos, com botão de copiar', '09026026757' in lista and 'data-copiar="09026026757"' in lista
       and '090.260.267-57</td>' not in lista)
     k = ci.get('/fibras/?de=2031-04-01&ate=2031-04-30').content.decode()
-    t('kanban mostra o CPF sem pontos e o selo manual', '09026026757 · Venda ZZP1' in k and 'fb-manual' in k)
+    t('/fibras/ (lista) mostra o CPF sem pontos e o selo manual', '09026026757' in k and 'fb-manual' in k)
     det = ci.get(f'/fibras/{fm.pk}/').content.decode()
     t('detalhe: CPF sem pontos e aviso do status manual com o que a Esteira diz', 'CPF 09026026757' in det
       and 'data-status-manual' in det and 'A Esteira diz: <b>3.5 AGENDADA</b>' in det, det[det.find('data-status-manual'):det.find('data-status-manual') + 400])
@@ -145,11 +145,11 @@ try:
     t('venda manual não vira Cancelado pela sincronização', fa.status == Fibra.STATUS_PENDENTE and fa.status_manual, fa.status)
 
     print('\n== SETA DE VOLTAR ==')
-    for url in ('/fibras/', '/fibras/lista/', '/fibras/relatorio/'):
+    for url in ('/fibras/', '/fibras/relatorio/'):
         t(f'{url}: seta de voltar ao lado das abas', 'class="fb-seta-voltar" data-fb-voltar' in ci.get(url).content.decode())
     t('validação: seta de voltar', 'vv-voltar' in ci.get('/fibras/validacao/').content.decode())
     t('detalhe: "Voltar" usa o histórico', 'data-fb-voltar' in det)
-    vazou = [u for u in ('/fibras/', '/fibras/lista/', f'/fibras/{fm.pk}/') if '{#' in ci.get(u).content.decode()]
+    vazou = [u for u in ('/fibras/', f'/fibras/{fm.pk}/') if '{#' in ci.get(u).content.decode()]
     t('nenhum comentário vazando', not vazou, vazou)
 finally:
     transaction.set_rollback(True)

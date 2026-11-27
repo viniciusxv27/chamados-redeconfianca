@@ -5,8 +5,9 @@ from . import views, views_acessos
 app_name = 'fibras'
 
 urlpatterns = [
-    path('', views.kanban, name='kanban'),
-    path('lista/', views.lista, name='lista'),
+    path('', views.lista, name='lista'),
+    # O kanban saiu (27/11/2026); o endereço antigo da lista leva para /fibras/.
+    path('lista/', views.lista_antiga, name='lista_antiga'),
     path('acessos/', views_acessos.acessos, name='acessos'),
     path('sync/', views.sync_now, name='sync_now'),
     path('importar/', views.importar_planilha, name='importar_planilha'),

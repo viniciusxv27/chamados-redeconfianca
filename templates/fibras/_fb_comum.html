@@ -114,7 +114,7 @@ window.FB = window.FB || (function () {
     if (navigator.clipboard) navigator.clipboard.writeText(v).then(function () { toast('Copiado: ' + v, true); }, function () { toast('Não foi possível copiar.', false); });
   });
 
-  // Seta de voltar: volta para a tela anterior do portal; aberta direto (sem histórico), vai ao Kanban.
+  // Seta de voltar: volta para a tela anterior do portal; aberta direto (sem histórico), vai à lista.
   document.addEventListener('click', function (e) {
     var a = e.target.closest && e.target.closest('[data-fb-voltar]');
     if (!a) return;

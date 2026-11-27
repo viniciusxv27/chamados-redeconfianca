@@ -67,7 +67,7 @@
  <div class="fb-rel">
   <div class="fb-cab">
     <div>
-      <a href="{% url 'fibras:kanban' %}{% if periodo_qs %}?{{ periodo_qs }}{% endif %}" class="fb-voltar"><i class="fas fa-arrow-left" aria-hidden="true"></i> Voltar ao Kanban</a>
+      <a href="{% url 'fibras:lista' %}{% if periodo_qs %}?{{ periodo_qs }}{% endif %}" class="fb-voltar"><i class="fas fa-arrow-left" aria-hidden="true"></i> Voltar à lista</a>
       <h1><span class="fb-ico" aria-hidden="true"><i class="fas fa-chart-bar"></i></span> Relatório de Fibras</h1>
       <p>{% if periodo_ativo %}Período: {{ periodo_rotulo }}{% else %}Visão geral do mês corrente{% endif %} · acompanhamento Myrella</p>
     </div>
@@ -118,7 +118,7 @@
       <b><span data-contar="{{ qtd_cancel }}">{{ qtd_cancel }}</span> <small>({{ percent_cancel }}%)</small></b>
       <p>R$ {{ receita_cancel|floatformat:"2g" }} perdidos</p>
     </a>
-    <a href="{% url 'fibras:kanban' %}{% if periodo_qs %}?{{ periodo_qs }}{% endif %}" class="fb-heroi-kpi roxo" style="animation-delay:180ms">
+    <a href="{% url 'fibras:lista' %}{% if periodo_qs %}?{{ periodo_qs }}{% endif %}" class="fb-heroi-kpi roxo" style="animation-delay:180ms">
       <i class="fas fa-question-circle bg-ico" aria-hidden="true"></i>
       <span class="r">Não localizadas</span>
       <b><span data-contar="{{ qtd_nao_loc }}">{{ qtd_nao_loc }}</span> <small>({{ percent_nao_loc }}%)</small></b>
@@ -129,7 +129,7 @@
   <!-- Blocos por status -->
   <div class="fb-kpis blocos">
     {% for b in blocos %}
-    <a href="{% if b.key == 'nao_localizado' %}{% url 'fibras:kanban' %}{% if periodo_qs %}?{{ periodo_qs }}{% endif %}{% else %}{% url 'fibras:lista' %}?status={{ b.key }}{% if periodo_qs %}&amp;{{ periodo_qs }}{% endif %}{% endif %}" class="fb-kpi" data-st="{{ b.key }}" style="animation-delay: {{ forloop.counter }}0ms">
+    <a href="{% url 'fibras:lista' %}?status={{ b.key }}{% if periodo_qs %}&amp;{{ periodo_qs }}{% endif %}" class="fb-kpi" data-st="{{ b.key }}" style="animation-delay: {{ forloop.counter }}0ms">
       <div class="fb-kpi-topo"><span>{{ b.label }}</span>
         <i class="fas {% if b.key == 'agendado' %}fa-calendar-check{% elif b.key == 'pendente' %}fa-hourglass-half{% elif b.key == 'problema' %}fa-triangle-exclamation{% elif b.key == 'instalado' %}fa-circle-check{% elif b.key == 'cancelado' %}fa-ban{% else %}fa-circle-question{% endif %}" aria-hidden="true"></i>
       </div>

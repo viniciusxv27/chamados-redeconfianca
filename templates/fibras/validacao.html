@@ -236,7 +236,7 @@
 <div class="vv">
   <main class="principal">
     <header class="topo">
-      <a class="botao-link vv-voltar" href="{% url 'fibras:kanban' %}" aria-label="Voltar" title="Voltar"
+      <a class="botao-link vv-voltar" href="{% url 'fibras:lista' %}" aria-label="Voltar" title="Voltar"
          onclick="if (document.referrer && document.referrer.indexOf(location.origin) === 0 && history.length > 1) { event.preventDefault(); history.back(); }"><i class="fa-solid fa-arrow-left"></i></a>
       <div class="segmentado" role="tablist" aria-label="Seções da validação">
         <button class="ativo" data-view="validacao">Cruzamento</button>
@@ -245,7 +245,7 @@
         <button data-view="bases">Bases tratadas</button>
       </div>
       <div class="topo-acoes">
-        <a class="botao-link" href="{% url 'fibras:kanban' %}"><i class="fa-solid fa-table-columns"></i>Kanban</a>
+        <a class="botao-link" href="{% url 'fibras:lista' %}"><i class="fa-solid fa-list"></i>Lista</a>
         <button class="secundario" id="btExportar" disabled><i class="fa-solid fa-file-excel"></i>Exportar Excel</button>
         <button class="primario" id="btCruzar" disabled><i class="fa-solid fa-bolt"></i>Cruzar</button>
       </div>
@@ -315,7 +315,7 @@
             <div class="regra"><b>Venda B2B <span class="tag b2b">B2B</span></b>Protocolo com letras e números e cliente com CNPJ. Fica fora do pareamento.</div>
             <div class="regra"><b>Sobras <span class="tag nl">Não localizada</span></b>Base de Vendas sem par. Do lado da Esteira Vivo: <i>Venda não lançada</i>.</div>
             <div class="regra"><b>Endereço <span class="tag media">só sinaliza</span></b>Compara logradouro, número e CEP das vendas localizadas. Não altera a assertividade.</div>
-            <div class="regra"><b>Kanban <span class="tag manual">status</span></b>O status de instalação da ORDEM vinculada move a fibra no kanban, como a planilha diária já fazia.</div>
+            <div class="regra"><b>Status <span class="tag manual">status</span></b>O status de instalação da ORDEM vinculada muda o status da fibra na lista, como a planilha diária já fazia.</div>
           </div>
         </section>
 
@@ -453,7 +453,7 @@ const URL_ = {
 const CSRF = "{{ csrf_token }}";
 
 const TITULOS = {
-  validacao: ["Base de Vendas × Esteira Vivo", "Localiza cada venda de fibra na Esteira de Vendas Vivo, classifica a assertividade e atualiza o kanban."],
+  validacao: ["Base de Vendas × Esteira Vivo", "Localiza cada venda de fibra na Esteira de Vendas Vivo, classifica a assertividade e atualiza o status na lista."],
   ajustes: ["Ajustes manuais", "Confirme, rejeite ou vincule ORDENS manualmente. Os ajustes valem para os próximos cruzamentos."],
   lojas: ["Correspondência de lojas", "Liga a FILIAL da Base de Vendas ao código ADABAS da Esteira de Vendas Vivo."],
   bases: ["Bases tratadas", "As três bases apenas com as colunas utilizadas no cruzamento."],
@@ -703,7 +703,7 @@ function desenharTabela() {
       <td><b>${esc(r.filial)}</b><div class="sub">${esc(r.data)} · venda ${esc(r.venda)}</div></td>
       <td>${esc(r.vendedor)}<div class="sub">${esc(r.servico)} · ${esc(r.plano)}</div></td>
       <td><b>${esc(r.tratado) || '<span class="mut">vazio</span>'}</b><div class="sub">${esc(r.formato)}</div></td>
-      <td>${tagStatus(r.status)}<div class="sub">kanban: ${esc(r.kanban)}</div></td>
+      <td>${tagStatus(r.status)}<div class="sub">status: ${esc(r.kanban)}</div></td>
       <td>${tagAssert(r.assert)}</td>
       <td><b>${esc(r.ordem) || '<span class="mut">—</span>'}</b>${r.ordem ? `<div class="sub">${esc(r.metodo)}</div>` : ""}</td>
       <td>${tagInst(r.etapa, r.status_inst)}</td>

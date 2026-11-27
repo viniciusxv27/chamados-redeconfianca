@@ -1,4 +1,4 @@
-"""/fibras: kanban e lista do mesmo quadro, rápidos e com cache (10/11/2026).
+"""/fibras: a lista do quadro, rápidos e com cache (10/11/2026).
 
 Rodar: venv/bin/python teste_fibras_quadro.py
 """
@@ -131,26 +131,26 @@ def ids(resp, chave):
     return sorted(f.pk for f in resp.context['fibras'])
 
 
-print('\n== KANBAN × LISTA ==')
+print('\n== LISTA (tela principal desde 27/11/2026: o kanban saiu) ==')
 for rotulo, q in [('mês', {}), ('todos', {'periodo': 'todos'}), ('b2b', {'b2b': '1', 'periodo': 'todos'}),
                   ('ordem vinculada', {'ordem': 'ORDZZ777'})]:
-    k, l = cr.get('/fibras/', q), cr.get('/fibras/lista/', q)
-    kc = {c['key']: c['count'] for c in k.context['colunas']}
+    l = cr.get('/fibras/', q)
+    kc = {c['key']: c['count'] for c in l.context['colunas']}
     lc = {key: n for key, _l, n in l.context['situacoes']}
-    t(f'{rotulo}: mesmas vendas, contagens e totais', ids(k, 'colunas') == ids(l, 'fibras') and kc == lc
-      and sum(c['total'] for c in k.context['colunas']) == l.context['total_lista'], (kc, lc))
+    t(f'{rotulo}: linhas, contadores e totais batem com as situações', ids(l, 'colunas') == ids(l, 'fibras') and kc == lc
+      and sum(c['total'] for c in l.context['colunas']) == l.context['total_lista'], (kc, lc))
 k = cr.get('/fibras/', {}).context
 cols = {c['key']: c for c in k['colunas']}
 t('pendentes fora da planilha vão para "Não localizado" e não se repetem', cols['nao_localizado']['count'] == 6
   and len(ids(cr.get('/fibras/', {}), 'colunas')) == len(set(ids(cr.get('/fibras/', {}), 'colunas'))))
 t('cancelada fora da planilha fica em Cancelado', cols['cancelado']['count'] == 1)
-t('lista abre no mês, como o kanban (antes abria em tudo)', len(cr.get('/fibras/lista/').context['fibras']) == 29)
-l = cr.get('/fibras/lista/', {'status': 'nao_localizado'}).context
-t('lista filtra pela coluna do kanban', len(l['fibras']) == 6 and all(f.coluna == 'nao_localizado' for f in l['fibras']))
+t('lista abre no mês (antes abria em tudo)', len(cr.get('/fibras/').context['fibras']) == 29)
+l = cr.get('/fibras/', {'status': 'nao_localizado'}).context
+t('lista filtra pela situação', len(l['fibras']) == 6 and all(f.coluna == 'nao_localizado' for f in l['fibras']))
 t('B2B pelos dígitos: CPF formatado não é empresa, CNPJ é',
   [f.cpf for c in cr.get('/fibras/', {'b2b': '1'}).context['colunas'] for f in c['items']] == ['12.345.678/0001-95'])
-h = cr.get('/fibras/', {'pdv': 'GLORIA'}).content.decode()
-t('Kanban → Lista leva os filtros', 'href="/fibras/lista/?pdv=GLORIA"' in h)
+r = cr.get('/fibras/lista/', {'pdv': 'GLORIA', 'status': 'agendado'})
+t('/fibras/lista/ antigo leva para /fibras/ com os filtros', r.status_code == 302 and r['Location'] == '/fibras/?pdv=GLORIA&status=agendado', r.get('Location'))
 
 print('\n== CONSULTAS E CACHE ==')
 quadro.invalidar()
@@ -196,12 +196,14 @@ outra = [f.pk for c in cr.get('/fibras/', {'periodo': 'todos'}).context['colunas
 t('"resposta nova" calculada por pessoa (fora do cache)', isinstance(nova, list) and isinstance(outra, list))
 
 print('\n== TELAS ==')
-h = cr.get('/fibras/lista/').content.decode()
-t('a lista não é embrulhada na rolagem lateral (cabe no celular)', 'id="fbTabela" data-rc-wrapped="1"' in h)
 h = cr.get('/fibras/').content.decode()
-t('kanban: coluna acompanha a altura da tela', 'calc(100vh - 230px)' in h and 'calc(100dvh - 190px)' in h)
+t('a lista não é embrulhada na rolagem lateral (cabe no celular)', 'id="fbTabela" data-rc-wrapped="1"' in h)
+t('sem kanban na tela (nem aba, nem quadro, nem arrastar)', 'id="kanbanBoard"' not in h and 'Kanban</a>' not in h
+  and 'Sortable.min.js' not in h)
+t('lista tem a faixa da validação, os contadores e as ordens inconsistentes',
+  'id="fbVal"' in h and 'id="fbKpis"' in h and 'data-vfiltro=' in h and 'data-chip="nao_localizado"' in h)
 import re as _re
-for p in ['templates/fibras/kanban.html', 'templates/fibras/lista.html']:
+for p in ['templates/fibras/lista.html']:
     ruins = [m for m in _re.finditer(r'\{#(.*?)#\}', open(p).read(), _re.S) if '\n' in m.group(1)]
     t(f'{p}: nenhum comentário {{# #}} de várias linhas', not ruins)
 

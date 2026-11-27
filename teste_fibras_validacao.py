@@ -108,9 +108,9 @@ try:
     print('== ACESSO ==')
     t('a Ilha abre a validação', ci.get('/fibras/validacao/').status_code == 200)
     r = cc.get('/fibras/validacao/')
-    t('consultor volta para o kanban', r.status_code == 302 and r['Location'].endswith('/fibras/'))
+    t('consultor volta para a lista', r.status_code == 302 and r['Location'].endswith('/fibras/'))
     t('e não usa a API', cc.get('/fibras/validacao/api/estado/').status_code == 403)
-    t('o kanban da Ilha tem o botão da validação', 'Validação Base × Esteira' in ci.get('/fibras/').content.decode())
+    t('a lista da Ilha tem o botão da validação', 'Validação Base × Esteira' in ci.get('/fibras/').content.decode())
 
     print('\n== IMPORTAR A ESTEIRA (cruza na hora) ==')
     with mock.patch.object(services, 'sync_fibras', return_value={'created': 0, 'updated': 0, 'total_in_source': 0}) as sinc:
@@ -129,7 +129,7 @@ try:
     t('1. protocolo exato (apóstrofo e A do final tratados) → Alta', f1.ordem_vinculada == '7123456789'
       and f1.assertividade == 'Alta' and f1.metodo_cruzamento == '1. Protocolo exato', (f1.ordem_vinculada, f1.assertividade))
     t('endereço confere', f1.conferencia_endereco == 'Confere', f1.detalhe_endereco)
-    t('a ORDEM vinculada move o kanban (instalada)', f1.status == Fibra.STATUS_INSTALADO and f1.etapa_instalacao == 'INSTALADA')
+    t('a ORDEM vinculada muda o status (instalada)', f1.status == Fibra.STATUS_INSTALADO and f1.etapa_instalacao == 'INSTALADA')
     t('2. mesma loja/dia, protocolo com 1 caractere diferente → Alta', f2.ordem_vinculada == '7123456709'
       and f2.assertividade == 'Alta' and f2.metodo_cruzamento.startswith('2.'), (f2.ordem_vinculada, f2.metodo_cruzamento))
     t('e traz SLA e status (agendada)', f2.status == Fibra.STATUS_AGENDADO and f2.sla_agenda == 'D+2')
@@ -143,7 +143,7 @@ try:
     res = j['resultado']
     t('KPIs do cruzamento', res['kpis']['pedidos'] == 6 and res['kpis']['alta'] == 2 and res['kpis']['muito_baixa'] == 2
       and res['kpis']['b2b'] == 1 and res['kpis']['nao_localizada'] == 1 and res['kpis']['nao_lancada'] == 1, res['kpis'])
-    t('venda não lançada na lista e no kanban (ordens inconsistentes)', [x['ordem'] for x in res['nl']] == ['7888888888']
+    t('venda não lançada na lista (ordens inconsistentes)', [x['ordem'] for x in res['nl']] == ['7888888888']
       and PlanilhaOrdemInconsistente.objects.filter(ordem='7888888888').exists())
     t('resumo loja/dia com PDV', res['resumo']['colunas'][:3] == ['ADABAS', 'PDV', 'DATA'] and res['resumo']['linhas'])
     t('histórico de status registra a Esteira', f1.status_history.filter(retorno__startswith='Esteira Vivo:').exists())
@@ -215,7 +215,8 @@ try:
 
     print('\n== TELAS ==')
     html = ci.get('/fibras/?ordem=7123456789&periodo=todos').content.decode()
-    t('kanban filtra pela ORDEM vinculada e mostra a assertividade', 'ZZV1' in html and 'ORDEM <b>7123456789</b>' in html)
+    t('a lista filtra pela ORDEM vinculada e mostra a assertividade', 'ZZV1' in html and 'cel-ordem">7123456789<' in html
+      and 'title="Assertividade do cruzamento com a Esteira Vivo"' in html)
     html = ci.get(f'/fibras/{f1.pk}/').content.decode()
     t('a fibra mostra o cruzamento', 'Cruzamento com a Esteira de Vendas Vivo' in html and '7123456789' in html)
 

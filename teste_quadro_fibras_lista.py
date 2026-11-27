@@ -3,7 +3,7 @@
 - /quadro-hc/: a tabela de cada loja se ajusta à largura da loja (container query) e fica fora do
   embrulho global com rolagem lateral (data-rc-wrapped); colunas extras só no espaço largo;
 - /fibras/lista: coluna "Ordem" (ORDEM da Esteira vinculada + protocolo) e o status muda na própria
-  linha (Ilha), pelo mesmo endpoint do kanban.
+  linha (Ilha), pelo endpoint de status.
 
 Transação desfeita no fim; nada sai para a rede.
 """
@@ -89,7 +89,7 @@ try:
         f2 = Fibra.objects.create(numero_da_venda='ZZQF2', numero_protocolo="'7222A", pdv='ZZ LOJA', data_da_venda=D,
                                   cpf='12345678909', cliente='ZZ Cliente 2', vendedor='ZZ VENDEDOR QF', pilar='FIXA',
                                   valor=100, status=Fibra.STATUS_PENDENTE)
-        url = '/fibras/lista/?de=2031-04-01&ate=2031-04-30'
+        url = '/fibras/?de=2031-04-01&ate=2031-04-30'
         h = ci.get(url).content.decode()
         t('coluna Ordem no cabeçalho', 'data-ord="ordem"' in h and '>Ordem <i' in h)
         t('a ORDEM vinculada na linha', re.search(r'data-label="Ordem" class="mono cel-ordem">7111111111<', h) is not None)

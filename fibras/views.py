@@ -19,7 +19,7 @@ from .services import change_status, import_planilha_xlsx, sync_fibras
 
 # ---------------------------------------------------------------------------
 # Filtro de período (data da venda): ?de=AAAA-MM-DD&ate=AAAA-MM-DD
-# Vale para kanban, lista, relatório e exportações. Data inválida é ignorada.
+# Vale para a lista, o relatório e as exportações. Data inválida é ignorada.
 # ---------------------------------------------------------------------------
 
 def _data_param(valor):
@@ -51,7 +51,7 @@ def _fim_do_mes(dia):
 
 
 def _periodo_ou_mes(request):
-    """O kanban abre no mês corrente. Quem limpou as datas (de/ate vazios) ou pediu
+    """A lista abre no mês corrente. Quem limpou as datas (de/ate vazios) ou pediu
     ?periodo=todos vê tudo."""
     de, ate = _periodo(request)
     if de or ate or 'de' in request.GET or 'ate' in request.GET or request.GET.get('periodo') == 'todos':
@@ -99,67 +99,6 @@ def _ctx_periodo(request, de, ate):
         'periodo_qs': urlencode(par),
         'sem_periodo_url': request.path + (f'?{resto.urlencode()}' if resto else ''),
     }
-
-
-def _nav_qs(request):
-    """Filtros que o Kanban e a Lista compartilham: trocar de tela não perde o recorte."""
-    g = request.GET.copy()
-    for chave in ('status', 'pagina'):
-        g.pop(chave, None)
-    return g.urlencode()
-
-
-@login_required
-@exige('modulo.ver')
-def kanban(request):
-    from . import quadro
-    from .models import PlanilhaOrdemInconsistente
-
-    filtros = quadro.ler_filtros(request)
-    # Período (data da venda) — vale para todas as colunas, inclusive "Não localizado".
-    # Sem período na URL, abre no mês corrente (a lista faz igual).
-    de, ate = _periodo_ou_mes(request)
-    qs = _filtrar_periodo(quadro.aplicar_filtros(fibras_visiveis(request.user), filtros), de, ate)
-
-    # Uma consulta para as vendas, uma para os incidentes; colunas somadas em Python
-    # (fibras/quadro.py). Antes: uma consulta por cartão.
-    colunas = quadro.colunas(quadro.carregar(qs, request.user), Fibra.STATUS_CHOICES)
-
-    inconsistencias = quadro.em_cache(
-        'inconsistencias', lambda: list(PlanilhaOrdemInconsistente.objects.order_by('-last_seen_at')[:200]))
-
-    ctx_periodo = _ctx_periodo(request, de, ate)
-    if ctx_periodo['periodo_ativo']:
-        # O "x" do período mostra tudo (sem ele, o kanban voltaria para o mês).
-        resto = request.GET.copy()
-        resto.pop('de', None)
-        resto.pop('ate', None)
-        resto['periodo'] = 'todos'
-        ctx_periodo['sem_periodo_url'] = f'{request.path}?{resto.urlencode()}'
-
-    # O botão "Cruzar" usa o período do quadro; sem período (ou com uma ponta só), fecha no mês.
-    hoje = timezone.localdate()
-    cruzar_ini = de or (ate or hoje).replace(day=1)
-    cruzar_fim = ate or (hoje if cruzar_ini <= hoje <= _fim_do_mes(cruzar_ini) else _fim_do_mes(cruzar_ini))
-    is_ilha = pode(request.user, 'validacao.usar')
-
-    return render(request, 'fibras/kanban.html', {
-        'cruzar_ini': cruzar_ini,
-        'cruzar_fim': cruzar_fim,
-        'validacao': quadro.em_cache('validacao', lambda: _validacao_do_quadro(qs, de, ate, is_ilha),
-                                     qs=qs, extra=f'ilha={is_ilha}'),
-        'colunas': colunas,
-        'filtro_pdv': filtros['pdv'],
-        'filtro_vendedor': filtros['vendedor'],
-        'filtro_venda': filtros['venda'],
-        'filtro_ordem': filtros['ordem'],
-        'filtro_b2b': filtros['b2b'],
-        'status_choices': Fibra.STATUS_CHOICES,
-        'inconsistencias': inconsistencias,
-        'inconsistencias_count': len(inconsistencias),
-        'nav_qs': _nav_qs(request),
-        **ctx_periodo,
-    })
 
 
 def _validacao_do_quadro(qs, de, ate, is_ilha):
@@ -216,15 +155,17 @@ def _validacao_do_quadro(qs, de, ate, is_ilha):
 @login_required
 @exige('modulo.ver')
 def lista(request):
-    """Visão em lista (tabela) do MESMO quadro do kanban: mesmos filtros, mesmo período
-    padrão e a mesma coluna "Não localizado" (fibras/quadro.py) — os números batem."""
+    """A tela principal do /fibras (o kanban saiu em 27/11/2026): a tabela do quadro, com a
+    faixa da validação Base × Esteira, os contadores por situação, a mudança de status e de
+    agendamento na linha e as ordens inconsistentes. Abre no mês corrente."""
     from . import quadro
+    from .models import PlanilhaOrdemInconsistente
 
     filtros = quadro.ler_filtros(request)
     de, ate = _periodo_ou_mes(request)
     qs = _filtrar_periodo(quadro.aplicar_filtros(fibras_visiveis(request.user), filtros), de, ate)
     colunas = quadro.colunas(quadro.carregar(qs, request.user), Fibra.STATUS_CHOICES)
-    # "Situação" da lista = a coluna do kanban (status, ou "Não localizado").
+    # "Situação" = status, ou "Não localizado" (fora da última planilha).
     situacao = filtros['status']
     validas = {c['key'] for c in colunas}
     if situacao and situacao not in validas:
@@ -234,11 +175,21 @@ def lista(request):
 
     ctx_periodo = _ctx_periodo(request, de, ate)
     if ctx_periodo['periodo_ativo']:
+        # O "x" do período mostra tudo (sem ele, a lista voltaria para o mês).
         resto = request.GET.copy()
         resto.pop('de', None)
         resto.pop('ate', None)
         resto['periodo'] = 'todos'
         ctx_periodo['sem_periodo_url'] = f'{request.path}?{resto.urlencode()}'
+
+    inconsistencias = quadro.em_cache(
+        'inconsistencias', lambda: list(PlanilhaOrdemInconsistente.objects.order_by('-last_seen_at')[:200]))
+
+    # O botão "Cruzar" usa o período da tela; sem período (ou com uma ponta só), fecha no mês.
+    hoje = timezone.localdate()
+    cruzar_ini = de or (ate or hoje).replace(day=1)
+    cruzar_fim = ate or (hoje if cruzar_ini <= hoje <= _fim_do_mes(cruzar_ini) else _fim_do_mes(cruzar_ini))
+    is_ilha = pode(request.user, 'validacao.usar')
 
     return render(request, 'fibras/lista.html', {
         'fibras': fibras,
@@ -252,9 +203,23 @@ def lista(request):
         'status_choices': Fibra.STATUS_CHOICES,
         'situacoes': [(c['key'], c['label'], c['count']) for c in colunas],
         'total_lista': sum((f.valor or 0 for f in fibras)),
-        'nav_qs': _nav_qs(request),
+        'validacao': quadro.em_cache('validacao', lambda: _validacao_do_quadro(qs, de, ate, is_ilha),
+                                     qs=qs, extra=f'ilha={is_ilha}'),
+        'cruzar_ini': cruzar_ini,
+        'cruzar_fim': cruzar_fim,
+        'inconsistencias': inconsistencias,
+        'inconsistencias_count': len(inconsistencias),
         **ctx_periodo,
     })
+
+
+@login_required
+def lista_antiga(request):
+    """/fibras/lista/ virou /fibras/ (27/11/2026): redireciona levando os filtros."""
+    destino = reverse('fibras:lista')
+    if request.GET:
+        destino += '?' + request.GET.urlencode()
+    return HttpResponseRedirect(destino)
 
 
 @login_required
@@ -367,11 +332,11 @@ def change_agendamento_ajax(request, pk: int):
 @exige('planilha.importar')
 @require_POST
 def importar_planilha(request):
-    """Upload manual da planilha diária (.xlsx). Atualiza o Kanban/Lista."""
+    """Upload manual da planilha diária (.xlsx). Atualiza a lista."""
     from .validacao import ErroValidacao, checar_arquivo
     file_obj = request.FILES.get('planilha')
     voltar = request.POST.get('voltar') or ''
-    destino = voltar if voltar.startswith('/fibras/') else reverse('fibras:kanban')
+    destino = voltar if voltar.startswith('/fibras/') else reverse('fibras:lista')
     try:
         checar_arquivo(file_obj)
         stats = import_planilha_xlsx(file_obj, by_user=request.user)
@@ -510,7 +475,7 @@ def sync_now(request):
         f"Sincronização concluída: {stats['created']} novas, {stats['updated']} atualizadas "
         f"(de {stats['total_in_source']} no MySQL).",
     )
-    return redirect('fibras:kanban')
+    return redirect('fibras:lista')
 
 
 @login_required

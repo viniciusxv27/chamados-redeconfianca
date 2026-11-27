@@ -169,7 +169,7 @@ PAGINAS = (
            gate=_menu('financeiro.context_processors.financeiro_menu', 'financeiro_liberado')),
     Pagina('vendas:dashboard', 'Vendas', 'Vendas, clientes e orçamentos.', 'venda cliente orcamento pdv lancar plano preco',
            gate=_menu('vendas.context_processors.vendas_menu', 'vendas_liberado')),
-    Pagina('fibras:kanban', 'Fibras', 'Acompanhamento de instalações de fibra.', 'fibra instalacao kanban banda larga',
+    Pagina('fibras:lista', 'Fibras', 'Acompanhamento de instalações de fibra.', 'fibra instalacao lista banda larga',
            gate=_menu('fibras.context_processors.fibras_menu', 'fibras_liberado')),
     Pagina('renova:inicio', 'Vini Renova', 'Avaliação de aparelho usado.', 'renova aparelho usado avaliacao trade celular',
            gate=_menu('renova.context_processors.renova_menu', 'renova_liberado')),

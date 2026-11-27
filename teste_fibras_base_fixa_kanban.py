@@ -1,5 +1,5 @@
 """/fibras (21/10/2026): abre no mês, mostra a mesma validação da /fibras/validacao e
-aceita a Base analítica – FIXA como Esteira (no kanban e na validação).
+aceita a Base analítica – FIXA como Esteira (na lista e na validação).
 
 Transação desfeita no fim; datas de 2031; o MySQL do Vivo GO e o aviso ao vendedor
 não são chamados.
@@ -117,7 +117,7 @@ try:
         t('.xls recusado nas duas com a mesma mensagem', r2.status_code == 400 and r2.json()['erro'] in msg_k
           and '.xlsx' in msg_k, (msg_k, r2.content[:200]))
 
-        print('— Base analítica FIXA pelo kanban')
+        print('— Base analítica FIXA pela lista')
         arquivo = base_fixa([
             ('2031-03-10', 'ZZF001', 'VENDAS BRUTAS', '7100000001', 'ZZ VENDEDOR'),
             ('2031-03-10', 'ZZF001', 'VENDAS BRUTAS', '7100000002', 'ZZ VENDEDOR'),
@@ -144,7 +144,7 @@ try:
         t('cancelamento leva a Cancelado', f_cancel.status == Fibra.STATUS_CANCELADO, f_cancel.status)
         t('sem par na Base analítica → Não localizada', f_fora.status_cruzamento == 'Não localizada', f_fora.status_cruzamento)
 
-        print('— A validação no kanban')
+        print('— A validação na lista')
         r = ci.get(voltar)
         h = r.content.decode()
         v = r.context['validacao']

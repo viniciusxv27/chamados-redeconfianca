@@ -1,6 +1,6 @@
 """/fibras: filtro de período pela data da venda (?de=AAAA-MM-DD&ate=AAAA-MM-DD).
 
-Vale para o kanban (todas as colunas, inclusive "Não localizado"), a lista, o
+Vale para a lista (todas as situações, inclusive "Não localizado"), a lista, o
 relatório e as exportações (Excel e CSV de canceladas). Data inválida é
 ignorada, sem erro. Tudo roda numa transação desfeita no fim; as datas são de
 2031 para não cruzar com vendas reais.
@@ -106,9 +106,7 @@ try:
     t('chip do período ativo (mês inteiro pelo nome)', 'Período: <b>março de 2031</b>' in html)
     t('o "x" do chip mostra todo o período (mantém o PDV)',
       'href="/fibras/?pdv=ZZ+LOJA+DATAFILTRO&amp;periodo=todos" class="fb-periodo-x"' in html)
-    # Desde 10/11/2026 a troca Kanban↔Lista leva todos os filtros (não só o período).
-    t('a navegação leva o período (e os demais filtros)',
-      'href="/fibras/lista/?pdv=ZZ+LOJA+DATAFILTRO&amp;de=2031-03-01&amp;ate=2031-03-31"' in html)
+    t('a navegação leva o período', 'href="/fibras/relatorio/?de=2031-03-01&amp;ate=2031-03-31"' in html)
     t('o CSV de canceladas leva o período', '/fibras/export/canceladas-csv/?de=2031-03-01&amp;ate=2031-03-31' in html)
 
     r, cols = kanban({'de': '2031-03-16'})
@@ -127,20 +125,20 @@ try:
     t('ambas inválidas: sem filtro e sem chip', r.status_code == 200
       and {f.numero_da_venda for col in r.context['colunas'] for f in col['items']} == TODAS
       and 'class="fb-periodo-chip"' not in r.content.decode())
-    t('lista com data inválida não quebra', c.get('/fibras/lista/', {'de': '2031-02-30'}).status_code == 200)
+    t('lista com data inválida não quebra', c.get('/fibras/', {'de': '2031-02-30'}).status_code == 200)
     t('relatório com data inválida não quebra', c.get('/fibras/relatorio/', {'ate': 'abc'}).status_code == 200)
     t('export com data inválida não quebra', c.get('/fibras/export/excel/', {'de': '2031-99-01'}).status_code == 200)
 
     print('\n== LISTA ==')
-    r = c.get('/fibras/lista/', {'pdv': PDV, 'de': '2031-03-01', 'ate': '2031-03-31'})
+    r = c.get('/fibras/', {'pdv': PDV, 'de': '2031-03-01', 'ate': '2031-03-31'})
     t('lista: só março', {f.numero_da_venda for f in r.context['fibras']} == MARCO)
     # O filtro da lista é a coluna do kanban (10/11/2026): as pendentes fora da planilha estão em "Não localizado".
-    r = c.get('/fibras/lista/', {'pdv': PDV, 'status': 'nao_localizado', 'de': '2031-03-01', 'ate': '2031-03-31'})
+    r = c.get('/fibras/', {'pdv': PDV, 'status': 'nao_localizado', 'de': '2031-03-01', 'ate': '2031-03-31'})
     t('lista: período + situação juntos', {f.numero_da_venda for f in r.context['fibras']} == {'ZZDTA', 'ZZDTD'})
-    r2 = c.get('/fibras/lista/', {'pdv': PDV, 'status': Fibra.STATUS_PENDENTE, 'de': '2031-03-01', 'ate': '2031-03-31'})
+    r2 = c.get('/fibras/', {'pdv': PDV, 'status': Fibra.STATUS_PENDENTE, 'de': '2031-03-01', 'ate': '2031-03-31'})
     t('lista: "Pendente" = a coluna Pendente do kanban (vazia aqui)', not r2.context['fibras'])
     t('lista: chip mantém situação e PDV no "x" (e mostra todo o período)',
-      'href="/fibras/lista/?pdv=ZZ+LOJA+DATAFILTRO&amp;status=nao_localizado&amp;periodo=todos" class="fb-periodo-x"' in r.content.decode())
+      'href="/fibras/?pdv=ZZ+LOJA+DATAFILTRO&amp;status=nao_localizado&amp;periodo=todos" class="fb-periodo-x"' in r.content.decode())
 
     print('\n== RELATÓRIO ==')
     r = c.get('/fibras/relatorio/', {'de': '2031-03-01', 'ate': '2031-03-31'})
@@ -153,7 +151,7 @@ try:
     t('relatório: Excel leva o período', 'href="/fibras/export/excel/?de=2031-03-01&amp;ate=2031-03-31"' in html)
     t('relatório: Excel de canceladas leva status + período',
       'href="/fibras/export/excel/?status=cancelado&amp;de=2031-03-01&amp;ate=2031-03-31"' in html)
-    t('relatório: atalhos para a lista levam o período', '/fibras/lista/?status=instalado&amp;de=2031-03-01&amp;ate=2031-03-31' in html)
+    t('relatório: atalhos para a lista levam o período', '/fibras/?status=instalado&amp;de=2031-03-01&amp;ate=2031-03-31' in html)
     t('relatório: painel de período', 'name="de" value="2031-03-01"' in html and 'class="fb-periodo-chip"' in html)
 
     print('\n== EXPORTAÇÕES ==')

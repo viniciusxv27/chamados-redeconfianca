@@ -1,4 +1,4 @@
-"""/fibras/lista/: Agendamento editável na própria linha (17/11/2026).
+"""/fibras/ (lista): Agendamento editável na própria linha (17/11/2026).
 
 Quem tem "Mudar status" edita e grava (e fica no histórico da venda); quem só vê recebe 403;
 data inválida é recusada; venda fora do recorte é 404. Sqlite descartável; nada sai para a rede.
@@ -135,13 +135,13 @@ r = cv.post(URL(f_dele.pk), {'data_agendamento': '2026-12-01'}, **AJ)
 t('403 em JSON', r.status_code == 403 and r.json()['ok'] is False, r.status_code)
 f_dele.refresh_from_db()
 t('não gravou', f_dele.data_agendamento is None)
-h = cv.get('/fibras/lista/?periodo=todos').content.decode()
+h = cv.get('/fibras/?periodo=todos').content.decode()
 t('lista mostra o texto, sem input de data', 'class="fb-ag-input"' not in h and 'ZZF0001' in h)
 t('anônimo vai para o login', Client().post(URL(f_dele.pk), {'data_agendamento': '2026-12-01'}).status_code == 302)
 
 print('Com Mudar status')
 cs.post('/fibras/acessos/', {'user': vend.pk, 'permissoes': ['loja.ver', 'status.alterar'], 'ativo': 'on'})
-h = cv.get('/fibras/lista/?periodo=todos').content.decode()
+h = cv.get('/fibras/?periodo=todos').content.decode()
 t('lista traz o input de data', 'class="fb-ag-input"' in h and 'fbUrlAgenda' in h)
 r = cv.post(URL(f_loja.pk), {'data_agendamento': '2026-12-01'}, **AJ)
 f_loja.refresh_from_db()
@@ -149,7 +149,7 @@ t('grava e devolve formatado', r.status_code == 200 and r.json()['data_agendamen
   and r.json()['data_agendamento'] == '2026-12-01' and str(f_loja.data_agendamento) == '2026-12-01', r.content[:200])
 hist = FibraStatusHistory.objects.filter(fibra=f_loja, alterado_por=vend).first()
 t('registra no histórico', hist and 'sem data para 01/12/2026' in hist.retorno and hist.status_anterior == hist.status_novo)
-h = cv.get('/fibras/lista/?periodo=todos').content.decode()
+h = cv.get('/fibras/?periodo=todos').content.decode()
 t('lista mostra o valor gravado', 'value="2026-12-01"' in h)
 n = FibraStatusHistory.objects.count()
 cv.post(URL(f_loja.pk), {'data_agendamento': '2026-12-01'}, **AJ)

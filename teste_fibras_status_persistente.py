@@ -174,7 +174,7 @@ t('agendamento gravado e marcado "à mão"', r.status_code == 200 and r.json().g
   and fm.data_agendamento == date(2031, 4, 20) and fm.agendamento_manual and fm.agendamento_manual_por == ilha
   and fm.agendamento_manual_em is not None, r.content[:200])
 t('fica no histórico', FibraStatusHistory.objects.filter(fibra=fm, retorno__startswith='Agendamento alterado').exists())
-lista = ci.get('/fibras/lista/?de=2031-04-01&ate=2031-04-30').content.decode()
+lista = ci.get('/fibras/?de=2031-04-01&ate=2031-04-30').content.decode()
 t('lista mostra o selo "manual" no agendamento', 'data-agenda-manual' in lista)
 t('lista põe o selo na hora, sem recarregar (JS)', 'fbSeloManual' in lista)
 

@@ -1,16 +1,77 @@
 {% extends "base.html" %}
 {% load l10n %}
-{% block title %}Fibras - Lista{% endblock %}
+{% block title %}Fibras{% endblock %}
 
 {% block extra_css %}
 {% include 'fibras/_fb_estilo.html' %}
 <style>
-.fb-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
-.fb-chip { display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px; border-radius: 980px; border: 0; background: var(--fb-card); box-shadow: inset 0 0 0 1px var(--fb-linha);
-  color: var(--fb-suave-2); font-size: 12.5px; font-weight: 500; cursor: pointer; transition: all .15s; white-space: nowrap; }
-.fb-chip:hover { color: var(--fb-texto); }
-.fb-chip .n { font-variant-numeric: tabular-nums; font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 980px; background: var(--fb-campo); }
-.fb-chip[aria-pressed="true"] { background: color-mix(in srgb, var(--st, var(--fb-pri)) 14%, var(--fb-card)); color: var(--st, var(--fb-pri)); box-shadow: inset 0 0 0 1.5px var(--st, var(--fb-pri)); font-weight: 600; }
+.fb-ferramentas { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.fb-ferramentas .fb-resultado { font-size: 12.5px; color: var(--fb-suave); font-variant-numeric: tabular-nums; }
+.fb-ferramentas .fb-dir { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.fb-import { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; }
+.fb-drop { position: relative; display: flex; align-items: center; gap: 14px; border: 1.5px dashed rgba(127,127,127,.35); border-radius: var(--fb-raio);
+  padding: 12px 14px; background: var(--fb-campo); cursor: pointer; transition: all .2s var(--fb-ease); min-width: 0; }
+.fb-drop:hover, .fb-drop.sobre { border-color: var(--fb-pri); background: var(--fb-card); }
+.fb-drop .fb-drop-ico { width: 38px; height: 38px; flex: 0 0 38px; border-radius: 11px; display: grid; place-items: center; background: #E3F5E8; color: #1E9E4A; }
+html.dark .fb-drop .fb-drop-ico { background: rgba(52,199,89,.16); color: #5EDB82; }
+.fb-drop b { display: block; font-size: 13.5px; }
+.fb-drop span { display: block; font-size: 12px; color: var(--fb-suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-drop input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+@media (max-width: 640px) { .fb-import { grid-template-columns: 1fr; } }
+
+/* ---- Validação Base × Esteira (os mesmos indicadores da /fibras/validacao) ---- */
+.fb-val { background: var(--fb-card); border-radius: var(--fb-raio-lg); box-shadow: var(--fb-sombra); padding: 14px 16px; margin-bottom: 16px; }
+.fb-val-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.fb-val-cab h2 { font-size: 15px; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 8px; }
+.fb-val-cab p { margin: 2px 0 0; font-size: 12px; color: var(--fb-suave); }
+.fb-val-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
+.fb-vk { text-align: left; border: 1px solid var(--fb-linha); background: var(--fb-card-2); border-radius: var(--fb-raio); padding: 9px 11px; cursor: pointer;
+  transition: border-color .15s var(--fb-ease), transform .15s var(--fb-ease); min-width: 0; }
+.fb-vk:hover { transform: translateY(-1px); border-color: var(--fb-pri); }
+.fb-vk.ativo { border-color: var(--fb-pri); background: var(--fb-pri-clara); box-shadow: 0 0 0 2px var(--fb-pri-suave); }
+.fb-vk-topo { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 11.5px; color: var(--fb-suave-2); font-weight: 600; }
+.fb-vk-topo span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-vk-topo i { width: 22px; height: 22px; flex: 0 0 22px; border-radius: 7px; display: grid; place-items: center; font-size: 10px; background: var(--fb-campo); color: var(--fb-suave-2); }
+.fb-vk.k-alta .fb-vk-topo i { background: #E3F5E8; color: var(--fb-verde); }
+.fb-vk.k-media .fb-vk-topo i { background: #FFF4E0; color: #E08A00; }
+.fb-vk.k-baixa .fb-vk-topo i { background: #FDEBDD; color: #D2601A; }
+.fb-vk.k-manual .fb-vk-topo i { background: #E5F0FC; color: var(--fb-azul); }
+.fb-vk.k-nl .fb-vk-topo i { background: #FDECEB; color: var(--fb-vermelho); }
+.fb-vk.k-b2b .fb-vk-topo i { background: #EFEAF7; color: var(--fb-roxo); }
+html.dark .fb-vk .fb-vk-topo i { background: var(--fb-campo-2); }
+.fb-vk b { display: block; font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.fb-vk small { display: block; font-size: 11px; color: var(--fb-suave); line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-val-barra { display: flex; height: 6px; border-radius: 6px; overflow: hidden; background: var(--fb-campo); margin-top: 10px; }
+.fb-val-barra span { display: block; height: 100%; }
+@media (max-width: 767px) {
+  .fb-val-grade { display: flex; overflow-x: auto; scroll-snap-type: x proximity; margin: 0 -4px; padding: 2px 4px 6px; scrollbar-width: none; }
+  .fb-val-grade::-webkit-scrollbar { display: none; }
+  .fb-val-grade .fb-vk { flex: 0 0 132px; scroll-snap-align: start; }
+}
+
+/* Contadores por situação (clique filtra a tabela na hora) */
+.fb .fb-kpis.kb { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.fb .fb-kpis.kb .fb-kpi { cursor: pointer; }
+@media (max-width: 1280px) { .fb .fb-kpis.kb { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 767px) {
+  .fb .fb-kpis.kb { display: flex; overflow-x: auto; scroll-snap-type: x proximity; gap: 10px; margin: 0 -12px 16px; padding: 4px 12px 6px; scrollbar-width: none; }
+  .fb .fb-kpis.kb::-webkit-scrollbar { display: none; }
+  .fb .fb-kpis.kb .fb-kpi { flex: 0 0 142px; scroll-snap-align: start; }
+  .fb-ferramentas .fb-dir { margin-left: 0; }
+}
+.fb-end-div { color: var(--fb-vermelho); font-weight: 600; }
+.fb-tabela .cel-ordem .fb-tag { margin-top: 3px; }
+/* Ordens inconsistentes */
+.fb-inc summary { list-style: none; cursor: pointer; flex-wrap: nowrap; align-items: flex-start; }
+.fb-inc summary > div { min-width: 0; }
+.fb-inc summary::-webkit-details-marker { display: none; }
+.fb-inc summary .fa-chevron-down { transition: transform .3s var(--fb-ease); color: var(--fb-suave); }
+.fb-inc[open] summary .fa-chevron-down { transform: rotate(180deg); }
+.fb-inc-lista { max-height: 300px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; margin-top: 12px; }
+.fb-inc-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; border-radius: 12px; background: var(--fb-campo); font-size: 12.5px; min-width: 0; }
+.fb-inc-item .ord { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; }
+.fb-inc-item .st { color: var(--fb-suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.fb-inc-item .qd { color: var(--fb-suave); white-space: nowrap; font-size: 11.5px; }
 .fb-tabela-wrap { background: var(--fb-card); border-radius: var(--fb-raio-lg); box-shadow: var(--fb-sombra); overflow: auto; max-height: 72vh; animation: fb-entrar .45s var(--fb-ease) both; }
 .fb-tabela { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
 .fb-tabela th, .fb-tabela td { padding: 10px 12px; border-bottom: 1px solid var(--fb-linha); text-align: left; vertical-align: top; }
@@ -73,34 +134,125 @@ html.dark .fb-novo { color: #A5B4FC; }
 <div class="fb" id="fbLista">
   <div class="fb-cab">
     <div>
-      <h1><span class="fb-ico" aria-hidden="true"><i class="fas fa-network-wired"></i></span> Fibras — Lista</h1>
-      <p>{% if periodo_ativo %}Período: {{ periodo_rotulo }}{% else %}Mês corrente{% endif %} · tabela completa para busca e filtragem.</p>
+      <h1><span class="fb-ico" aria-hidden="true"><i class="fas fa-network-wired"></i></span> Fibras — Acompanhamento</h1>
+      <p>{% if periodo_ativo %}Período: {{ periodo_rotulo }}{% else %}Todo o período{% endif %} · status segmentado conforme retorno da Ilha.
+        {% if fb_pode.status_alterar %}<span class="fb-dica"><i class="fas fa-hand-pointer" aria-hidden="true"></i> Mude o status e o agendamento na própria linha</span>{% endif %}
+      </p>
     </div>
     <div class="fb-acoes">
-      {% if fb_pode.planilha_importar %}
-      <button type="button" class="fb-btn sucesso" data-fb-toggle="fbImport" aria-expanded="false" aria-controls="fbImport">
-        <i class="fas fa-file-excel" aria-hidden="true"></i> Importar planilha
+      {% if fb_pode.validacao_usar %}
+      <button type="button" class="fb-btn primario" id="fbValCruzar" data-url="{% url 'fibras:validacao_cruzar' %}"
+              data-ini="{{ cruzar_ini|date:'Y-m-d' }}" data-fim="{{ cruzar_fim|date:'Y-m-d' }}"
+              {% if not validacao.importacao %}disabled title="Importe a Esteira primeiro"{% else %}title="Cruza a Base de Vendas com a Esteira Vivo de {{ cruzar_ini|date:'d/m/Y' }} a {{ cruzar_fim|date:'d/m/Y' }} (a mesma conta da tela de Validação)"{% endif %}>
+        <i class="fas fa-code-compare" aria-hidden="true"></i> Cruzar Base × Esteira
       </button>
+      {% endif %}
+      {% if fb_pode.planilha_importar %}
+      <button type="button" class="fb-btn sucesso" id="fbImportar" title="Escolha o .xlsx da Esteira Vivo (ANALÍTICO ou Base analítica – FIXA): importa e já cruza com a Base de Vendas">
+        <i class="fas fa-file-excel" aria-hidden="true"></i> Importar Esteira
+      </button>
+      {% endif %}
+      {% if fb_pode.exportar %}
+      <a href="{% url 'fibras:export_canceladas_csv' %}{% if periodo_qs %}?{{ periodo_qs }}{% endif %}" class="fb-btn perigo" title="Exporta as fibras canceladas na planilha de Gestão Documental (Receita zerada){% if periodo_ativo %} · período: {{ periodo_rotulo }}{% endif %}">
+        <i class="fas fa-file-csv" aria-hidden="true"></i> Exportar canceladas
+      </a>
       {% endif %}
     </div>
   </div>
 
   <div class="fb-barra-topo">
     {% include 'fibras/_fb_nav.html' with ativo='lista' %}
+    <div class="fb-acoes">
+      {% if filtro_b2b %}
+      <a href="{% url 'fibras:lista' %}{% if periodo_qs %}?{{ periodo_qs }}{% endif %}" class="fb-btn roxo on" title="Mostrando apenas fibras B2B (documento &gt; 11 caracteres). Clique para ver todas.">
+        <i class="fas fa-building" aria-hidden="true"></i> B2B (ativo) <i class="fas fa-xmark" aria-hidden="true"></i>
+      </a>
+      {% else %}
+      <a href="?b2b=1{% if periodo_qs %}&amp;{{ periodo_qs }}{% endif %}" class="fb-btn roxo" title="Ver apenas fibras de empresa (documento &gt; 11 caracteres)">
+        <i class="fas fa-building" aria-hidden="true"></i> B2B
+      </a>
+      {% endif %}
+    </div>
   </div>
 
   {% if fb_pode.planilha_importar %}
-  <section class="fb-card fb-recolhivel" id="fbImport" aria-label="Importar planilha">
-    <form method="post" action="{% url 'fibras:importar_planilha' %}" enctype="multipart/form-data" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap" id="fbImportForm">{% csrf_token %}
-      <label class="fb-rotulo" style="margin:0;display:flex;align-items:center;gap:8px;flex:1 1 260px;min-width:0">
-        <i class="fas fa-file-excel" aria-hidden="true" style="color:#1E9E4A"></i>
-        <span>Planilha:</span>
-        <input type="file" name="planilha" accept=".xlsx" required class="fb-campo" style="padding:6px 8px">
+  <section class="fb-card" id="fbImport" aria-label="Importar planilha da Esteira" hidden>
+    <form method="post" action="{% url 'fibras:importar_planilha' %}" enctype="multipart/form-data" class="fb-import" id="fbImportForm">{% csrf_token %}
+      <label class="fb-drop" id="fbDrop">
+        <span class="fb-drop-ico" aria-hidden="true"><i class="fas fa-file-excel"></i></span>
+        <span style="min-width:0">
+          <b>Esteira Vivo (ANALÍTICO ou Base analítica – FIXA): <span style="display:inline;color:inherit;font-size:inherit" id="fbArqNome">escolha ou arraste o .xlsx</span></b>
+          <span>Importa a Esteira de Vendas Vivo e cruza com a Base de Vendas (protocolo, loja e data ±1) — a mesma importação da Validação.</span>
+        </span>
+        <input type="file" name="planilha" accept=".xlsx" required aria-label="Arquivo .xlsx da Esteira Vivo (ANALÍTICO ou Base analítica – FIXA)"><input type="hidden" name="voltar" value="{{ request.get_full_path }}">
       </label>
-      <button class="fb-btn primario" type="submit"><i class="fas fa-upload" aria-hidden="true"></i> Importar</button>
+      <button class="fb-btn primario" type="submit" title="Importa a Esteira de Vendas Vivo e cruza com a Base de Vendas (protocolo, loja e data ±1)">
+        <i class="fas fa-upload" aria-hidden="true"></i> Importar
+      </button>
     </form>
   </section>
   {% endif %}
+
+  {# Validação Base × Esteira: os mesmos indicadores da /fibras/validacao, contados nas vendas da lista. Clique filtra as linhas. #}
+  {% with v=validacao %}
+  <section class="fb-val" id="fbVal" aria-label="Validação Base de Vendas × Esteira Vivo">
+    <div class="fb-val-cab">
+      <div>
+        <h2><i class="fas fa-code-compare" aria-hidden="true" style="color:var(--fb-pri)"></i> Validação Base × Esteira <span class="fb-tag">{{ v.k.pedidos }} venda{{ v.k.pedidos|pluralize }}{% if periodo_ativo %} · {{ periodo_rotulo }}{% endif %}</span></h2>
+        <p>{% if v.cruzamento %}Último cruzamento: {{ v.cruzamento.executado_em|date:"d/m/Y H:i" }}{% if v.cruzamento.executado_por %} por {{ v.cruzamento.executado_por.get_full_name }}{% endif %} ({{ v.cruzamento.ini|date:"d/m" }} a {{ v.cruzamento.fim|date:"d/m/Y" }}){% else %}Nenhum cruzamento feito ainda.{% endif %}{% if v.importacao %} · Esteira: {{ v.importacao.nome_arquivo }} ({{ v.importacao.importado_em|date:"d/m H:i" }}){% else %} · Esteira não importada{% endif %}</p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="fb-btn leve pequeno" id="fbValLimpar" hidden><i class="fas fa-xmark" aria-hidden="true"></i> Tirar filtro</button>
+        {% if fb_pode.validacao_usar %}
+        <a href="{% url 'fibras:validacao' %}" class="fb-btn pequeno"><i class="fas fa-up-right-from-square" aria-hidden="true"></i> Validação completa</a>
+        {% endif %}
+      </div>
+    </div>
+    <div class="fb-val-grade" role="group" aria-label="Filtrar as linhas pelo resultado da validação">
+      {% for c in v.cards %}
+      <button type="button" class="fb-vk {{ c.classe }}" data-vfiltro="{{ c.tipo }}|{{ c.valor }}" aria-pressed="false" title="Mostrar só as linhas: {{ c.rotulo }}">
+        <div class="fb-vk-topo"><span>{{ c.rotulo }}</span><i class="fas {{ c.icone }}" aria-hidden="true"></i></div>
+        <b>{{ c.n }}</b><small>{{ c.detalhe }}</small>
+      </button>
+      {% endfor %}
+      {% if v.nao_lancada is not None %}
+      <a class="fb-vk" href="#fbInconsistencias" title="Vendas da Esteira Vivo no período que não estão na Base de Vendas">
+        <div class="fb-vk-topo"><span>Não lançadas</span><i class="fas fa-ban" aria-hidden="true"></i></div>
+        <b>{{ v.nao_lancada }}</b><small>na Esteira, sem Base de Vendas</small>
+      </a>
+      {% endif %}
+    </div>
+    {% if v.k.pedidos %}
+    <div class="fb-val-barra" aria-hidden="true">
+      <span style="width:{% widthratio v.k.alta v.k.pedidos 100 %}%;background:#1E9E4A"></span>
+      <span style="width:{% widthratio v.k.manual v.k.pedidos 100 %}%;background:#0071E3"></span>
+      <span style="width:{% widthratio v.k.media v.k.pedidos 100 %}%;background:#F5A623"></span>
+      <span style="width:{% widthratio v.k.muito_baixa v.k.pedidos 100 %}%;background:#E8742E"></span>
+      <span style="width:{% widthratio v.k.nao_localizada v.k.pedidos 100 %}%;background:#E0352B"></span>
+      <span style="width:{% widthratio v.k.b2b v.k.pedidos 100 %}%;background:#8E6FC4"></span>
+    </div>
+    {% endif %}
+  </section>
+  {% endwith %}
+
+  {# Contadores por situação: status, ou "Não localizado" (fora da última planilha). Clique filtra a tabela. #}
+  <div class="fb-kpis kb" id="fbKpis" role="group" aria-label="Filtrar por situação (instantâneo)">
+    <button type="button" class="fb-kpi destaque" data-chip="" aria-pressed="true" title="Todas as situações">
+      <div class="fb-kpi-topo"><span>Total</span><i class="fas fa-layer-group" aria-hidden="true"></i></div>
+      <b data-kpi-qtd>{{ fibras|length }}</b>
+      <small data-kpi-valor>R$ {{ total_lista|floatformat:"2g" }}</small>
+    </button>
+    {% for col in colunas %}
+    <button type="button" class="fb-kpi" data-st="{{ col.key }}" data-chip="{{ col.key }}" aria-pressed="false" style="animation-delay: {{ forloop.counter }}0ms" title="Mostrar só: {{ col.label }}">
+      <div class="fb-kpi-topo"><span>{{ col.label }}</span>
+        <i class="fas {% if col.key == 'agendado' %}fa-calendar-check{% elif col.key == 'pendente' %}fa-hourglass-half{% elif col.key == 'problema' %}fa-triangle-exclamation{% elif col.key == 'instalado' %}fa-circle-check{% elif col.key == 'cancelado' %}fa-ban{% else %}fa-circle-question{% endif %}" aria-hidden="true"></i>
+      </div>
+      <b data-kpi-qtd>{{ col.count }}</b>
+      <small data-kpi-valor>R$ {{ col.total|floatformat:"2g" }}</small>
+      <div class="fb-kpi-bar" aria-hidden="true"><span></span></div>
+    </button>
+    {% endfor %}
+  </div>
 
   <div class="fb-ferramentas" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
     <div class="fb-busca">
@@ -116,7 +268,7 @@ html.dark .fb-novo { color: #A5B4FC; }
 
   <form method="get" class="fb-card fb-filtros-painel" id="fbFiltros" style="padding:14px 16px" aria-label="Filtros do servidor">
     <div class="fb-filtros">
-      <div><label class="fb-rotulo" for="fStatus">Situação (coluna do kanban)</label>
+      <div><label class="fb-rotulo" for="fStatus">Situação</label>
         <select id="fStatus" name="status" class="fb-campo">
           <option value="">Todas</option>
           {% for k, l, n in situacoes %}<option value="{{ k }}" {% if k == filtro_status %}selected{% endif %}>{{ l }} ({{ n }})</option>{% endfor %}
@@ -135,15 +287,6 @@ html.dark .fb-novo { color: #A5B4FC; }
     </div>
   </form>
   {% include 'fibras/_fb_periodo_chip.html' %}
-
-  {% if fibras %}
-  <div class="fb-chips" id="fbChips" role="group" aria-label="Filtrar por status (instantâneo)">
-    <button type="button" class="fb-chip" data-chip="" aria-pressed="true">Todos <span class="n" data-n>0</span></button>
-    {% for k, l in status_choices %}
-    <button type="button" class="fb-chip" data-chip="{{ k }}" data-st="{{ k }}" aria-pressed="false"><span class="st-ponto" aria-hidden="true"></span>{{ l }} <span class="n" data-n>0</span></button>
-    {% endfor %}
-  </div>
-  {% endif %}
 
   <div class="fb-tabela-wrap">
     <table class="fb-tabela" id="fbTabela" data-rc-wrapped="1">
@@ -167,25 +310,26 @@ html.dark .fb-novo { color: #A5B4FC; }
         {% for f in fibras %}
         {% with inc=f.inc %}
         <tr class="{% if f.nova_resposta %}nova-resposta{% endif %}"
-            data-url="{% url 'fibras:detail' f.pk %}" data-st="{{ f.status }}"
+            data-url="{% url 'fibras:detail' f.pk %}" data-st="{{ f.status }}" data-col="{{ f.coluna }}"
+            data-assert="{{ f.assertividade }}" data-cruz="{{ f.status_cruzamento }}" data-end="{% if f.conferencia_endereco == 'Divergente' or f.conferencia_endereco == 'Parcialmente divergente' %}div{% endif %}"
             data-venda="{{ f.numero_da_venda }}" data-cliente="{{ f.cliente }}" data-valor="{{ f.valor|unlocalize }}"
             data-vendedor="{{ f.vendedor }}" data-data="{{ f.data_da_venda|date:'Y-m-d' }}" data-agenda="{{ f.data_agendamento|date:'Y-m-d' }}" data-status="{{ f.get_status_display }}"
             data-ordem="{{ f.ordem_vinculada|default:f.numero_protocolo }}" data-pk="{{ f.pk }}"
-            data-busca="{{ f.numero_da_venda }} {{ f.cliente }} {{ f.cpf }} {{ f.cpf_digitos }} {{ f.numero_acesso }} {{ f.plano }} {{ f.vendedor }} {{ f.pdv }} {{ f.numero_protocolo }} {{ f.ordem_vinculada }} {{ f.retorno_myrella }}">
+            data-busca="{{ f.numero_da_venda }} {{ f.cliente }} {{ f.cpf }} {{ f.cpf_digitos }} {{ f.numero_acesso }} {{ f.plano }} {{ f.vendedor }} {{ f.pdv }} {{ f.numero_protocolo }} {{ f.ordem_vinculada }} {{ f.retorno_myrella }} {{ f.endereco }}">
           <td data-label="Venda" class="mono">{{ f.numero_da_venda }}
             {% if f.nova_resposta %}
               <span class="fb-novo"><i class="fas fa-circle" aria-hidden="true"></i> nova resposta</span>
             {% endif %}
           </td>
-          <td data-label="Ordem" class="mono cel-ordem">{% if f.ordem_vinculada %}{{ f.ordem_vinculada }}{% else %}<span title="Sem ORDEM da Esteira vinculada" style="color:var(--fb-suave)">—</span>{% endif %}{% if f.numero_protocolo and f.numero_protocolo != f.ordem_vinculada %}<span class="sub" title="Protocolo da venda">prot. {{ f.numero_protocolo }}</span>{% endif %}</td>
-          <td data-label="Cliente" class="cel-cliente forte">{{ f.cliente|default:"—" }}</td>
+          <td data-label="Ordem" class="mono cel-ordem">{% if f.ordem_vinculada %}{{ f.ordem_vinculada }}{% else %}<span title="Sem ORDEM da Esteira vinculada" style="color:var(--fb-suave)">—</span>{% endif %}{% if f.numero_protocolo and f.numero_protocolo != f.ordem_vinculada %}<span class="sub" title="Protocolo da venda">prot. {{ f.numero_protocolo }}</span>{% endif %}{% if f.ordem_vinculada and f.assertividade %}<span class="sub"><span class="fb-tag {% if f.assertividade == 'Alta' %}alta{% elif f.assertividade == 'Manual' %}manual{% elif f.assertividade == 'Média' %}media{% else %}baixa{% endif %}" title="Assertividade do cruzamento com a Esteira Vivo">{{ f.assertividade }}</span>{% if f.conferencia_endereco == 'Divergente' or f.conferencia_endereco == 'Parcialmente divergente' %} <span class="fb-end-div" title="{{ f.detalhe_endereco }}"><i class="fas fa-location-dot" aria-hidden="true"></i> endereço</span>{% endif %}</span>{% elif f.status_cruzamento == 'Venda B2B' %}<span class="sub"><span class="fb-tag b2b">B2B</span></span>{% endif %}</td>
+          <td data-label="Cliente" class="cel-cliente forte">{{ f.cliente|default:"—" }}{% if f.endereco %}<span class="sub" style="font-weight:400" title="{{ f.endereco }}">{{ f.endereco|truncatechars:60 }}</span>{% endif %}</td>
           <td data-label="CPF / Acesso" style="font-size:12px" class="mono">{{ f.cpf_digitos|default:"—" }}{% if f.cpf_digitos %} <button type="button" class="fb-copiar" data-copiar="{{ f.cpf_digitos }}" aria-label="Copiar CPF {{ f.cpf_digitos }}" title="Copiar"><i class="far fa-copy" aria-hidden="true"></i></button>{% endif %}<span class="sub">{{ f.numero_acesso }}</span></td>
           <td data-label="Plano" class="cel-plano" style="font-size:12px" title="{{ f.plano }}">{{ f.plano|truncatechars:35 }}</td>
           <td data-label="Valor" class="num valor">R$ {{ f.valor|floatformat:"2g" }}</td>
           <td data-label="Vendedor / PDV" style="font-size:12px">{{ f.vendedor }}<span class="sub">{{ f.pdv }}</span></td>
           <td data-label="Data" style="font-size:12px;white-space:nowrap">{{ f.data_da_venda|date:"d/m/Y" }}</td>
           <td data-label="Agendamento" style="font-size:12px;white-space:nowrap">{% if fb_pode.status_alterar %}<input type="date" class="fb-ag-input" value="{{ f.data_agendamento|date:'Y-m-d' }}" data-mudar-agenda data-antes="{{ f.data_agendamento|date:'Y-m-d' }}" min="2000-01-01" max="2100-12-31" aria-label="Agendamento da venda {{ f.numero_da_venda }}" title="Data de agendamento (vazio limpa)" style="font-size:12px;padding:2px 4px;border:1px solid var(--fb-borda,#d1d5db);border-radius:6px;background:transparent;color:inherit">{% else %}{{ f.data_agendamento|date:"d/m/Y"|default:"—" }}{% endif %}{% if f.agendamento_manual %}<span class="sub fb-manual" data-agenda-manual title="Agendamento definido à mão: a importação da Esteira não troca"><i class="fas fa-hand" aria-hidden="true"></i> manual</span>{% endif %}</td>
-          <td data-label="Status" class="centro cel-status">{% if fb_pode.status_alterar %}<select class="fb-st-select" data-st="{{ f.status }}" data-mudar-status aria-label="Status da venda {{ f.numero_da_venda }}">{% for k, l in status_choices %}<option value="{{ k }}" {% if k == f.status %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>{% else %}<span class="st-pill" data-st="{{ f.status }}">{{ f.get_status_display }}</span>{% endif %}{% if f.status_manual %}<span class="sub fb-manual" title="Status definido à mão: a importação da Esteira não troca{% if f.status_esteira and f.status_esteira != f.status %} (a Esteira diz: {{ f.status_planilha_raw }}){% endif %}"><i class="fas fa-hand" aria-hidden="true"></i> manual</span>{% endif %}{% if f.coluna == 'nao_localizado' %}<span class="sub" title="Fora da última planilha: no kanban fica na coluna Não localizado">não localizado</span>{% endif %}</td>
+          <td data-label="Status" class="centro cel-status">{% if fb_pode.status_alterar %}<select class="fb-st-select" data-st="{{ f.status }}" data-mudar-status aria-label="Status da venda {{ f.numero_da_venda }}">{% for k, l in status_choices %}<option value="{{ k }}" {% if k == f.status %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>{% else %}<span class="st-pill" data-st="{{ f.status }}">{{ f.get_status_display }}</span>{% endif %}{% if f.status_manual %}<span class="sub fb-manual" title="Status definido à mão: a importação da Esteira não troca{% if f.status_esteira and f.status_esteira != f.status %} (a Esteira diz: {{ f.status_planilha_raw }}){% endif %}"><i class="fas fa-hand" aria-hidden="true"></i> manual</span>{% endif %}{% if f.coluna == 'nao_localizado' %}<span class="sub" title="Fora da última planilha da Esteira">não localizado</span>{% endif %}</td>
           <td data-label="Retorno Myrella" class="retorno cel-retorno" title="{{ f.retorno_myrella }}">{{ f.retorno_myrella|truncatechars:60 }}</td>
           <td class="num cel-acao"><a href="{% url 'fibras:detail' f.pk %}" class="fb-abrir">Abrir <i class="fas fa-arrow-right" aria-hidden="true"></i></a></td>
         </tr>
@@ -204,6 +348,34 @@ html.dark .fb-novo { color: #A5B4FC; }
     <span id="fbSomaVisivel"></span>
   </div>
   {% endif %}
+
+  {% if inconsistencias %}
+  <details class="fb-card fb-inc" id="fbInconsistencias" style="margin-top:18px" open>
+    <summary class="fb-card-cab" style="margin-bottom:0">
+      <div>
+        <h3><i class="fas fa-triangle-exclamation" aria-hidden="true" style="background:rgba(224,138,0,.14);color:#E08A00"></i> Ordens inconsistentes da planilha <span class="fb-tag aviso">{{ inconsistencias_count }}</span></h3>
+        <p>Ordens da planilha sem protocolo correspondente no banco. Saem daqui automaticamente quando o número for ajustado.</p>
+      </div>
+      <i class="fas fa-chevron-down" aria-hidden="true"></i>
+    </summary>
+    <div class="fb-busca" style="margin-top:12px;max-width:320px">
+      <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+      <input type="search" id="fbIncBusca" class="fb-campo" placeholder="Filtrar ordens…" aria-label="Filtrar ordens inconsistentes" autocomplete="off">
+    </div>
+    <div class="fb-inc-lista" id="fbIncLista">
+      {% for inc in inconsistencias %}
+      <div class="fb-inc-item" data-busca="{{ inc.ordem }} {{ inc.status_raw }}">
+        <div style="min-width:0;display:flex;flex-direction:column">
+          <span class="ord">{{ inc.ordem }}</span>
+          {% if inc.status_raw %}<span class="st" title="{{ inc.status_raw }}">{{ inc.status_raw }}</span>{% endif %}
+        </div>
+        <span class="qd">{% if inc.occurrences > 1 %}<span class="fb-tag" style="margin-right:4px">{{ inc.occurrences }}×</span>{% endif %}{{ inc.last_seen_at|date:"d/m H:i" }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+  {% endif %}
+
 </div>
 
 {% include 'fibras/_fb_comum.html' %}
@@ -219,34 +391,48 @@ html.dark .fb-novo { color: #A5B4FC; }
   if (!tabela) return;
   var tbody = tabela.tBodies[0];
   var linhas = Array.prototype.slice.call(tbody.querySelectorAll('tr[data-url]'));
+  var tokenCsrf = (document.getElementById('fbCsrf') || { dataset: {} }).dataset.token || '';
   var semRes = document.getElementById('fbSemResultado');
   var busca = document.getElementById('fbBusca');
   var resultado = document.getElementById('fbResultado');
-  var chips = document.getElementById('fbChips');
-  var stAtivo = '';
+  var kpis = document.getElementById('fbKpis');
+  var stAtivo = '';   /* situação (status ou "nao_localizado") do contador clicado */
+  var vFiltro = '';   /* "tipo|valor" do indicador da validação clicado (vazio = sem filtro) */
   linhas.forEach(function (tr) { tr._busca = FB.normalizar(tr.dataset.busca); });
+
+  function passaValidacao(tr) {
+    if (!vFiltro) return true;
+    var p = vFiltro.split('|'), tipo = p[0], valor = p.slice(1).join('|');
+    var campo = { assert: tr.dataset.assert, cruz: tr.dataset.cruz, end: tr.dataset.end }[tipo];
+    return (campo || '') === valor;
+  }
 
   function aplicar() {
     var termos = FB.normalizar(busca.value.trim()).split(/\s+/).filter(Boolean);
-    var vis = 0, soma = 0, porSt = {};
+    var vis = 0, soma = 0, porCol = {}, totQ = 0, totV = 0;
     linhas.forEach(function (tr) {
-      var casaBusca = termos.every(function (t) { return tr._busca.indexOf(t) !== -1; });
-      if (casaBusca) porSt[tr.dataset.st] = (porSt[tr.dataset.st] || 0) + 1;
-      var ok = casaBusca && (!stAtivo || tr.dataset.st === stAtivo);
+      var casa = passaValidacao(tr) && termos.every(function (t) { return tr._busca.indexOf(t) !== -1; });
+      var v = parseFloat(tr.dataset.valor) || 0;
+      if (casa) {
+        var c = porCol[tr.dataset.col] || (porCol[tr.dataset.col] = { q: 0, v: 0 });
+        c.q++; c.v += v; totQ++; totV += v;
+      }
+      var ok = casa && (!stAtivo || tr.dataset.col === stAtivo);
       tr.hidden = !ok;
-      if (ok) { vis++; soma += parseFloat(tr.dataset.valor) || 0; }
+      if (ok) { vis++; soma += v; }
     });
     if (semRes) semRes.hidden = !(linhas.length && vis === 0);
-    if (chips) {
-      var tot = 0;
-      chips.querySelectorAll('[data-chip]').forEach(function (c) {
-        var k = c.dataset.chip, n = k ? (porSt[k] || 0) : 0;
-        if (k) { tot += n; c.querySelector('[data-n]').textContent = FB.int(n); }
-        c.hidden = !!k && n === 0 && k !== stAtivo;
+    if (kpis) {
+      kpis.querySelectorAll('[data-chip]').forEach(function (k) {
+        var chave = k.dataset.chip, d = chave ? (porCol[chave] || { q: 0, v: 0 }) : { q: totQ, v: totV };
+        k.querySelector('[data-kpi-qtd]').textContent = FB.int(d.q);
+        k.querySelector('[data-kpi-valor]').textContent = FB.brl(d.v);
+        var bar = k.querySelector('.fb-kpi-bar span');
+        if (bar) bar.style.width = (totQ ? Math.round(d.q / totQ * 100) : 0) + '%';
+        if (chave) k.title = d.q + ' venda(s) · ' + FB.brl(d.v) + (totQ ? ' · ' + Math.round(d.q / totQ * 100) + '% da lista' : '');
       });
-      chips.querySelector('[data-chip=""] [data-n]').textContent = FB.int(tot);
     }
-    var filtrando = termos.length || stAtivo;
+    var filtrando = termos.length || stAtivo || vFiltro;
     if (resultado) resultado.textContent = linhas.length ? (filtrando ? vis + ' de ' + linhas.length + ' linha(s)' : linhas.length + ' linha(s)') : '';
     var sv = document.getElementById('fbSomaVisivel');
     if (sv) sv.textContent = (filtrando ? 'Soma das visíveis: ' : 'Soma: ') + FB.brl(soma);
@@ -260,12 +446,47 @@ html.dark .fb-novo { color: #A5B4FC; }
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
     e.preventDefault(); busca.focus();
   });
-  if (chips) chips.addEventListener('click', function (e) {
+  if (kpis) kpis.addEventListener('click', function (e) {
     var c = e.target.closest('[data-chip]');
     if (!c) return;
-    stAtivo = c.dataset.chip;
-    chips.querySelectorAll('[data-chip]').forEach(function (x) { x.setAttribute('aria-pressed', x === c ? 'true' : 'false'); });
+    stAtivo = stAtivo === c.dataset.chip ? '' : c.dataset.chip;
+    kpis.querySelectorAll('[data-chip]').forEach(function (x) {
+      var on = x.dataset.chip === stAtivo;
+      x.setAttribute('aria-pressed', on ? 'true' : 'false');
+      x.classList.toggle('ativo', on && !!stAtivo);
+    });
     aplicar();
+  });
+
+  /* Validação Base × Esteira: clique no indicador filtra as linhas */
+  var vBotoes = Array.prototype.slice.call(document.querySelectorAll('#fbVal [data-vfiltro]'));
+  var vLimpar = document.getElementById('fbValLimpar');
+  function marcarValidacao() {
+    vBotoes.forEach(function (b) { var on = b.dataset.vfiltro === vFiltro; b.classList.toggle('ativo', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+    if (vLimpar) vLimpar.hidden = !vFiltro;
+  }
+  vBotoes.forEach(function (b) {
+    b.addEventListener('click', function () { vFiltro = vFiltro === b.dataset.vfiltro ? '' : b.dataset.vfiltro; marcarValidacao(); aplicar(); });
+  });
+  if (vLimpar) vLimpar.addEventListener('click', function () { vFiltro = ''; marcarValidacao(); aplicar(); });
+  var vCruzar = document.getElementById('fbValCruzar');
+  if (vCruzar) vCruzar.addEventListener('click', function () {
+    vCruzar.disabled = true;
+    vCruzar.innerHTML = '<i class="fas fa-circle-notch fa-spin" aria-hidden="true"></i> Cruzando…';
+    fetch(vCruzar.dataset.url, { method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': FB.csrf() || tokenCsrf },
+      body: JSON.stringify({ ini: vCruzar.dataset.ini, fim: vCruzar.dataset.fim }) })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) throw new Error(res.j.erro || 'Falha ao cruzar.');
+        FB.toast('Cruzamento feito: ' + ((res.j.kpis || {}).pedidos || 0) + ' pedido(s) analisados. Atualizando…', true);
+        setTimeout(function () { location.reload(); }, 900);
+      })
+      .catch(function (e) {
+        FB.toast(e.message || 'Falha ao cruzar.', false);
+        vCruzar.disabled = false;
+        vCruzar.innerHTML = '<i class="fas fa-code-compare" aria-hidden="true"></i> Cruzar Base × Esteira';
+      });
   });
 
   /* Ordenação por coluna (clique alterna crescente/decrescente) */
@@ -297,9 +518,8 @@ html.dark .fb-novo { color: #A5B4FC; }
     celula.appendChild(s);
   }
 
-  /* Status na própria linha (Ilha): o mesmo endpoint do arrastar do kanban. */
+  /* Status na própria linha (Ilha). */
   var urlStatus = (document.getElementById('fbUrlStatus') || { dataset: {} }).dataset.url || '';
-  var tokenCsrf = (document.getElementById('fbCsrf') || { dataset: {} }).dataset.token || '';
   tbody.addEventListener('change', function (e) {
     var sel = e.target.closest('[data-mudar-status]'); if (!sel) return;
     var tr = sel.closest('tr[data-pk]'), antes = sel.dataset.st, novo = sel.value;
@@ -353,6 +573,47 @@ html.dark .fb-novo { color: #A5B4FC; }
     if (Array.prototype.some.call(document.querySelectorAll('#fbFiltros input[type=date]'), function (i) { return i.value !== ''; })) n++;
     if (n) { fq.textContent = n; fq.hidden = false; }
   }
+  /* ---------- Importação: nome do arquivo + arrastar arquivo ---------- */
+  var drop = document.getElementById('fbDrop'), bImportar = document.getElementById('fbImportar');
+  if (drop && bImportar) {
+    // Um clique: escolhe o arquivo e já importa (o arquivo também pode ser solto em cima do botão).
+    var entrada = drop.querySelector('input[type=file]'), formImp = document.getElementById('fbImportForm');
+    var enviar = function () {
+      if (!entrada.files || !entrada.files[0]) return;
+      bImportar.disabled = true;
+      bImportar.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Importando ' + entrada.files[0].name + '…';
+      formImp.submit();
+    };
+    bImportar.addEventListener('click', function () { entrada.click(); });
+    entrada.addEventListener('change', enviar);
+    bImportar.addEventListener('dragover', function (e) { e.preventDefault(); bImportar.classList.add('on'); });
+    bImportar.addEventListener('dragleave', function () { bImportar.classList.remove('on'); });
+    bImportar.addEventListener('drop', function (e) {
+      e.preventDefault(); bImportar.classList.remove('on');
+      if (!e.dataTransfer.files.length) return;
+      entrada.files = e.dataTransfer.files; enviar();
+    });
+  }
+  if (drop) {
+    var inp = drop.querySelector('input[type=file]'), nome = document.getElementById('fbArqNome');
+    inp.addEventListener('change', function () { nome.textContent = inp.files && inp.files[0] ? inp.files[0].name : 'escolha ou arraste o .xlsx'; });
+    ['dragenter', 'dragover'].forEach(function (ev) { drop.addEventListener(ev, function () { drop.classList.add('sobre'); }); });
+    ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function () { drop.classList.remove('sobre'); }); });
+    document.getElementById('fbImportForm').addEventListener('submit', function (e) {
+      var b = e.target.querySelector('button[type=submit]');
+      b.disabled = true;
+      b.querySelector('i').className = 'fas fa-spinner fa-spin';
+      b.lastChild.textContent = ' Importando…';
+    });
+  }
+
+  /* ---------- Ordens inconsistentes: filtro rápido ---------- */
+  var incB = document.getElementById('fbIncBusca');
+  if (incB) incB.addEventListener('input', function () {
+    var q = FB.normalizar(incB.value.trim());
+    document.querySelectorAll('#fbIncLista .fb-inc-item').forEach(function (it) { it.hidden = q && FB.normalizar(it.dataset.busca).indexOf(q) === -1; });
+  });
+
   aplicar();
 })();
 </script>
