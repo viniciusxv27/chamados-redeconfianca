@@ -231,6 +231,10 @@
       </label>
       <button class="btn-pri" type="submit" id="btnFixaPrevia" disabled>Cruzar com as vendas de fixa</button>
     </form>
+    <div class="sva-bloco fixa-puxar">
+      <span>ou, sem planilha:</span>
+      <button class="btn-sec" type="button" id="btnFixaPuxar">Puxar canceladas do /fibras (<span id="fixaPuxarMes">mês da esteira</span>)</button>
+    </div>
 
     <div class="sva-bloco" id="fixaPrevia" hidden></div>
   </div>
@@ -268,4 +272,4 @@
 <div class="toasts" id="toasts" aria-live="polite"></div>
 </div>
 {% endblock %}
-{% block extra_js %}<script src="{% static 'auditoria_d1/esteira.js' %}?v=5"></script>{% endblock %}
+{% block extra_js %}<script src="{% static 'auditoria_d1/esteira.js' %}?v=6"></script>{% endblock %}

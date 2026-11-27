@@ -514,3 +514,5 @@ html.dark .d1-abas a.ativa { color: #1a1030; }
 @media (max-width: 400px) {
   .d1 .destaques, .d1 .dados { grid-template-columns: 1fr; }
 }
+/* Base Fixa: puxar as canceladas direto do /fibras (28/11/2026) */
+.d1 .fixa-puxar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; color: var(--cinza-6); font-size: 13px; }

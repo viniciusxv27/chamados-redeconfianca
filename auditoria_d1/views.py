@@ -437,11 +437,18 @@ def api_sva_whatsapp_cancelar(request):
 def api_fixa_previa(request):
     """Cruza a Base Fixa enviada (export do /fibras; o Analítico de Vendas da Vivo ainda é aceito) com as vendas
     de fixa e mostra o que mudaria, sem gravar nada."""
-    nome, base, erro = _ler_upload(request, cruzamento_fixa.ler_base,
-                                   "Envie a planilha exportada do /fibras (.xlsx).",
-                                   "Não consegui ler o arquivo. Envie a planilha em .xlsx, como exportada do /fibras.")
-    if erro:
-        return erro
+    if request.POST.get("origem") == "fibras":  # "Puxar canceladas do /fibras": sem arquivo, direto do banco
+        inicio, fim = regras.mes(request.POST.get("mes"))
+        base = cruzamento_fixa.base_do_fibras(inicio, fim)
+        if not base:
+            return _json({"erro": f"Nenhuma fibra cancelada no /fibras em {inicio:%m/%Y}."}, 404)
+        nome = f"/fibras — canceladas de {inicio:%m/%Y}"
+    else:
+        nome, base, erro = _ler_upload(request, cruzamento_fixa.ler_base,
+                                       "Envie a planilha exportada do /fibras (.xlsx).",
+                                       "Não consegui ler o arquivo. Envie a planilha em .xlsx, como exportada do /fibras.")
+        if erro:
+            return erro
     resultados, _ = cruzamento_fixa.cruzar(base)
     res = cruzamento_fixa.resumo(resultados, base)
     linhas = [regras.resumir_fixa(r) for r in resultados]

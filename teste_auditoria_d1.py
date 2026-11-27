@@ -713,6 +713,46 @@ t('sugestão do /fibras gravada com a correção', [(s['id_servico'], s['correca
   and sn[0]['servico_base'].startswith('/fibras Cancelado'), sn)
 t('base de outubro (Analítico) não foi mexida', q("SELECT status FROM verificacao_vendas WHERE id_servico='F1'")[0]['status'] == 'CONTESTADA')
 
+print('== BASE FIXA PUXADA DIRETO DO /FIBRAS (28/11/2026) ==')
+from fibras.models import Fibra  # noqa: E402
+
+
+def fibra(numero, status, data=DN, cpf='52998224725', manual=False, **kw):
+    return Fibra.objects.create(numero_da_venda=numero, status=status, data_da_venda=data, cpf=cpf, pdv='LARANJEIRAS',
+                                vendedor='JOAO VENDEDOR', plano='Vivo Total 600 Mbps', valor=Decimal('100'), pilar='Fixa',
+                                servico_tecnico='Alta Banda Larga', status_manual=manual, **kw)
+
+
+fibra('400', Fibra.STATUS_CANCELADO, manual=True, retorno_myrella='cliente desistiu')
+fibra('401', Fibra.STATUS_INSTALADO, cpf='11144477735')           # não cancelada: fica de fora
+fibra('403', Fibra.STATUS_CANCELADO)                              # CPF diferente do VivoGo → sugestão
+fibra('405', Fibra.STATUS_CANCELADO, data=dt.date(2026, 10, 30))  # outro mês: fica de fora
+bf = cruzamento_fixa.base_do_fibras(dt.date(2026, 11, 1), dt.date(2026, 11, 30))
+t('base do /fibras: só as canceladas do mês', sorted(a['id_venda'] for a in bf) == ['400', '403'], bf)
+t('base do /fibras: mesmo formato do export (fonte, situação, manual, retorno, anomes)',
+  (bf[0]['fonte'], bf[0]['situacao'], bf[0]['manual'], bf[0]['status'], bf[0]['retorno'], bf[0]['anomes'], bf[0]['cpf'])
+  == ('FIBRAS', 'CANCELADA', True, 'Cancelado', 'cliente desistiu', '202611', '52998224725'), bf[0])
+_lido = {a['id_venda']: a for a in cruzamento_fixa.ler_base(base_fibras([lf('400', '52998224725', '20/11/2026', 'Cancelado', 'Sim')]))}['400']
+t('base do /fibras tem as mesmas chaves que a planilha lida', set(bf[0]) >= set(_lido) - {'status_manual'}, set(_lido) - set(bf[0]))
+r = cg.post('/auditoria-d1/api/fixa/previa', {'origem': 'fibras', 'mes': '2026-11'})
+jp = r.json()
+t('prévia sem arquivo, puxando do /fibras', r.status_code == 200 and jp['fonte'] == 'FIBRAS' and jp['arquivo'] == '/fibras — canceladas de 11/2026'
+  and jp['linhas'] == 2, r.content[:300])
+t('prévia do /fibras: 400 zera, 403 vira sugestão', [x['id_venda'] for x in jp['aplicar_lista']] == ['400']
+  and [x['id_venda'] for x in jp['sugestoes_lista']] == ['403'], jp)
+t('observação traz o retorno da Myrella', 'cliente desistiu' in jp['aplicar_lista'][0]['motivo'], jp['aplicar_lista'])
+r = cg.post('/auditoria-d1/api/fixa/previa', {'origem': 'fibras', 'mes': '2026-09'})
+t('mês sem cancelada → 404 com mensagem', r.status_code == 404 and '09/2026' in r.json()['erro'], r.content[:200])
+t('AUDITOR não puxa do /fibras (403)', ca.post('/auditoria-d1/api/fixa/previa', {'origem': 'fibras', 'mes': '2026-11'}).status_code == 403)
+r = jpost(cg, '/auditoria-d1/api/fixa/aplicar', {'token': jp['token']})
+t('aplicar a base puxada do /fibras', r.status_code == 200 and r.json()['aplicadas'] == 1, r.content[:300])
+imp = q("SELECT arquivo, linhas FROM cruzamento_importacoes WHERE origem='CRUZAMENTO_FIXA' ORDER BY id DESC")[0]
+t('importação registrada com a origem /fibras', imp['arquivo'] == '/fibras — canceladas de 11/2026' and imp['linhas'] == 2, imp)
+pg = cg.get('/auditoria-d1/').content.decode()
+t('modal da Base Fixa tem o botão de puxar do /fibras', 'id="btnFixaPuxar"' in pg and 'Puxar canceladas do /fibras' in pg)
+_js = (pathlib.Path(__file__).resolve().parent / 'static' / 'auditoria_d1' / 'esteira.js').read_text()
+t('JS manda origem=fibras e o mês da esteira', 'fd.append("origem", "fibras")' in _js and 'fd.append("mes", S.mes)' in _js)
+
 print('== VIVO GO: SITUAÇÃO DO SERVIÇO = CANCELADO NO EXCLUIR VENDA ==')
 r = ca.get('/auditoria-d1/api/exportar?mes=2026-11')
 rows = list(csv.reader(io.StringIO(r.content.decode('cp1252')), delimiter=';'))
@@ -843,7 +883,7 @@ from vendas.models import Plano  # noqa: E402
 # 1. botão "Exportar"
 pa = ca.get('/auditoria-d1/').content.decode()
 t('botão de exportar se chama "Exportar" (não "Exportar mês")', '<span>Exportar</span>' in pa and 'Exportar mês' not in pa)
-t('estáticos com ?v= novo', "esteira.js?v=5" in pa and "auditoria_d1.css?v=3" in pa)
+t('estáticos com ?v= novo', "esteira.js?v=6" in pa and "auditoria_d1.css?v=4" in pa)
 t('busca geral no topo, com o atalho / indicado', 'id="buscaGeral"' in pa and '( / )' in pa and 'id="bgPainel"' in pa)
 t('CONSULTA também tem a busca geral', 'id="buscaGeral"' in cc.get('/auditoria-d1/').content.decode())
 
@@ -1183,8 +1223,8 @@ _js = (pathlib.Path(__file__).resolve().parent / 'static' / 'auditoria_d1' / 'es
 t('card "Documento sem pontuação" com os dígitos do documento', '["Documento sem pontuação", dig(it.documento) || "—", dig(it.documento)]' in _js)
 t('cada card dos dados da venda tem o botão de copiar (menos os vazios)', 'class="copiar" data-copiar="${esc(alvo)}"' in _js
   and 'txt === "—" ? "" : txt' in _js)
-t('esteira.js e o CSS com versão nova', "esteira.js' %}?v=5" in (pathlib.Path(__file__).resolve().parent / 'templates' / 'auditoria_d1' / 'esteira.html').read_text()
-  and "auditoria_d1.css' %}?v=3" in (pathlib.Path(__file__).resolve().parent / 'templates' / 'auditoria_d1' / '_base.html').read_text())
+t('esteira.js e o CSS com versão nova', "esteira.js' %}?v=6" in (pathlib.Path(__file__).resolve().parent / 'templates' / 'auditoria_d1' / 'esteira.html').read_text()
+  and "auditoria_d1.css' %}?v=4" in (pathlib.Path(__file__).resolve().parent / 'templates' / 'auditoria_d1' / '_base.html').read_text())
 
 print(f'\n{ok} ok, {fail} falha(s)')
 sys.exit(1 if fail else 0)

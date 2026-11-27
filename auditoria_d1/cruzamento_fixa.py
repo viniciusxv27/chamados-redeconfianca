@@ -361,6 +361,28 @@ def ler_base_fibras(cab, linhas):
     return base
 
 
+def base_do_fibras(inicio, fim):
+    """Base Fixa direto do banco do /fibras (28/11/2026): as fibras com status Cancelado e venda no período, no mesmo
+    formato de ler_base_fibras (é o que o export de canceladas traria). Vale para todas as lojas: é a auditoria
+    lendo o /fibras, não a tela dele (não depende do acesso da pessoa ao /fibras)."""
+    from fibras.models import Fibra
+    base = []
+    qs = (Fibra.objects.filter(status=Fibra.STATUS_CANCELADO, data_da_venda__range=(inicio, fim))
+          .order_by("data_da_venda", "id"))
+    for f in qs:
+        venda = (f.numero_da_venda or "").strip().lstrip("'")
+        if not venda or not f.data_da_venda:
+            continue
+        base.append({"id_venda": venda, "cpf": f.cpf_digitos, "cliente": f.cliente, "endereco": f.endereco,
+                     "acesso": f.numero_acesso, "plano": f.plano, "valor": texto_id(float(f.valor or 0)), "pdv": f.pdv,
+                     "vendedor": f.vendedor, "data": f.data_da_venda, "data_agenda": f.data_agendamento,
+                     "pilar": f.pilar, "servico_tecnico": f.servico_tecnico, "status": f.get_status_display(),
+                     "status_manual": "Sim" if f.status_manual else "", "retorno": f.retorno_myrella or "",
+                     "anomes": f.data_da_venda.strftime("%Y%m"), "fonte": FONTE_FIBRAS, "situacao": "CANCELADA",
+                     "manual": bool(f.status_manual)})
+    return base
+
+
 def carregar_vendas_ids(ids, de, ate):
     """Serviços de fixa da VivoGo das vendas da base (PDV + data primeiro, que é o índice da tabela)."""
     lista = db.pdvs() or [""]

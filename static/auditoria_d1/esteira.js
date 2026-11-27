@@ -1337,7 +1337,12 @@
       $("#btnFixaPrevia").disabled = !FX.arquivo;
       $("#fixaPrevia").hidden = true;
     };
-    $("#btnFixa").onclick = async () => { modal.hidden = false; await carregarUltimaFixa(); };
+    $("#btnFixa").onclick = async () => {
+      modal.hidden = false;
+      const [a, m] = S.mes.split("-");
+      $("#fixaPuxarMes").textContent = `${m}/${a}`;
+      await carregarUltimaFixa();
+    };
     const fechar = () => { modal.hidden = true; };
     $("#fecharFixa").onclick = fechar;
     modal.addEventListener("click", e => { if (e.target === modal) fechar(); });
@@ -1347,14 +1352,10 @@
     ["dragleave", "drop"].forEach(ev => lbl.addEventListener(ev, e => { e.preventDefault(); lbl.classList.remove("arrastando"); }));
     lbl.addEventListener("drop", e => escolher(e.dataTransfer.files[0]));
 
-    $("#formFixa").onsubmit = async e => {
-      e.preventDefault();
-      if (!FX.arquivo) return;
-      const btn = $("#btnFixaPrevia");
+    const previa = async (btn, fd) => {
+      const txt = btn.innerHTML;
       btn.disabled = true;
       btn.textContent = "Cruzando…";
-      const fd = new FormData();
-      fd.append("base", FX.arquivo);
       try {
         const r = await fetch(URL_("/api/fixa/previa"), { method: "POST", body: fd, credentials: "same-origin", headers: { "X-CSRFToken": csrf() } });
         const j = await r.json().catch(() => ({}));
@@ -1364,9 +1365,24 @@
       } catch (err) {
         toast(err.message, "erro");
       } finally {
-        btn.disabled = false;
-        btn.textContent = "Cruzar com as vendas de fixa";
+        btn.disabled = btn.id === "btnFixaPrevia" && !FX.arquivo;
+        btn.innerHTML = txt;
       }
+    };
+    // Base Fixa direto do banco do /fibras: as canceladas do mês da esteira, sem exportar planilha (28/11/2026)
+    $("#btnFixaPuxar").onclick = () => {
+      const fd = new FormData();
+      fd.append("origem", "fibras");
+      fd.append("mes", S.mes);
+      previa($("#btnFixaPuxar"), fd);
+    };
+
+    $("#formFixa").onsubmit = async e => {
+      e.preventDefault();
+      if (!FX.arquivo) return;
+      const fd = new FormData();
+      fd.append("base", FX.arquivo);
+      await previa($("#btnFixaPrevia"), fd);
     };
 
     $("#fixaPrevia").addEventListener("click", async e => {
