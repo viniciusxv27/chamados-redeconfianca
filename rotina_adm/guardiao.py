@@ -32,7 +32,7 @@ GARANTIR (40)
   9. Segurança e Confiabilidade do Estoque Total (20): quem gere lança o % de conformidade do inventário
      mensal da loja; 80% ou mais = 20; abaixo ou sem lançamento = 0.
 
-Proporcional é linear (90% de 10 = 9), com duas casas. Níveis pelo total: 0 Desenvolvimento, 60 Evolução,
+Proporcional é linear (90% de 10 = 9), com duas casas. Níveis pelo total: 0 Evolução (1),
 70 Avançada, 90 Cumprida, 100 Excelência. Os pontos não acumulam entre meses; o mês passado se consulta
 recalculando (``?mes=AAAA-MM``).
 
@@ -68,8 +68,8 @@ MISSOES = (
     ('estoque_total', 9, 'GARANTIR', 'Segurança e Confiabilidade do Estoque Total', 'Conformidade do inventário mensal', 20, 'fa-warehouse'),
 )
 NIVEIS = (
-    (0, 'Missão em Desenvolvimento', 'desenvolvimento', 'fa-flag'),
-    (60, 'Missão em Evolução', 'evolucao', 'fa-chart-line'),
+    # 28/11/2026: saiu "Missão em Desenvolvimento" (0–59); a Evolução vira o nível 1 e vai de 0 a 69.
+    (0, 'Missão em Evolução', 'evolucao', 'fa-chart-line'),
     (70, 'Missão Avançada', 'avancada', 'fa-bullseye'),
     (90, 'Missão Cumprida', 'cumprida', 'fa-check-circle'),
     (100, 'Missão de Excelência', 'excelencia', 'fa-star'),

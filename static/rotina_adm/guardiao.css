@@ -80,12 +80,10 @@ html.dark .mg {
 .mg-total small { font-size: 13px; font-weight: 500; color: var(--mg-texto-3); margin-left: 3px; }
 .mg-nivel { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 4px 11px; margin-bottom: 6px;
   color: var(--nv, var(--mg-laranja)); background: var(--nv-claro, var(--mg-laranja-claro)); }
-.mg-nivel.desenvolvimento, .mg-nivel-cor.desenvolvimento { --nv: #64748b; --nv-claro: #f1f5f9; }
 .mg-nivel.evolucao, .mg-nivel-cor.evolucao { --nv: var(--mg-laranja); --nv-claro: var(--mg-laranja-claro); }
 .mg-nivel.avancada, .mg-nivel-cor.avancada { --nv: #b4530a; --nv-claro: #ffeedd; }
 .mg-nivel.cumprida, .mg-nivel-cor.cumprida { --nv: var(--mg-verde); --nv-claro: var(--mg-verde-claro); }
 .mg-nivel.excelencia, .mg-nivel-cor.excelencia { --nv: var(--mg-roxo); --nv-claro: var(--mg-roxo-claro); }
-html.dark .mg-nivel.desenvolvimento, .mg-nivel-cor.desenvolvimento { --nv: #cbd5e1; --nv-claro: rgba(203, 213, 225, .12); }
 html.dark .mg-nivel.avancada, .mg-nivel-cor.avancada { --nv: #fdba74; --nv-claro: rgba(253, 186, 116, .14); }
 
 .mg-barras { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }

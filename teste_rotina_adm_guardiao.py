@@ -98,24 +98,28 @@ def rodar():
     t('fmt 12.5 → 12,5', guardiao.fmt(12.5) == '12,5')
     t('fmt 6.6666 → 6,67', guardiao.fmt(6.6666) == '6,67')
     t('fmt 20.0 → 20', guardiao.fmt(20.0) == '20')
-    t('nível 59,99 = Desenvolvimento', guardiao.nivel(59.99)['nome'] == 'Missão em Desenvolvimento')
-    t('nível 60 = Evolução', guardiao.nivel(60)['nome'] == 'Missão em Evolução')
+    t('nível 0 = Evolução (Desenvolvimento saiu)', guardiao.nivel(0)['nome'] == 'Missão em Evolução'
+      and all(n[1] != 'Missão em Desenvolvimento' for n in guardiao.NIVEIS))
+    t('nível 69,99 = Evolução', guardiao.nivel(69.99)['nome'] == 'Missão em Evolução')
     t('nível 73,17 = Avançada', guardiao.nivel(73.17)['nome'] == 'Missão Avançada')
     t('nível 90 = Cumprida', guardiao.nivel(90)['nome'] == 'Missão Cumprida')
     t('nível 100 = Excelência', guardiao.nivel(100)['nome'] == 'Missão de Excelência')
     # Faixas do card do Destaque (27/11/2026): a mesma régua de NIVEIS.
     fx = guardiao.faixas(73.17)
-    t('faixas: 5 faixas, a atual é Avançada', len(fx['lista']) == len(guardiao.NIVEIS)
-      and fx['atual']['nome'] == 'Missão Avançada' and [f['estado'] for f in fx['lista']]
-      == ['alcancada', 'alcancada', 'atual', 'futura', 'futura'], fx['atual'])
+    t('faixas: 4 faixas, a atual é Avançada (nível 2)', len(fx['lista']) == 4
+      and fx['atual']['nome'] == 'Missão Avançada' and fx['atual']['numero'] == 2 and [f['estado'] for f in fx['lista']]
+      == ['alcancada', 'atual', 'futura', 'futura'], fx['atual'])
+    t('faixas numeradas 1 a 4: Evolução, Avançada, Cumprida, Excelência',
+      [(f['numero'], f['nome']) for f in fx['lista']] == [(1, 'Missão em Evolução'), (2, 'Missão Avançada'),
+                                                         (3, 'Missão Cumprida'), (4, 'Missão de Excelência')])
     t('faixas: faltam 16,83 para Cumprida', fx['proxima']['nome'] == 'Missão Cumprida' and fx['falta_txt'] == '16,83',
       fx['falta_txt'])
     t('faixas: avanço dentro da faixa (70→90)', fx['pct_na_faixa'] in (15.8, 15.9), fx['pct_na_faixa'])
-    t('faixas: intervalos 0–59, 60–69, 70–89, 90–99, 100', [(f['minimo'], f['ate']) for f in fx['lista']]
-      == [(0, 59), (60, 69), (70, 89), (90, 99), (100, 100)])
+    t('faixas: intervalos 0–69, 70–89, 90–99, 100', [(f['minimo'], f['ate']) for f in fx['lista']]
+      == [(0, 69), (70, 89), (90, 99), (100, 100)])
     fx = guardiao.faixas(100)
     t('faixas: 100 pontos = última faixa, sem próxima', fx['proxima'] is None and fx['atual']['ultima'] and fx['falta'] == 0)
-    t('faixas: 0 pontos = primeira, faltam 60', guardiao.faixas(0)['falta'] == 60)
+    t('faixas: 0 pontos = primeira, faltam 70', guardiao.faixas(0)['falta'] == 70)
     js = guardiao.janelas(date(2026, 10, 1), date(2026, 10, 31))
     t('4 janelas LVUT em outubro (a última vai até 31)', [(a.day, b.day) for _n, a, b in js] == [(1, 7), (8, 14), (15, 21), (22, 31)])
     js = guardiao.janelas(date(2027, 2, 1), date(2027, 2, 28))
@@ -428,8 +432,8 @@ def rodar():
         t('Guardiões em Destaque lista a ana', 'Ana Zz' in resp.content.decode())
         # Destaque visual (27/11/2026): Faixas ao lado do pódio e a classificação em barras com a pessoa em foco.
         html = resp.content.decode()
-        t('destaque tem o card Faixas com as 5 faixas', 'data-faixas' in html and html.count('data-faixa="') == 5
-          and 'Missão de Excelência' in html)
+        t('destaque tem o card Faixas com as 4 faixas', 'data-faixas' in html and html.count('data-faixa="') == 4
+          and 'Missão de Excelência' in html and 'Missão em Desenvolvimento' not in html)
         t('faixas marcam uma faixa atual', html.count('data-faixa="atual"') == 1)
         resp = c_ana.get('/rotina-adm/guardiao/destaque/?mes=2026-10')
         html = resp.content.decode()
@@ -441,7 +445,7 @@ def rodar():
           ('mg-degrau p' in html and ' eu"' in html) if eu_no_podio else 'data-eu' in html, eu_no_podio)
         t('faixa do card = nível da pessoa', ctx['faixas']['atual']['nome'] == ctx['nivel']['nome'])
         if ctx['demais']:
-            t('barras divididas por pilar', 'mg-barra-pilares' in html and html.count('class="marco"') == 3 * len(ctx['demais']))
+            t('barras divididas por pilar', 'mg-barra-pilares' in html and html.count('class="marco"') == 2 * len(ctx['demais']))
         resp = c_ana.get('/rotina-adm/ranking/?mes=2026-10')
         t('URL antiga do ranking leva ao Destaque', resp.status_code == 302
           and resp['Location'] == '/rotina-adm/guardiao/destaque/?mes=2026-10', resp.get('Location'))
