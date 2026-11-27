@@ -150,6 +150,73 @@ def criar_titulos_rateados(dados, rateio, usuario=None, request=None, parcelas=1
     return criados
 
 
+def _partes_do_rateio(valor, rateio):
+    """Valor dividido pelos percentuais (arredondamento comum; o que sobra fica com a última loja)."""
+    partes = [(valor * pct / 100).quantize(CENTAVO, rounding=ROUND_HALF_UP) for _l, pct in rateio[:-1]]
+    return partes + [valor - sum(partes)]
+
+
+def _pct_txt(pct):
+    return f'{pct.normalize():f}'.replace('.', ',')
+
+
+@transaction.atomic
+def ratear_titulo(titulo, rateio, usuario=None, request=None, todas_parcelas=False):
+    """Rateia um título já lançado entre lojas: o original fica com a parte da 1ª loja e nasce um título
+    para cada outra loja (mesmo fornecedor, vencimento, parcela, documento e anexo).
+
+    Só título em aberto e sem baixa. Com `todas_parcelas`, faz o mesmo nas outras parcelas em aberto
+    (sem baixa) do mesmo grupo; as parcelas de cada loja ficam num grupo próprio.
+    Devolve (títulos tocados ou criados, parcelas puladas).
+    """
+    alvo = Titulo.objects.select_for_update().get(pk=titulo.pk)
+    if alvo.status != 'ABERTO' or alvo.valor_baixado > ZERO:
+        raise RegraFinanceira('Só dá para ratear título em aberto e sem pagamento lançado.')
+    alvos, pulados = [alvo], []
+    if todas_parcelas and alvo.parcelas > 1:
+        for outro in Titulo.objects.select_for_update().filter(grupo=alvo.grupo).exclude(pk=alvo.pk).order_by('parcela'):
+            if outro.status == 'ABERTO' and outro.valor_baixado == ZERO:
+                alvos.append(outro)
+            else:
+                pulados.append(outro)
+    grupos = [None] + [uuid.uuid4() for _ in rateio[1:]]
+    resumo_lojas = '; '.join(f'{loja.name} {_pct_txt(pct)}%' for loja, pct in rateio)
+    saida = []
+    for t in sorted(alvos, key=lambda x: x.parcela):
+        if t.valor <= ZERO:
+            continue
+        partes = _partes_do_rateio(t.valor, rateio)
+        if any(v <= ZERO for v in partes):
+            raise RegraFinanceira(f'Com esse rateio alguma loja ficaria com valor zerado na parcela {t.parcela}.')
+        antes = auditoria.foto(t)
+        valor_total = t.valor
+        nota = f'Rateio de R$ {valor_total:,.2f}'.replace(',', '_').replace('.', ',').replace('_', '.') \
+            + f' entre lojas: {resumo_lojas}.'
+        observacao = (t.observacao.strip() + '\n' if t.observacao.strip() else '') + nota
+        base_descricao = t.descricao
+        for i, (loja, pct) in enumerate(rateio):
+            rotulo = f' (rateio {_pct_txt(pct)}% — {loja.name})'
+            descricao = (base_descricao[:200 - len(rotulo)] + rotulo)[:200]
+            if i == 0:
+                t.loja, t.valor, t.descricao, t.observacao = loja, partes[0], descricao, observacao
+                t.save()
+                auditoria.registrar(request, 'EDITAR', f'Rateou {t.get_tipo_display().lower()} entre {len(rateio)} lojas: '
+                                    f'{t.descricao}', area=_area(t), obj=t, valor=t.valor, antes=antes,
+                                    depois=auditoria.foto(t), usuario=usuario)
+                saida.append(t)
+                continue
+            novo = Titulo.objects.get(pk=t.pk)
+            novo.pk = novo.id = None
+            novo.loja, novo.valor, novo.descricao, novo.observacao = loja, partes[i], descricao, observacao
+            novo.grupo, novo.criado_por = grupos[i], usuario
+            novo.save()
+            auditoria.registrar(request, 'CRIAR', f'Rateio: {novo.get_tipo_display().lower()} da loja {loja.name}: '
+                                f'{novo.descricao}', area=_area(novo), obj=novo, valor=novo.valor,
+                                depois=auditoria.foto(novo), usuario=usuario)
+            saida.append(novo)
+    return saida, pulados
+
+
 @transaction.atomic
 def editar_titulo(titulo, campos, usuario=None, request=None):
     titulo = Titulo.objects.select_for_update().get(pk=titulo.pk)

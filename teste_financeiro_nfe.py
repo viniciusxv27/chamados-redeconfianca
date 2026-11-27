@@ -902,6 +902,43 @@ try:
                   ('Loja ZZ NFe Vitoria', Decimal('350.00'), '2026-12-05'), ('Loja ZZ NFe Vitoria', Decimal('350.00'), '2027-01-05')],
               [(x.loja.name, x.valor, x.vencimento) for x in al])
 
+            print('\n== RATEAR TÍTULO JÁ LANÇADO ==')
+            c.post('/financeiro/pagar/novo/', {'descricao': 'ZZ Energia rateável', 'vencimento': '2026-12-10', 'valor': '300,00',
+                                               'parcelas': '3', 'intervalo': 'MENSAL', 'valor_modo': 'total', 'loja': str(loja_es.pk)})
+            p1, p2, p3 = Titulo.objects.filter(descricao='ZZ Energia rateável').order_by('parcela')
+            Titulo.objects.filter(pk=p3.pk).update(status='CANCELADO')
+            corpo = c.get(f'/financeiro/titulo/{p1.pk}/').content.decode()
+            t('tela do título tem "Ratear entre lojas" (com as outras parcelas em aberto)', 'data-abrir="#finRatear"' in corpo
+              and f'/financeiro/titulo/{p1.pk}/ratear/' in corpo and 'outras 1 parcela em aberto' in corpo, corpo.count('finRatear'))
+            r = c.post(f'/financeiro/titulo/{p1.pk}/ratear/', {'ratear': '1', 'rateio_loja': [str(loja_es.pk), str(loja_rj.pk)],
+                                                               'rateio_pct': ['70', '20']})
+            p1.refresh_from_db()
+            t('rateio que não soma 100% não mexe no título', p1.valor == Decimal('100.00') and p1.loja_id == loja_es.pk)
+            r = c.post(f'/financeiro/titulo/{p1.pk}/ratear/', {'ratear': '1', 'todas_parcelas': '1',
+                                                               'rateio_loja': [str(loja_es.pk), str(loja_rj.pk), str(loja_sp.pk)],
+                                                               'rateio_pct': ['50', '33,33', '16,67']})
+            todos = list(Titulo.objects.filter(descricao__startswith='ZZ Energia rateável').order_by('parcela', 'loja__name'))
+            p1.refresh_from_db()
+            t('o original fica com a parte da 1ª loja', (p1.loja_id, p1.valor) == (loja_es.pk, Decimal('50.00'))
+              and 'rateio 50% — Loja ZZ NFe Vitoria' in p1.descricao and 'Rateio de R$ 100,00 entre lojas' in p1.observacao)
+            abertos = [x for x in todos if x.status != 'CANCELADO']
+            t('parcelas 1 e 2 viram 3 títulos cada (somando a parcela); a cancelada fica', len(abertos) == 6
+              and all(sum(x.valor for x in abertos if x.parcela == n) == Decimal('100.00') for n in (1, 2))
+              and Titulo.objects.get(pk=p3.pk).valor == Decimal('100.00') and Titulo.objects.get(pk=p3.pk).loja_id == loja_es.pk,
+              [(x.parcela, x.loja.name, x.valor) for x in abertos])
+            rj = [x for x in abertos if x.loja_id == loja_rj.pk]
+            t('as parcelas de cada loja nova ficam no mesmo grupo e com o vencimento delas', len(rj) == 2 and rj[0].grupo == rj[1].grupo
+              and rj[0].grupo != p1.grupo and [x.vencimento.isoformat() for x in rj] == ['2026-12-10', '2027-01-10']
+              and [x.valor for x in rj] == [Decimal('33.33'), Decimal('33.33')])
+            t('rateio na rastreabilidade', LogFinanceiro.objects.filter(descricao__contains='Rateou a pagar entre 3 lojas').exists())
+            msgs = [str(m) for m in r.wsgi_request._messages]
+            t('mensagem diz o que foi feito e o que ficou', any('6 título(s) em 2 parcelas' in m and '1 parcela(s)' in m for m in msgs), msgs)
+            Titulo.objects.filter(pk=p2.pk).update(valor_baixado=Decimal('10'), status='PARCIAL')
+            r = c.post(f'/financeiro/titulo/{p2.pk}/ratear/', {'ratear': '1', 'rateio_loja': [str(loja_es.pk), str(loja_rj.pk)],
+                                                               'rateio_pct': ['50', '50']})
+            t('título com pagamento não se rateia', Titulo.objects.get(pk=p2.pk).valor == Decimal('50.00')
+              and 'Ratear entre lojas' not in c.get(f'/financeiro/titulo/{p2.pk}/').content.decode())
+
             Titulo.objects.create(tipo='PAGAR', descricao='ZZ entrada pelo PIS/Cofins', vencimento=quando.date(),
                                   valor=Decimal('150'), nota=r_ok, origem='NFE')
             corpo = c.get(f'/financeiro/notas/{ok_n.pk}/').content.decode()

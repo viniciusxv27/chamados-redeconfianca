@@ -6,6 +6,7 @@
 {% block fin_acoes %}
 <a href="{% if titulo.tipo == 'PAGAR' %}{% url 'financeiro:pagar' %}{% else %}{% url 'financeiro:receber' %}{% endif %}" class="fin-btn fin-btn-claro"><i class="fas fa-arrow-left"></i>Voltar</a>
 {% if pode_editar and titulo.status != 'CANCELADO' %}<button type="button" data-abrir="#finEditar" class="fin-btn fin-btn-claro"><i class="fas fa-pen"></i>Editar</button>{% endif %}
+{% if pode_ratear %}<button type="button" data-abrir="#finRatear" class="fin-btn fin-btn-claro"><i class="fas fa-chart-pie"></i>Ratear entre lojas</button>{% endif %}
 {% if pode.baixas_baixar and titulo.status != 'QUITADO' and titulo.status != 'CANCELADO' %}
 <button type="button" data-abrir="#finModalBaixa" class="fin-btn fin-btn-verde"><i class="fas fa-check"></i>{% if titulo.tipo == 'PAGAR' %}Pagar{% else %}Receber{% endif %}</button>
 {% endif %}
@@ -213,4 +214,87 @@
 {% endif %}
 
 {% if pode_editar and titulo.status != 'CANCELADO' %}{% include 'financeiro/_modal_titulo.html' %}{% endif %}
+{% if pode_ratear %}
+<div class="fin-modal" id="finRatear" role="dialog" aria-modal="true" aria-labelledby="finRatearTitulo">
+    <div class="sm:max-w-xl">
+        <form method="post" action="{% url 'financeiro:titulo_ratear' titulo.id %}" id="finRatearForm">{% csrf_token %}
+            <input type="hidden" name="ratear" value="1">
+            <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <h3 id="finRatearTitulo" class="font-bold text-gray-900 flex items-center gap-2"><span class="fin-kpi-icone bg-emerald-50 text-emerald-600"><i class="fas fa-chart-pie"></i></span>Ratear entre lojas</h3>
+                <button type="button" data-fechar class="w-8 h-8 rounded-lg text-gray-400 hover:bg-gray-100" aria-label="Fechar"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div class="p-5 space-y-3">
+                <p class="text-sm text-gray-600">Este título ({{ titulo.valor|brl_zero }}{% if titulo.rotulo_parcela %}, parcela {{ titulo.rotulo_parcela }}{% endif %}) fica com a parte da <strong>primeira loja</strong>; cada outra loja ganha um título com a sua parte, mesmo vencimento e fornecedor.</p>
+                <div class="space-y-1.5" data-rateio-linhas>
+                    {% for linha_rateio in '12' %}
+                    <div class="grid grid-cols-[1fr_6.5rem_7rem_2rem] gap-2 items-center" data-rateio-linha>
+                        <select name="rateio_loja" class="fin-input" aria-label="Loja do rateio" required><option value="">Escolha a loja…</option>
+                            {% for l in lojas %}<option value="{{ l.id }}" {% if forloop.parentloop.first and titulo.loja_id == l.id %}selected{% endif %}>{{ l.name }}</option>{% endfor %}</select>
+                        <div class="relative"><input name="rateio_pct" inputmode="decimal" class="fin-input text-right tabular pr-7" placeholder="0" aria-label="Percentual da loja" required><span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">%</span></div>
+                        <span class="text-sm text-right tabular text-gray-700" data-rateio-valor>—</span>
+                        <button type="button" class="fin-btn-icone w-8 h-8" data-rateio-tirar aria-label="Tirar a loja do rateio"><i class="fas fa-xmark"></i></button>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="flex items-center justify-between gap-2 flex-wrap">
+                    <p class="text-xs" data-rateio-soma aria-live="polite"></p>
+                    <div class="flex gap-3">
+                        <button type="button" class="fin-link" data-rateio-igual><i class="fas fa-equals"></i>Dividir igual</button>
+                        <button type="button" class="fin-link" data-rateio-mais><i class="fas fa-plus"></i>Loja</button>
+                    </div>
+                </div>
+                {% if irmaos_abertos %}
+                <label class="flex items-start gap-2 text-sm text-gray-700 rounded-lg bg-gray-50 px-3 py-2"><input type="checkbox" name="todas_parcelas" value="1" checked class="accent-emerald-600 mt-0.5">
+                    <span>Ratear também as outras {{ irmaos_abertos|length }} parcela{{ irmaos_abertos|length|pluralize }} em aberto deste lançamento <span class="text-xs text-gray-500 block">Parcelas já pagas ou canceladas ficam como estão.</span></span></label>
+                {% endif %}
+            </div>
+            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
+                <button type="button" data-fechar class="fin-btn fin-btn-claro">Cancelar</button>
+                <button type="submit" class="fin-btn fin-btn-verde"><i class="fas fa-check"></i>Ratear</button>
+            </div>
+        </form>
+    </div>
+</div>
+<script>
+(function () {
+    var form = document.getElementById('finRatearForm');
+    if (!form) return;
+    var VALOR = Number('{{ titulo.valor|stringformat:".2f" }}') || 0;
+    var linhas = form.querySelector('[data-rateio-linhas]'), soma = form.querySelector('[data-rateio-soma]');
+    function num(v) { v = (v || '').trim().replace(/\s|%/g, ''); if (v.indexOf(',') >= 0) v = v.replace(/\./g, '').replace(',', '.'); return Number(v) || 0; }
+    function pintar() {
+        var s = 0, rows = linhas.querySelectorAll('[data-rateio-linha]');
+        rows.forEach(function (r) {
+            var p = num(r.querySelector('[name=rateio_pct]').value); s += p;
+            r.querySelector('[data-rateio-valor]').textContent = p ? window.Fin.brl(VALOR * p / 100) : '—';
+            r.querySelector('[data-rateio-tirar]').hidden = rows.length <= 2;
+        });
+        s = Math.round(s * 100) / 100;
+        var ok = Math.abs(s - 100) < 0.01;
+        soma.className = 'text-xs font-semibold ' + (ok ? 'text-emerald-700' : 'text-amber-700');
+        soma.textContent = 'Soma: ' + s.toLocaleString('pt-BR') + '%' + (ok ? ' ✓' : ' — precisa dar 100%');
+    }
+    form.querySelector('[data-rateio-mais]').addEventListener('click', function () {
+        var nova = linhas.querySelector('[data-rateio-linha]').cloneNode(true);
+        nova.querySelector('select').value = ''; nova.querySelector('input').value = '';
+        linhas.appendChild(nova); pintar(); nova.querySelector('select').focus();
+    });
+    form.querySelector('[data-rateio-igual]').addEventListener('click', function () {
+        var rows = linhas.querySelectorAll('[data-rateio-linha]'), n = rows.length, base = Math.floor(10000 / n) / 100;
+        rows.forEach(function (r, i) { var v = i === n - 1 ? Math.round((100 - base * (n - 1)) * 100) / 100 : base; r.querySelector('[name=rateio_pct]').value = String(v).replace('.', ','); });
+        pintar();
+    });
+    linhas.addEventListener('click', function (e) { var b = e.target.closest('[data-rateio-tirar]'); if (b && linhas.children.length > 2) { b.closest('[data-rateio-linha]').remove(); pintar(); } });
+    form.addEventListener('input', pintar);
+    form.addEventListener('submit', function (e) {
+        var s = 0, lojas = [];
+        linhas.querySelectorAll('[data-rateio-linha]').forEach(function (r) { s += num(r.querySelector('[name=rateio_pct]').value); lojas.push(r.querySelector('select').value); });
+        var erro = new Set(lojas).size !== lojas.length ? 'A mesma loja aparece duas vezes no rateio.'
+            : Math.abs(Math.round(s * 100) / 100 - 100) >= 0.01 ? 'Os percentuais do rateio precisam somar 100%.' : '';
+        if (erro) { e.preventDefault(); e.stopImmediatePropagation(); window.Fin.toast(erro, 'error'); }
+    }, true);
+    pintar();
+})();
+</script>
+{% endif %}
 {% endblock %}

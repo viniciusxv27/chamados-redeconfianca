@@ -58,6 +58,7 @@ urlpatterns = [
     path('receber/', views.receber, name='receber'),
     path('<str:area>/novo/', views.titulo_novo, name='titulo_novo'),
     path('titulo/<int:pk>/', views.titulo, name='titulo'),
+    path('titulo/<int:pk>/ratear/', views.titulo_ratear, name='titulo_ratear'),
     path('titulo/<int:pk>/editar/', views.titulo_editar, name='titulo_editar'),
     path('titulo/<int:pk>/cancelar/', views.titulo_cancelar, name='titulo_cancelar'),
     path('titulo/<int:pk>/excluir/', views.titulo_excluir, name='titulo_excluir'),

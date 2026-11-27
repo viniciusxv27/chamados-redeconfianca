@@ -504,6 +504,9 @@ def titulo(request, pk):
         'pode_editar': pode(request.user, f'{area}.editar'),
         'pode_cancelar': pode(request.user, f'{area}.cancelar'),
     })
+    contexto['pode_ratear'] = (contexto['pode_editar'] and titulo.status == 'ABERTO' and titulo.valor_baixado == 0
+                               and len(contexto['lojas']) > 1)
+    contexto['irmaos_abertos'] = [t for t in contexto['irmaos'] if t.status == 'ABERTO' and t.valor_baixado == 0]
     return render(request, 'financeiro/titulo.html', contexto)
 
 
@@ -524,6 +527,31 @@ def titulo_editar(request, pk):
         messages.success(request, 'Título atualizado.')
     except (Invalido, servicos.RegraFinanceira) as exc:
         messages.error(request, str(exc))
+    return redirect('financeiro:titulo', pk)
+
+
+@login_required
+@require_POST
+def titulo_ratear(request, pk):
+    """Rateia um título lançado (e, se pedido, as outras parcelas em aberto) entre lojas."""
+    titulo = _titulo_ou_404(request, pk)
+    area = 'pagar' if titulo.tipo == 'PAGAR' else 'receber'
+    if not pode(request.user, f'{area}.editar'):
+        messages.error(request, 'Editar títulos não está liberado para o seu usuário.')
+        return redirect('financeiro:titulo', pk)
+    try:
+        rateio = ler_rateio(request)
+        if not rateio:
+            raise Invalido('Escolha as lojas e os percentuais do rateio.')
+        feitos, pulados = servicos.ratear_titulo(titulo, rateio, usuario=request.user, request=request,
+                                                 todas_parcelas=request.POST.get('todas_parcelas') == '1')
+    except (Invalido, servicos.RegraFinanceira) as exc:
+        messages.error(request, str(exc))
+        return redirect('financeiro:titulo', pk)
+    parcelas = len({t.parcela for t in feitos})
+    messages.success(request, f'Rateado entre {len(rateio)} lojas: {len(feitos)} título(s)'
+                     + (f' em {parcelas} parcelas' if parcelas > 1 else '') + '.'
+                     + (f' {len(pulados)} parcela(s) já paga(s) ou cancelada(s) ficaram como estavam.' if pulados else ''))
     return redirect('financeiro:titulo', pk)
 
 
