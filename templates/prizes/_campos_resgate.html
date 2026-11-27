@@ -1,0 +1,55 @@
+{% comment %}
+Campos que quem resgata precisa preencher (Numeração, Observação, Cor...). Quem cadastra
+digita o nome que quiser. Cada linha manda campo_nome e campo_obrigatorio ("1"/"0") na
+mesma ordem — prizes.models.campos_do_formulario lê. Usado em /prizes/create/ e
+/prizes/<id>/edit/. Recebe ``campos`` (lista de {"nome", "obrigatorio"}).
+{% endcomment %}
+<div data-campos-resgate>
+    <p class="text-xs text-gray-500 mb-3">
+        Informações que a pessoa precisa preencher ao resgatar, como <strong>Numeração</strong>, <strong>Cor</strong> ou <strong>Observação</strong>.
+        Deixe vazio se o prêmio não pedir nada.
+    </p>
+    <div class="space-y-2" data-campos-lista>
+        {% for campo in campos %}
+        <div class="flex flex-wrap sm:flex-nowrap items-center gap-2" data-campo-linha>
+            <input type="text" name="campo_nome" value="{{ campo.nome }}" maxlength="60" placeholder="Nome do campo (ex.: Numeração)"
+                   class="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-300 focus:border-transparent">
+            <select name="campo_obrigatorio" class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                <option value="1" {% if campo.obrigatorio %}selected{% endif %}>Obrigatório</option>
+                <option value="0" {% if not campo.obrigatorio %}selected{% endif %}>Opcional</option>
+            </select>
+            <button type="button" data-campo-remover class="w-9 h-9 rounded-lg text-red-500 hover:bg-red-50" title="Remover campo" aria-label="Remover campo"><i class="fas fa-trash-alt"></i></button>
+        </div>
+        {% endfor %}
+    </div>
+    <button type="button" data-campo-adicionar class="mt-3 inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-300 text-sm font-semibold text-gray-600 hover:bg-gray-50">
+        <i class="fas fa-plus"></i> Adicionar campo
+    </button>
+    <template data-campo-modelo>
+        <div class="flex flex-wrap sm:flex-nowrap items-center gap-2" data-campo-linha>
+            <input type="text" name="campo_nome" value="" maxlength="60" placeholder="Nome do campo (ex.: Numeração)"
+                   class="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-300 focus:border-transparent">
+            <select name="campo_obrigatorio" class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                <option value="1" selected>Obrigatório</option>
+                <option value="0">Opcional</option>
+            </select>
+            <button type="button" data-campo-remover class="w-9 h-9 rounded-lg text-red-500 hover:bg-red-50" title="Remover campo" aria-label="Remover campo"><i class="fas fa-trash-alt"></i></button>
+        </div>
+    </template>
+</div>
+<script>
+(function () {
+    var caixa = document.currentScript.previousElementSibling;
+    var lista = caixa.querySelector('[data-campos-lista]');
+    var modelo = caixa.querySelector('[data-campo-modelo]');
+    caixa.querySelector('[data-campo-adicionar]').addEventListener('click', function () {
+        if (lista.children.length >= 10) { alert('No máximo 10 campos por prêmio.'); return; }
+        lista.appendChild(modelo.content.cloneNode(true));
+        lista.lastElementChild.querySelector('input').focus();
+    });
+    lista.addEventListener('click', function (e) {
+        var botao = e.target.closest('[data-campo-remover]');
+        if (botao) { botao.closest('[data-campo-linha]').remove(); }
+    });
+})();
+</script>

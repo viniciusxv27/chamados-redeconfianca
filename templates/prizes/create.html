@@ -203,6 +203,15 @@
                           placeholder="Ex: Válido apenas para uso presencial, não pode ser combinado com outras promoções..."></textarea>
             </div>
 
+            <!-- Campos pedidos no resgate -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                    <i class="fas fa-list-check mr-1"></i>
+                    Campos para o resgate (opcional)
+                </label>
+                {% include 'prizes/_campos_resgate.html' with campos=campos %}
+            </div>
+
             <!-- Botões -->
             <div class="flex gap-4 pt-6">
                 <button type="submit" class="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors font-semibold">

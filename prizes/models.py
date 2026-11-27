@@ -36,6 +36,56 @@ class PrizeCategory(models.Model):
 STATUS_QUE_OCUPAM_ESTOQUE = ('PENDENTE', 'APROVADO', 'ENTREGUE')
 
 
+LIMITE_CAMPOS_RESGATE = 10
+LIMITE_NOME_CAMPO = 60
+LIMITE_RESPOSTA = 500
+
+
+def normalizar_campos(campos):
+    """Lista de campos do prêmio sem nome vazio nem repetido, no formato
+    [{'nome': str, 'obrigatorio': bool}]. Aceita o JSON gravado ou o que veio da tela."""
+    saida, vistos = [], set()
+    for c in campos or []:
+        if isinstance(c, str):
+            c = {'nome': c, 'obrigatorio': True}
+        if not isinstance(c, dict):
+            continue
+        nome = ' '.join(str(c.get('nome') or '').split())[:LIMITE_NOME_CAMPO]
+        if not nome or nome.lower() in vistos:
+            continue
+        vistos.add(nome.lower())
+        saida.append({'nome': nome, 'obrigatorio': bool(c.get('obrigatorio', True))})
+        if len(saida) == LIMITE_CAMPOS_RESGATE:
+            break
+    return saida
+
+
+def campos_do_formulario(post):
+    """Campos digitados em /prizes/create/ e /prizes/<id>/edit/: cada linha manda
+    campo_nome e campo_obrigatorio ("1"/"0") na mesma ordem."""
+    nomes = post.getlist('campo_nome')
+    obrig = post.getlist('campo_obrigatorio')
+    return normalizar_campos([
+        {'nome': n, 'obrigatorio': (obrig[i] if i < len(obrig) else '1') == '1'}
+        for i, n in enumerate(nomes)
+    ])
+
+
+def respostas_do_resgate(campos, dados):
+    """Confere o que quem resgata preencheu. ``dados`` é o POST (resposta_0,
+    resposta_1...) ou um dict do app. Devolve (respostas, erro)."""
+    respostas, faltando = [], []
+    for i, campo in enumerate(campos):
+        valor = dados.get(f'resposta_{i}') if hasattr(dados, 'get') else None
+        valor = ' '.join(str(valor or '').split())[:LIMITE_RESPOSTA]
+        if not valor and campo['obrigatorio']:
+            faltando.append(campo['nome'])
+        respostas.append({'nome': campo['nome'], 'valor': valor})
+    if faltando:
+        return None, 'Preencha: ' + ', '.join(faltando) + '.'
+    return respostas, None
+
+
 class PrizeQuerySet(models.QuerySet):
     def visiveis(self):
         """Fora os excluídos da gestão (exclusão lógica: os resgates continuam)."""
@@ -87,6 +137,12 @@ class Prize(models.Model):
     excluido_em = models.DateTimeField(null=True, blank=True, verbose_name="Excluído em")
     excluido_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                      related_name='+', verbose_name="Excluído por")
+    # Campos que quem resgata precisa preencher (27/11/2026): quem cadastra digita o nome
+    # que quiser ("Numeração", "Observação", "Cor"...). Lista de {"nome", "obrigatorio"};
+    # as respostas ficam no Redemption.respostas. db_default: outros servidores rodam o
+    # código antigo no mesmo banco e inserem sem essa coluna.
+    campos_resgate = models.JSONField(default=list, blank=True, db_default=[],
+                                      verbose_name="Campos pedidos no resgate")
 
     objects = PrizeQuerySet.as_manager()
 
@@ -135,6 +191,11 @@ class Prize(models.Model):
     @property
     def excluido(self):
         return self.excluido_em is not None
+
+    @property
+    def campos(self):
+        """Campos do resgate já limpos: [{'nome': 'Numeração', 'obrigatorio': True}, ...]."""
+        return normalizar_campos(self.campos_resgate)
 
     @property
     def available(self):
@@ -251,6 +312,9 @@ class Redemption(models.Model):
         verbose_name="Aprovado por"
     )
     notes = models.TextField(blank=True, verbose_name="Observações")
+    # O que quem resgatou preencheu nos campos do prêmio: [{"nome", "valor"}].
+    respostas = models.JSONField(default=list, blank=True, db_default=[],
+                                 verbose_name="Informações do resgate")
     
     class Meta:
         verbose_name = "Resgate"
@@ -259,6 +323,15 @@ class Redemption(models.Model):
     
     def __str__(self):
         return f"{self.user.full_name} - {self.prize.name}"
+
+    @property
+    def respostas_preenchidas(self):
+        """Só as respostas com valor, para mostrar na gestão e no histórico."""
+        return [r for r in (self.respostas or []) if isinstance(r, dict) and r.get('valor')]
+
+    @property
+    def respostas_texto(self):
+        return ' · '.join(f"{r.get('nome')}: {r.get('valor')}" for r in self.respostas_preenchidas)
 
     @property
     def awaiting_pickup(self):

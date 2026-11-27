@@ -175,6 +175,7 @@ def _resgate(request, r):
         'retirar_ate': r.pickup_deadline.isoformat() if r.pickup_deadline else None,
         'aguardando_retirada': r.awaiting_pickup,
         'observacao': (r.delivery_notes or r.notes or '').strip() or None,
+        'informacoes': r.respostas_preenchidas,
         # A tela da web só oferece cancelar no PENDENTE (redemption_history.html:133).
         'pode_cancelar': r.status == 'PENDENTE',
     }
@@ -230,6 +231,9 @@ def premio(request, pk):
     saida.update({
         'descricao': p.description or None,
         'termos': p.terms or None,
+        # Campos que o resgate pede (Numeração, Observação...). O app manda as respostas
+        # em {"respostas": {"0": "...", "1": "..."}} na ordem desta lista.
+        'campos': p.campos,
         'saldo': _num(saldo),
         'caminho_web': '/prizes/',
     })
@@ -242,6 +246,12 @@ def premio(request, pk):
 def resgatar(request, pk):
     """Resgata pela view da web (prizes/views.py:67): mesmas validações, débito e movimentação de C$."""
     _premio_visivel(pk)                         # inativo/inexistente → 404 (a web dá 404 também)
+    respostas = request.data.get('respostas') if hasattr(request.data, 'get') else None
+    if isinstance(respostas, (list, tuple)):
+        respostas = {str(i): v for i, v in enumerate(respostas)}
+    if isinstance(respostas, dict):
+        # A view da web lê resposta_0, resposta_1... (prizes.models.respostas_do_resgate).
+        request._request.respostas_resgate = {f'resposta_{k}': v for k, v in respostas.items()}
     resposta, _msgs = _chamar_web(request, web.redeem_prize, pk)
     corpo = _json_da_web(resposta)
     if resposta.status_code != 200 or not corpo.get('success'):

@@ -15,7 +15,8 @@ from django.core.validators import URLValidator
 
 from core.models import Notification
 
-from .models import Prize, PrizeCategory, Redemption, CSTransaction, PrizeDiscount, SugestaoProduto
+from .models import (Prize, PrizeCategory, Redemption, CSTransaction, PrizeDiscount, SugestaoProduto,
+                     campos_do_formulario, respostas_do_resgate)
 from users.models import User
 
 
@@ -61,6 +62,8 @@ def marketplace_view(request):
         'current_category': category_filter,
         'search': search,
         'current_ordering': ordering,
+        # Campos que cada prêmio pede no resgate; o modal de confirmar monta os inputs.
+        'campos_por_premio': {str(p.pk): p.campos for p in prizes_page if p.campos},
     }
     return render(request, 'prizes/marketplace.html', context)
 
@@ -79,7 +82,14 @@ def redeem_prize(request, prize_id):
     
     if request.user.balance_cs < final_value:
         return JsonResponse({'success': False, 'error': 'Saldo insuficiente'})
-    
+
+    # Campos que o prêmio pede (Numeração, Observação...). O app manda as respostas no
+    # corpo JSON e as entrega aqui por request.respostas_resgate.
+    dados = getattr(request, 'respostas_resgate', None) or request.POST
+    respostas, erro = respostas_do_resgate(prize.campos, dados)
+    if erro:
+        return JsonResponse({'success': False, 'error': erro})
+
     try:
         with transaction.atomic():
             # Trava o prêmio e reconta o estoque: dois resgates ao mesmo tempo não levam a
@@ -95,7 +105,8 @@ def redeem_prize(request, prize_id):
                 status='PENDENTE',
                 original_value=prize.value_cs,
                 discount_value=prize.discount_amount,
-                final_value=final_value
+                final_value=final_value,
+                respostas=respostas,
             )
             
             # Debitar saldo (usar valor final)
@@ -250,6 +261,7 @@ def create_prize(request):
                 unlimited_stock=request.POST.get('unlimited_stock') == 'on',
                 terms=request.POST.get('terms', ''),
                 valid_until=request.POST.get('valid_until') or None,
+                campos_resgate=campos_do_formulario(request.POST),
                 created_by=request.user
             )
             
@@ -264,7 +276,9 @@ def create_prize(request):
             messages.error(request, f'Erro ao criar prêmio: {str(e)}')
     
     categories = PrizeCategory.objects.filter(active=True)
-    return render(request, 'prizes/create.html', {'categories': categories})
+    # Com erro, os campos digitados voltam para a tela.
+    campos = campos_do_formulario(request.POST) if request.method == 'POST' else []
+    return render(request, 'prizes/create.html', {'categories': categories, 'campos': campos})
 
 
 @login_required
@@ -332,6 +346,7 @@ def edit_prize(request, prize_id):
                 prize.terms = request.POST.get('terms', '')
                 prize.valid_until = request.POST.get('valid_until') or None
                 prize.is_active = request.POST.get('is_active') == 'on'
+                prize.campos_resgate = campos_do_formulario(request.POST)
 
                 if request.FILES.get('image'):
                     prize.image = request.FILES['image']
@@ -362,6 +377,7 @@ def edit_prize(request, prize_id):
         'resgates_ativos': prize.resgates_ativos,
         # Com erro, a tela volta com o que foi digitado.
         'estoque_disponivel': (request.POST.get('estoque_disponivel') if erro else prize.estoque_restante),
+        'campos': campos_do_formulario(request.POST) if erro else prize.campos,
     }
     return render(request, 'prizes/edit.html', context)
 
@@ -490,7 +506,7 @@ def export_redemptions_excel(request):
     headers = [
         'ID', 'Usuário', 'E-mail', 'Setor', 'Telefone', 'Prêmio', 'Categoria', 'Custo (C$)',
         'Status', 'Data do Resgate', 'Data da Aprovação', 'Data da Entrega',
-        'Aprovado/Atualizado por', 'Observações'
+        'Aprovado/Atualizado por', 'Observações', 'Informações do resgate'
     ]
 
     header_font = Font(bold=True, color="FFFFFF")
@@ -521,6 +537,7 @@ def export_redemptions_excel(request):
         ws.cell(row=row, column=12, value=redemption.delivered_at.strftime("%d/%m/%Y %H:%M") if redemption.delivered_at else "")
         ws.cell(row=row, column=13, value=redemption.approved_by.full_name if redemption.approved_by else "")
         ws.cell(row=row, column=14, value=redemption.notes or redemption.delivery_notes or "")
+        ws.cell(row=row, column=15, value=redemption.respostas_texto)
 
     # Ajustar largura das colunas
     for col in range(1, len(headers) + 1):
