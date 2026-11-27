@@ -310,14 +310,7 @@ textarea.mg-input { height: auto; min-height: 60px; padding: 8px 10px; resize: v
 .mg-classif .pts small { font-size: 11px; color: var(--mg-texto-3); white-space: nowrap; }
 .mg-classif-rodape { margin: 0; padding: 8px 20px 14px; font-size: 11.5px; color: var(--mg-texto-3); border-top: 1px solid var(--mg-borda); }
 
-/* Código de Conquista */
-.mg-tabela { width: 100%; border-collapse: collapse; font-size: 13px; }
-.mg-tabela th { text-align: left; font-size: 11.5px; color: var(--mg-texto-3); font-weight: 700; padding: 8px 12px; border-bottom: 1px solid var(--mg-borda); }
-.mg-tabela td { padding: 9px 12px; border-bottom: 1px solid var(--mg-borda); vertical-align: top; overflow-wrap: anywhere; }
-.mg-tabela tr:last-child td { border-bottom: 0; }
-.mg-niveis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
-.mg-niveis div { border: 1px solid var(--mg-borda); border-radius: 14px; padding: 12px; font-size: 12px; color: var(--mg-texto-2); }
-.mg-niveis div b { display: block; margin: 6px 0 2px; font-size: 13px; color: var(--mg-texto); }
+/* Texto corrido */
 .mg-texto { font-size: 13.5px; line-height: 1.55; color: var(--mg-texto-2); }
 .mg-texto li { margin: 4px 0; }
 
@@ -327,7 +320,6 @@ textarea.mg-input { height: auto; min-height: 60px; padding: 8px 10px; resize: v
   .mg-linha1 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .mg-linha1 > :last-child { grid-column: 1 / -1; }
   .mg-numeros { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .mg-niveis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 860px) {
   .mg-grade2, .mg-missoes, .mg-categorias, .mg-hoje, .mg-kanban { grid-template-columns: minmax(0, 1fr); }
@@ -352,8 +344,6 @@ textarea.mg-input { height: auto; min-height: 60px; padding: 8px 10px; resize: v
   .mg-classif .pos { width: 30px; height: 30px; font-size: 12px; }
   .mg-legenda { margin-left: 0; order: 3; width: 100%; }
   .mg-classif-rodape { padding: 8px 14px 12px; }
-  .mg-niveis { grid-template-columns: minmax(0, 1fr); }
-  .mg-tabela th, .mg-tabela td { padding: 8px 6px; font-size: 12px; }
   .mg-card-cab, .mg-card-pad, .mg-missao, .mg-cat, .mg-central { padding-left: 14px; padding-right: 14px; }
 }
 @media (prefers-reduced-motion: reduce) { .mg-trilho > i { animation: none; width: var(--w); } .mg-barra-pilares > i { animation: none; } }

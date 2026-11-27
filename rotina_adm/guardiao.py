@@ -17,8 +17,9 @@ PROTEGER (40)
   5. Contagem LVUT (20): 4 categorias × 4 contagens no mês (``ContagemEstoque``). O mês vira 4 janelas
      (1–7, 8–14, 15–21, 22–fim); cada categoria contada dentro da janela vale 1,25. Com divergência fica
      bloqueada até a loja regularizar (até o fim do ciclo); fora da janela ou sem contagem = 0.
-  6. Protocolo de Recuperação LVUT (10): divergências das contagens do mês regularizadas até o fim do ciclo
-     ÷ divergências encontradas (peso = número de divergências). Sem divergência = 10 se houve contagem.
+  6. Protocolo de Recuperação LVUT (10): começa com 10 e desconta as divergências em aberto na proporção
+     do que foi contado no mês: 10 × (1 − divergências em aberto ÷ itens contados). Regularizar (até o fim
+     do ciclo) devolve os pontos. Sem contagem = 10.
   7. Proteção Fiscal (10): vendas "Sem NF" da Visão SAP da loja com venda no mês que saíram do SAP ou foram
      dadas como resolvidas até o fim do ciclo (a marcada como resolvida que o SAP releu e continua lá não
      vale). Proporcional; sem pendência no mês = 10.
@@ -103,7 +104,7 @@ def nivel(total):
 
 
 def faixas(total):
-    """As faixas do Código de Conquista (NIVEIS) com a situação de quem tem ``total`` pontos no ciclo.
+    """As faixas da Jornada de Conquista (NIVEIS) com a situação de quem tem ``total`` pontos no ciclo.
 
     Cada faixa: numero, minimo, ate (o mínimo da seguinte − 1 ou 100), nome, classe, icone e
     estado = 'alcancada' | 'atual' | 'futura'. ``proxima`` é a faixa seguinte (None na última) e
@@ -514,20 +515,39 @@ def m_lvut(base, loja, contagens):
                              + (f' · {bloqueadas} bloqueada(s) por divergência' if bloqueadas else '') + '.')
 
 
+def itens_da_contagem(c):
+    """Itens contados; contagem anterior ao campo (nulo) vale como itens = divergências."""
+    return c.itens_contados if c.itens_contados else c.divergencias
+
+
 def m_recuperacao(base, contagens):
-    com_div = [c for c in contagens if c.divergencias]
-    total = sum(c.divergencias for c in com_div)
-    feitas = sum(c.divergencias for c in com_div if _regularizada_no_prazo(base, c))
-    abertas = [c for c in com_div if not c.regularizada_em]
-    if not total:
-        contou = any(c.data <= base.hoje for c in contagens)
-        return _resultado('recuperacao', 10 if contou else 0, pct=None, abertas=[],
-                          status='cumprida' if contou else 'pendente',
-                          resumo='Nenhuma divergência nas contagens do ciclo.' if contou else
-                          'Aguardando as contagens do ciclo para validar.')
-    pct = round(feitas * 100 / total, 1)
-    return _resultado('recuperacao', proporcional(10, feitas, total), pct=pct, abertas=abertas,
-                      resumo=f'{feitas} de {total} divergência(s) regularizada(s) ({fmt(pct)}%).')
+    """Começa com os 10 pontos e desconta as divergências em aberto na proporção do contado no mês.
+
+    pontos = 10 × (1 − divergências em aberto ÷ itens contados). Regularizar devolve os pontos; com o
+    ciclo fechado, o que foi regularizado depois do fechamento continua descontando.
+    """
+    contado = sum(itens_da_contagem(c) for c in contagens if c.data <= base.hoje)
+    com_div = [c for c in contagens if c.divergencias and c.data <= base.hoje]
+    em_aberto = [c for c in com_div if not _regularizada_no_prazo(base, c)]
+    div_aberto = sum(c.divergencias for c in em_aberto)
+    div_resolvidas = sum(c.divergencias for c in com_div if _regularizada_no_prazo(base, c))
+    abertas = [c for c in com_div if not c.regularizada_em]       # as que ainda dá para regularizar na tela
+    extra = {'abertas': abertas, 'contado': contado, 'div_aberto': div_aberto, 'div_resolvidas': div_resolvidas}
+    if not contado:
+        return _resultado('recuperacao', 10, pct=None, **extra,
+                          resumo='Nenhuma contagem no ciclo ainda: a missão começa com os 10 pontos.')
+    conforme = max(contado - div_aberto, 0)
+    pct = round(conforme * 100 / contado, 2)
+    pontos = proporcional(10, conforme, contado)
+    status = 'cumprida' if pontos >= 10 else ('parcial' if base.aberto else 'perdida')
+    if not div_aberto:
+        resumo = f'Nenhuma divergência em aberto em {contado} item(ns) contado(s).'
+    else:
+        resumo = (f'{div_aberto} divergência(s) em aberto em {contado} item(ns) contado(s) '
+                  f'(−{fmt(round(10 - pontos, 2))} pts).')
+    if div_resolvidas:
+        resumo += f' {div_resolvidas} regularizada(s).'
+    return _resultado('recuperacao', pontos, pct=pct, status=status, resumo=resumo, **extra)
 
 
 def m_fiscal(base, loja):

@@ -1,6 +1,6 @@
 {% extends 'rotina_adm/guardiao/_base.html' %}
 {% block mg_conteudo %}
-{% comment %}Guardiões em Destaque (27/11/2026): pódio + card "Faixas" (as faixas do Código de Conquista, guardiao.faixas)
+{% comment %}Guardiões em Destaque (27/11/2026): pódio + card "Faixas" (guardiao.faixas sobre NIVEIS)
 lado a lado; embaixo, a classificação em barras por pilar, com a pessoa escolhida em destaque.{% endcomment %}
 <div class="mg-destaque-topo">
 <section class="mg-card rc-sobe" data-destaque-podio>
@@ -24,7 +24,7 @@ lado a lado; embaixo, a classificação em barras por pilar, com a pessoa escolh
 </section>
 
 <section class="mg-card mg-faixas rc-sobe" data-faixas>
-    <div class="mg-card-cab"><h2><i class="fas fa-bars"></i>Faixas</h2><a class="mg-link" style="font-size:12px" href="{% url 'rotina_adm:guardiao_codigo' %}{% if q %}?{{ q }}{% endif %}">Código de Conquista <i class="fas fa-chevron-right" style="font-size:9px"></i></a></div>
+    <div class="mg-card-cab"><h2><i class="fas fa-bars"></i>Faixas</h2></div>
     <div class="mg-faixa-atual mg-nivel-cor {{ faixas.atual.classe }}">
         <span class="ic"><i class="fas {{ faixas.atual.icone }}"></i></span>
         <div style="min-width:0">

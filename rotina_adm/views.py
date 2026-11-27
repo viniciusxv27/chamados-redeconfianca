@@ -107,15 +107,15 @@ def estoque_registrar(request):
     if categoria not in dict(ContagemEstoque.CATEGORIAS):
         messages.error(request, 'Escolha a categoria contada.')
         return redirect(volta)
-    texto = (request.POST.get('divergencias') or '0').strip()
-    if not texto.isdigit() or int(texto) > 100000:
-        messages.error(request, 'Informe as divergências em número (0 se bateu tudo).')
+    itens, divergencias, erro = servicos.numeros_da_contagem(request.POST)
+    if erro:
+        messages.error(request, erro)
         return redirect(volta)
     hoje = timezone.localdate()
     segunda = hoje - timedelta(days=hoje.weekday())
     ja_na_semana = ContagemEstoque.objects.filter(loja=loja, categoria=categoria, data__gte=segunda).exists()
     contagem = ContagemEstoque.objects.create(
-        loja=loja, categoria=categoria, data=hoje, divergencias=int(texto),
+        loja=loja, categoria=categoria, data=hoje, divergencias=divergencias, itens_contados=itens,
         observacao=(request.POST.get('observacao') or '').strip()[:2000], feito_por=request.user)
     nome = contagem.get_categoria_display()
     messages.success(request, f'Contagem de {nome} registrada.' + (' Esta categoria já tinha sido contada nesta semana.'

@@ -189,6 +189,23 @@ VISUAL_ESTOQUE = {
 }
 
 
+def numeros_da_contagem(post):
+    """(itens contados, divergências, erro) do formulário de contagem LVUT (central e Missão Guardião).
+
+    Itens contados é obrigatório (27/11/2026): o Protocolo de Recuperação desconta as divergências em
+    aberto na proporção do que foi contado. As divergências não passam do contado.
+    """
+    itens = (post.get('itens_contados') or '').strip()
+    div = (post.get('divergencias') or '0').strip()
+    if not itens.isdigit() or not 0 < int(itens) <= 1000000:
+        return None, None, 'Informe quantos itens foram contados (número maior que zero).'
+    if not div.isdigit() or int(div) > 1000000:
+        return None, None, 'Informe as divergências em número (0 se bateu tudo).'
+    if int(div) > int(itens):
+        return None, None, 'As divergências não podem passar do número de itens contados.'
+    return int(itens), int(div), ''
+
+
 def contagem_estoque(loja, hoje=None):
     """Cada categoria com a última contagem da loja e a situação na semana (segunda a domingo).
 

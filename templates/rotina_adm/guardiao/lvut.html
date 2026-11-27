@@ -23,7 +23,8 @@
     <form method="post" action="{% url 'rotina_adm:guardiao_contagem' %}" class="mg-form">{% csrf_token %}
         <input type="hidden" name="pessoa" value="{{ pessoa.id }}"><input type="hidden" name="mes" value="{{ mes }}">
         <label>Categoria<select name="categoria" class="mg-input" required><option value="">Escolha…</option>{% for valor, nome in categorias %}<option value="{{ valor }}">{{ nome }}</option>{% endfor %}</select></label>
-        <label style="flex:0 1 150px">Divergências<input type="number" name="divergencias" class="mg-input" min="0" max="100000" value="0" required></label>
+        <label style="flex:0 1 150px">Itens contados<input type="number" name="itens_contados" class="mg-input" min="1" max="1000000" required inputmode="numeric"></label>
+        <label style="flex:0 1 150px">Divergências<input type="number" name="divergencias" class="mg-input" min="0" max="1000000" value="0" required inputmode="numeric"></label>
         <label style="flex:3 1 220px">Observação (opcional)<input type="text" name="observacao" class="mg-input" maxlength="2000" placeholder="Produtos, seriais ou ICCIDs divergentes"></label>
         <button class="mg-botao primario"><i class="fas fa-check"></i>Registrar</button>
     </form>
@@ -36,7 +37,7 @@
         <div class="mg-cat-cab"><i class="fas {{ cat.icone }}"></i><h3>{{ cat.nome }}</h3><span>{{ cat.pontos }}/5</span></div>
         <div class="mg-janelas">
             {% for c in cat.celulas %}
-            <div class="mg-janela {{ c.situacao }}{% if c.atual %} atual{% endif %}" title="{% if c.contagem %}Contada em {{ c.contagem.data|date:'d/m' }}{% if c.contagem.feito_por %} por {{ c.contagem.feito_por.get_full_name }}{% endif %}{% if c.contagem.divergencias %} · {{ c.contagem.divergencias }} divergência(s){% endif %}{% endif %}">
+            <div class="mg-janela {{ c.situacao }}{% if c.atual %} atual{% endif %}" title="{% if c.contagem %}Contada em {{ c.contagem.data|date:'d/m' }}{% if c.contagem.feito_por %} por {{ c.contagem.feito_por.get_full_name }}{% endif %}{% if c.contagem.itens_contados %} · {{ c.contagem.itens_contados }} itens{% endif %}{% if c.contagem.divergencias %} · {{ c.contagem.divergencias }} divergência(s){% endif %}{% endif %}">
                 <div>{{ c.de|date:'d' }}–{{ c.ate|date:'d/m' }}</div>
                 <i class="fas {% if c.situacao == 'conquistada' %}fa-check-circle{% elif c.situacao == 'recuperada' %}fa-sync-alt{% elif c.situacao == 'bloqueada' %}fa-lock{% elif c.situacao == 'pendente' %}fa-hourglass-half{% else %}fa-times-circle{% endif %}"></i>
                 <div>{% if c.situacao == 'conquistada' %}Conquistada{% elif c.situacao == 'recuperada' %}Recuperada{% elif c.situacao == 'bloqueada' %}Bloqueada{% elif c.situacao == 'pendente' %}Pendente{% elif c.situacao == 'perdida' %}Não regularizada{% else %}Não realizada{% endif %}</div>
@@ -52,11 +53,12 @@
         <h2><i class="fas fa-sync-alt"></i>Protocolo de Recuperação LVUT</h2>
         <span style="font-weight:800;color:var(--mg-teal)">{{ r.pontos_txt }}/10</span>
     </div>
+    <div class="mg-vazio" style="border-bottom:1px solid var(--mg-borda)">{{ r.resumo }} A missão começa com os 10 pontos e desconta as divergências em aberto na proporção do que foi contado no mês; regularizar devolve os pontos.</div>
     {% if r.abertas %}
         {% for c in r.abertas %}
         <div class="mg-divergencia">
             <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:13px">
-                <b>{{ c.get_categoria_display }} · contada em {{ c.data|date:'d/m' }}{% if c.feito_por %} por {{ c.feito_por.get_full_name }}{% endif %}</b>
+                <b>{{ c.get_categoria_display }} · contada em {{ c.data|date:'d/m' }}{% if c.itens_contados %} · {{ c.itens_contados }} ite{{ c.itens_contados|pluralize:"m,ns" }}{% endif %}{% if c.feito_por %} por {{ c.feito_por.get_full_name }}{% endif %}</b>
                 <span class="mg-selo bloqueada"><i class="fas fa-lock"></i>{{ c.divergencias }} divergência{{ c.divergencias|pluralize }}</span>
             </div>
             {% if c.observacao %}<div class="mg-resumo" style="margin-top:4px">“{{ c.observacao }}”</div>{% endif %}
@@ -69,8 +71,6 @@
             {% endif %}
         </div>
         {% endfor %}
-    {% else %}
-    <div class="mg-vazio">{{ r.resumo }}</div>
     {% endif %}
 </section>
 {% else %}

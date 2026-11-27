@@ -242,8 +242,10 @@ Compacto desde 12/11/2026: só os números; as listas recentes abrem no "Ver det
         {% csrf_token %}<input type="hidden" name="loja" value="{{ loja.id }}"><input type="hidden" name="categoria" value="">
         <div class="ra-modal-cabeca"><h3>Contagem · <span data-nome></span></h3><button type="button" data-fechar aria-label="Fechar"><i class="fas fa-xmark"></i></button></div>
         <div class="ra-modal-corpo">
+            <label class="ra-rotulo">Itens contados
+                <input class="ra-campo" type="number" name="itens_contados" min="1" max="1000000" required inputmode="numeric"></label>
             <label class="ra-rotulo">Divergências encontradas
-                <input class="ra-campo" type="number" name="divergencias" min="0" max="100000" value="0" required inputmode="numeric"></label>
+                <input class="ra-campo" type="number" name="divergencias" min="0" max="1000000" value="0" required inputmode="numeric"></label>
             <label class="ra-rotulo">Observação (opcional)
                 <textarea class="ra-campo" name="observacao" rows="3" maxlength="2000" placeholder="Ex.: 2 películas faltando, já avisei o gerente"></textarea></label>
         </div>
@@ -342,6 +344,7 @@ Compacto desde 12/11/2026: só os números; as listas recentes abrem no "Ver det
             contagem.querySelector('[name=categoria]').value = b.dataset.contar;
             contagem.querySelector('[data-nome]').textContent = b.dataset.nome;
             contagem.querySelector('[name=divergencias]').value = 0;
+            contagem.querySelector('[name=itens_contados]').value = '';
             contagem.showModal();
         });
     });

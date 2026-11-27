@@ -26,7 +26,6 @@ ABAS = (
     ('lvut', 'Proteção LVUT', 'fa-shield-alt'),
     ('agenda', 'Agenda de Missões', 'fa-calendar-alt'),
     ('destaque', 'Guardiões em Destaque', 'fa-star'),
-    ('codigo', 'Código de Conquista', 'fa-bars'),
 )
 
 
@@ -87,9 +86,8 @@ def guardiao_tela(request, aba='visao'):
         'proprio': pessoa.id == request.user.id,
         'pode_marcar': _pode_marcar(request.user, dados['loja']),
         'categorias': ContagemEstoque.CATEGORIAS, 'origens': MissaoAgenda.ORIGENS,
-        'por_contagem': guardiao.fmt(guardiao.LVUT_POR_CONTAGEM), 'niveis': guardiao.NIVEIS,
-        'missoes_def': guardiao.MISSOES, 'pilares_def': guardiao.PILARES,
-        'estoque_minimo': guardiao.ESTOQUE_TOTAL_MINIMO,
+        'por_contagem': guardiao.fmt(guardiao.LVUT_POR_CONTAGEM),
+        'pilares_def': guardiao.PILARES,
     }
     sufixo = f'?{contexto["q"]}' if contexto['q'] else ''
     for c in dados.get('cartoes', []):
@@ -110,7 +108,7 @@ def guardiao_tela(request, aba='visao'):
         contexto['ranking'] = rk['linhas']
         contexto['podio'] = [l for l in rk['linhas'][:3] if l['total'] > 0]
         contexto['minha_linha'] = next((l for l in rk['linhas'] if l['pessoa'].id == pessoa.id), None)
-        # Embaixo do pódio, as barras dos demais (com a pessoa em destaque); ao lado, as faixas do Código de Conquista.
+        # Embaixo do pódio, as barras dos demais (com a pessoa em destaque); ao lado, as faixas (NIVEIS).
         contexto['demais'] = rk['linhas'][len(contexto['podio']):]
         contexto['faixas'] = guardiao.faixas(dados['total'])
         contexto['marcos'] = [n[0] for n in guardiao.NIVEIS[1:] if n[0] < 100]  # 100 é a borda da barra
@@ -131,6 +129,12 @@ def guardiao_tela(request, aba='visao'):
     if not dados['loja']:
         contexto['sem_loja'] = True
     return render(request, f'rotina_adm/guardiao/{aba}.html', contexto)
+
+
+def guardiao_codigo(request):
+    """/rotina-adm/guardiao/codigo/ saiu em 27/11/2026: o link antigo cai na Visão geral (com a pessoa e o mês)."""
+    destino = reverse('rotina_adm:guardiao')
+    return redirect(destino + (f'?{request.GET.urlencode()}' if request.GET else ''))
 
 
 @login_required
@@ -206,18 +210,19 @@ def guardiao_contagem(request):
         messages.error(request, 'Você só registra a contagem da sua loja.')
         return _volta(request, pessoa, 'lvut')
     categoria = request.POST.get('categoria') or ''
-    texto = (request.POST.get('divergencias') or '0').strip()
+    itens, divergencias, erro = servicos.numeros_da_contagem(request.POST)
     if categoria not in dict(ContagemEstoque.CATEGORIAS):
         messages.error(request, 'Escolha a categoria contada.')
-    elif not texto.isdigit() or int(texto) > 100000:
-        messages.error(request, 'Informe as divergências em número (0 se bateu tudo).')
+    elif erro:
+        messages.error(request, erro)
     else:
         c = ContagemEstoque.objects.create(loja=loja, categoria=categoria, data=timezone.localdate(),
-                                           divergencias=int(texto), feito_por=request.user,
+                                           divergencias=divergencias, itens_contados=itens, feito_por=request.user,
                                            observacao=(request.POST.get('observacao') or '').strip()[:2000])
         if c.divergencias:
             messages.success(request, f'Contagem de {c.get_categoria_display()} registrada com {c.divergencias} '
-                                      'divergência(s): a conquista fica bloqueada até a regularização.')
+                                      'divergência(s): a conquista fica bloqueada e o Protocolo de Recuperação perde pontos até a '
+                                      'regularização.')
         else:
             messages.success(request, f'Contagem de {c.get_categoria_display()} registrada sem divergência: '
                                       f'+{guardiao.fmt(guardiao.LVUT_POR_CONTAGEM)} ponto conquistado!')

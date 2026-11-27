@@ -117,6 +117,9 @@ class ContagemEstoque(models.Model):
     categoria = models.CharField(max_length=12, choices=CATEGORIAS, verbose_name='Categoria')
     data = models.DateField(db_index=True)
     divergencias = models.PositiveIntegerField(default=0, verbose_name='Divergências encontradas')
+    # Protocolo de Recuperação LVUT (27/11/2026): a nota desconta as divergências em aberto na proporção
+    # do que foi contado no mês. Nulo nas contagens anteriores ao campo (vale como itens = divergências).
+    itens_contados = models.PositiveIntegerField(null=True, blank=True, verbose_name='Itens contados')
     observacao = models.TextField(blank=True, default='', verbose_name='Observação')
     feito_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                   related_name='+')

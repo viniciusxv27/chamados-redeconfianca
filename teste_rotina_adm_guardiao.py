@@ -132,9 +132,9 @@ def rodar():
     t('sem dado: fiscal sem pendência vale 10', pts(r, 'fiscal') == 10, r['por_chave']['fiscal']['resumo'])
     t('sem dado: Evolução sem curso vale 5', pts(r, 'evolucao') == 5)
     t('sem dado: CheckLojas 0 e não cumprido', pts(r, 'checklojas') == 0 and r['por_chave']['checklojas']['status'] == 'perdida')
-    t('sem dado: recuperação sem contagem 0', pts(r, 'recuperacao') == 0)
+    t('sem dado: recuperação começa com os 10 pontos', pts(r, 'recuperacao') == 10)
     t('sem dado: agenda sem nada previsto 0 com aviso', pts(r, 'agenda') == 0 and r['por_chave']['agenda']['aviso'])
-    t('sem dado: total 20', r['total'] == 20, r['total'])
+    t('sem dado: total 30', r['total'] == 30, r['total'])
 
     # Renova: 3 de 4 conformes (2 com dispensa, 1 com... dispensa também; 1 sem)
     for n, disp in enumerate([True, True, True, False]):
@@ -196,12 +196,14 @@ def rodar():
     # LVUT: janela 1 todas sem divergência (4 × 1,25 = 5); janela 2 smartphone com divergência regularizada no mês;
     # janela 2 SIM card com divergência nunca regularizada (perdida); janela 3 películas regularizada em novembro (perdida)
     for cat in ('SMARTPHONES', 'ELETRONICOS', 'SIMCARD', 'PELICULAS'):
-        ContagemEstoque.objects.create(loja=loja, categoria=cat, data=date(2026, 10, 3), divergencias=0)
+        ContagemEstoque.objects.create(loja=loja, categoria=cat, data=date(2026, 10, 3), divergencias=0,
+                                       itens_contados=25)
     ContagemEstoque.objects.create(loja=loja, categoria='SMARTPHONES', data=date(2026, 10, 9), divergencias=2,
-                                   regularizada_em=aware(date(2026, 10, 12)), regularizacao='ajuste')
-    ContagemEstoque.objects.create(loja=loja, categoria='SIMCARD', data=date(2026, 10, 10), divergencias=3)
+                                   itens_contados=20, regularizada_em=aware(date(2026, 10, 12)), regularizacao='ajuste')
+    ContagemEstoque.objects.create(loja=loja, categoria='SIMCARD', data=date(2026, 10, 10), divergencias=3,
+                                   itens_contados=20)
     ContagemEstoque.objects.create(loja=loja, categoria='PELICULAS', data=date(2026, 10, 16), divergencias=5,
-                                   regularizada_em=aware(date(2026, 11, 2)), regularizacao='tarde')
+                                   itens_contados=10, regularizada_em=aware(date(2026, 11, 2)), regularizacao='tarde')
     ContagemEstoque.objects.create(loja=outra, categoria='SMARTPHONES', data=date(2026, 10, 16), divergencias=0)
     r = calc(ana)
     lv = r['por_chave']['lvut']
@@ -211,13 +213,28 @@ def rodar():
     t('LVUT: 11 perdidas (2 divergências + 9 não realizadas)', lv['perdidas'] == 11, lv['perdidas'])
     cel = {c['janela']: c['situacao'] for c in lv['grade'][0]['celulas']}
     t('LVUT: smartphones janela 2 recuperada', cel[2] == 'recuperada', cel)
-    t('Recuperação: 2 de 10 divergências no prazo = 2', pts(r, 'recuperacao') == 2.0, pts(r, 'recuperacao'))
+    # 150 itens contados; no fechamento ficaram 8 divergências em aberto (3 nunca regularizadas + 5 regularizadas
+    # só em novembro): 10 × 142/150 = 9,47
+    rec = r['por_chave']['recuperacao']
+    t('Recuperação: desconta o que ficou em aberto no fechamento (10 × 142/150 = 9,47)', pts(r, 'recuperacao') == 9.47,
+      (pts(r, 'recuperacao'), rec['resumo']))
+    t('Recuperação: resumo diz quanto está em aberto e quanto foi regularizado',
+      '8 divergência(s) em aberto em 150' in rec['resumo'] and '2 regularizada(s)' in rec['resumo'], rec['resumo'])
+    t('Recuperação: ciclo fechado com desconto = não cumprida', rec['status'] == 'perdida')
 
     # Mês aberto: mesma situação vista em 12/10 (sem as de depois)
     r_aberto = calc(ana, hoje=date(2026, 10, 12))
     lv = r_aberto['por_chave']['lvut']
     t('mês aberto: SIM card com divergência fica bloqueada', lv['bloqueadas'] == 1, lv['bloqueadas'])
     t('mês aberto: janelas que ainda não acabaram ficam pendentes', lv['pendentes'] >= 8, lv['pendentes'])
+    # Em 12/10: 140 itens contados até o dia; só o SIM card (3) em aberto, o smartphone já foi regularizado
+    t('mês aberto: recuperação desconta só o que está em aberto (10 × 137/140 = 9,79)',
+      pts(r_aberto, 'recuperacao') == 9.79, pts(r_aberto, 'recuperacao'))
+    t('mês aberto: com desconto fica em andamento', r_aberto['por_chave']['recuperacao']['status'] == 'parcial')
+    # Contagem anterior ao campo (sem itens contados) vale como itens = divergências
+    ContagemEstoque.objects.create(loja=outra, categoria='PELICULAS', data=date(2026, 10, 20), divergencias=4)
+    t('contagem sem itens contados pesa inteira (4 de 4 em aberto = 0)', pts(calc(bia), 'recuperacao') == 0,
+      calc(bia)['por_chave']['recuperacao']['resumo'])
 
     # Fiscal: PDV que casa com a loja ("ZZ GUARDIAO <sufixo>"); 4 do mês: 1 saiu do SAP, 1 resolvida, 2 abertas
     pdv = f'ZZ GUARDIAO {sufixo}'
@@ -298,15 +315,19 @@ def rodar():
         c_bia.force_login(bia)
         c_gil.force_login(gil)
         c_zeca.force_login(zeca)
-        for aba in ('', 'missoes/', 'lvut/', 'agenda/', 'destaque/', 'codigo/'):
+        for aba in ('', 'missoes/', 'lvut/', 'agenda/', 'destaque/'):
             resp = c_ana.get(f'/rotina-adm/guardiao/{aba}')
             t(f'aba {aba or "visão geral"} abre (200)', resp.status_code == 200, resp.status_code)
+        resp = c_ana.get('/rotina-adm/guardiao/codigo/?mes=2026-10')
+        t('Código de Conquista saiu: o link antigo vai para a visão geral', resp.status_code == 302
+          and resp['Location'] == '/rotina-adm/guardiao/?mes=2026-10', resp.get('Location'))
         resp = c_ana.get('/rotina-adm/guardiao/?mes=2026-10')
         html = resp.content.decode()
         t('visão geral mostra o título e o ciclo', 'Missão Guardião' in html and 'Ciclo 10/2026' in html)
         t('visão geral mostra "Como a nota foi formada"', 'Como a nota foi formada' in html and 'Renova — Conformidade SAP' in html)
         t('visão geral mostra o total formatado', f'{r["total_txt"]}%' in html, r['total_txt'])
         t('menu da Rotina ADM tem a aba Missão Guardião', 'Missão Guardião</a>' in html)
+        t('a aba Código de Conquista não aparece mais', 'Código de Conquista' not in html and '/guardiao/codigo/' not in html)
         resp = c_zeca.get('/rotina-adm/guardiao/')
         t('sem acesso volta para a home', resp.status_code == 302 and '/rotina-adm/' not in resp['Location'])
         resp = c_ana.get(f'/rotina-adm/guardiao/?pessoa={bia.id}&mes=2026-10')
@@ -330,11 +351,20 @@ def rodar():
             loja=outra, missao='ESTOQUE_TOTAL', competencia=hoje.replace(day=1)).exists())
 
         # Contagem e regularização pela tela
-        resp = c_bia.post('/rotina-adm/guardiao/contagem/', {'categoria': 'SIMCARD', 'divergencias': '2'})
+        c_bia.post('/rotina-adm/guardiao/contagem/', {'categoria': 'SIMCARD', 'divergencias': '2'})
+        t('contagem sem itens contados é recusada', not ContagemEstoque.objects.filter(loja=outra, data=hoje).exists())
+        c_bia.post('/rotina-adm/guardiao/contagem/', {'categoria': 'SIMCARD', 'itens_contados': '3', 'divergencias': '5'})
+        t('divergências acima do contado são recusadas', not ContagemEstoque.objects.filter(loja=outra, data=hoje).exists())
+        t('antes da contagem a recuperação do mês está nos 10', guardiao.calcular(bia)['por_chave']['recuperacao']['pontos'] == 10)
+        resp = c_bia.post('/rotina-adm/guardiao/contagem/', {'categoria': 'SIMCARD', 'itens_contados': '40',
+                                                             'divergencias': '2'})
         cont = ContagemEstoque.objects.filter(loja=outra, data=hoje, categoria='SIMCARD').first()
-        t('contagem com divergência registrada', cont and cont.divergencias == 2)
+        t('contagem com divergência registrada com os itens contados', cont and cont.divergencias == 2
+          and cont.itens_contados == 40)
         r_b = guardiao.calcular(bia)
         t('contagem com divergência fica bloqueada no mês aberto', r_b['por_chave']['lvut']['bloqueadas'] == 1)
+        t('divergência em aberto tira pontos da recuperação (10 × 38/40 = 9,5)',
+          r_b['por_chave']['recuperacao']['pontos'] == 9.5, r_b['por_chave']['recuperacao']['pontos'])
         resp = c_ana.post(f'/rotina-adm/guardiao/contagem/{cont.id}/regularizar/', {'regularizacao': 'x'})
         cont.refresh_from_db()
         t('outra loja não regulariza', cont.regularizada_em is None)
@@ -348,6 +378,7 @@ def rodar():
         r_b = guardiao.calcular(bia)
         t('regularizada vira conquista recuperada', r_b['por_chave']['lvut']['bloqueadas'] == 0
           and r_b['por_chave']['lvut']['conquistadas'] >= 1)
+        t('regularizar devolve os pontos da recuperação (volta a 10)', r_b['por_chave']['recuperacao']['pontos'] == 10)
 
         # Missão manual: incluir, mover, outra pessoa não mexe, excluir
         resp = c_bia.post('/rotina-adm/guardiao/missao/', {'acao': 'nova', 'titulo': 'Zz conferir equipamentos',
