@@ -23,18 +23,41 @@
         {% else %}<i class="fas fa-circle-info text-amber-500 mr-1"></i>Marque os quatro itens depois de feitos lá fora, finalize, envie a orientação e confirme o envio.{% endif %}
         <span class="float-right text-[11px] text-gray-400">mais antigos primeiro</span>
     </div>
+    <style>
+        /* Dados do colaborador no card (27/11/2026): tokens do módulo, o tema escuro troca os valores. */
+        .ac-dados > summary { padding:2px 0; }
+        .ac-dados .ac-dados-seta { font-size:9px; transition:transform .15s; transform:rotate(-90deg); }
+        .ac-dados[open] .ac-dados-seta { transform:none; }
+        .ac-dados-grade { display:grid; grid-template-columns:repeat(auto-fill, minmax(11.5rem, 1fr)); gap:6px 14px; margin:6px 0 0;
+            padding:10px 12px; border:1px solid var(--ac-borda); border-radius:10px; background:var(--ac-sup-2); }
+        .ac-dados-grade > div { min-width:0; }
+        .ac-dados-grade .ac-dados-largo { grid-column:1 / -1; }
+        .ac-dados-grade dt { font-size:9.5px; font-weight:700; letter-spacing:.03em; color:var(--ac-th); text-transform:uppercase; }
+        .ac-dados-grade dd { margin:0; font-size:12.5px; color:var(--ac-campo-txt); overflow-wrap:anywhere; line-height:1.35; }
+        .ac-dados-grade dd.vazio { color:var(--ac-placeholder); }
+        @media (max-width:640px) { .ac-card-corpo { flex-basis:100%; } }
+        @media (max-width:420px) { .ac-dados-grade { grid-template-columns:repeat(2, minmax(0, 1fr)); padding:8px 10px; } }
+    </style>
     <ul class="divide-y divide-gray-100">
     {% for c in linhas %}
     <li class="px-4 py-3">
         <div class="flex items-start gap-3 flex-wrap">
-            <div class="min-w-0 flex-1">
+            <div class="min-w-0 flex-1 ac-card-corpo">
                 <a href="{% url 'acess:ficha' c.id %}" class="font-semibold text-gray-900 hover:text-amber-700">{{ c.nome }}</a>
                 <span class="text-[11px] text-gray-500">{{ c.cargo|default:"Cargo não informado" }}</span>
                 {% if c.admissao_futura %}<p class="text-[11px] font-semibold text-indigo-700"><i class="fas fa-calendar-day mr-1"></i>{% if etapa == 1 %}Criar no GEFAC em {{ c.admissao_futura|date:"d/m/Y" }}{% else %}Admissão em {{ c.admissao_futura|date:"d/m/Y" }}{% endif %} <span class="font-normal text-indigo-500">(admissão daqui a {{ c.dias_ate_admissao }} dia{{ c.dias_ate_admissao|pluralize }})</span></p>{% endif %}
                 <p class="text-[11px] text-gray-600">ADABAS <strong class="tabular">{{ c.unidade_adabas|default:"não informado" }}</strong>{% if c.login %} · login <strong class="tabular">{{ c.login }}</strong>{% endif %} ·
                     <span class="{% if c.dias_na_etapa >= 7 %}text-red-600 font-semibold{% elif c.dias_na_etapa >= 3 %}text-amber-700 font-semibold{% endif %}">há {{ c.dias_na_etapa }} dia(s) na etapa</span></p>
-                <details class="ac-det text-[11px] text-gray-500 mt-0.5"><summary class="text-amber-700">Detalhes do usuário</summary>
-                    <p>CPF {{ c.cpf_formatado|default:"—" }} · {{ c.email|default:"sem e-mail" }} · {{ c.local.name|default:"sem local" }}{% if c.loja_vinculo %} · vínculo {{ c.loja_vinculo.name }}{% endif %}</p></details>
+                <details class="ac-det ac-dados mt-1.5" open data-dados-card>
+                    <summary class="flex items-center gap-2 text-[11px] font-semibold text-amber-700"><i class="fas fa-chevron-down ac-dados-seta"></i>Dados do colaborador
+                        <button type="button" class="ac-btn ac-btn-claro ac-btn-mini ml-auto" data-copiar="{{ c.texto_card }}" title="Copiar os dados nesta ordem" data-copiar-card><i class="far fa-copy"></i>Copiar dados</button></summary>
+                    <dl class="ac-dados-grade">
+                        {% for rotulo, valor in c.dados_card %}
+                        <div{% if rotulo == 'ENDEREÇO COMPLETO' %} class="ac-dados-largo"{% endif %}><dt>{{ rotulo }}</dt><dd{% if not valor %} class="vazio"{% endif %}>{{ valor|default:"—" }}</dd></div>
+                        {% endfor %}
+                    </dl>
+                    {% if c.local and c.loja_vinculo and c.loja_vinculo != c.local %}<p class="text-[11px] text-gray-500 mt-1">Local na ficha: {{ c.local.name }} · vínculo {{ c.loja_vinculo.name }}</p>{% endif %}
+                </details>
                 {% if etapa == 1 %}
                 <div class="mt-1.5 flex items-center gap-2 flex-wrap text-[11px]" data-xml-gefac>
                     <span class="font-semibold text-gray-500 uppercase">XML do perfil GEFAC</span>

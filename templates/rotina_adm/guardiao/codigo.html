@@ -22,6 +22,7 @@
         {% for minimo, nome, classe, icone in niveis %}
         <div><span class="mg-nivel {{ classe }}" style="margin:0"><i class="fas {{ icone }}"></i>Nível {{ forloop.counter|stringformat:'02d' }}</span><b>{{ nome }}</b>{% if forloop.last %}100 pontos no ciclo{% else %}A partir de {{ minimo }} pontos{% endif %}</div>
         {% endfor %}
+    </div>
 </section>
 
 <section class="mg-card mg-card-pad" data-rc-revela style="margin-bottom:14px">

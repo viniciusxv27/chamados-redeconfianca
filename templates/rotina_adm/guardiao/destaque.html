@@ -1,37 +1,85 @@
 {% extends 'rotina_adm/guardiao/_base.html' %}
 {% block mg_conteudo %}
-<section class="mg-card rc-sobe" style="margin-bottom:14px">
+{% comment %}Guardiões em Destaque (27/11/2026): pódio + card "Faixas" (as faixas do Código de Conquista, guardiao.faixas)
+lado a lado; embaixo, a classificação em barras por pilar, com a pessoa escolhida em destaque.{% endcomment %}
+<div class="mg-destaque-topo">
+<section class="mg-card rc-sobe" data-destaque-podio>
     <div class="mg-card-cab"><h2><i class="fas fa-trophy" style="color:#d4a017"></i>Guardiões em Destaque · {{ mes_extenso }}</h2>{% if aberto %}<span style="font-size:12px;color:var(--mg-texto-3)">Parcial: pontos até hoje</span>{% endif %}</div>
     {% if podio %}
     <div class="mg-podio">
         {% for ordem in '213' %}{% for l in podio %}{% if forloop.counter|stringformat:'s' == ordem %}
-        <div class="mg-degrau p{{ ordem }}">
+        <div class="mg-degrau p{{ ordem }}{% if l.pessoa.id == pessoa.id %} eu{% endif %}">
             {% if ordem == '1' %}<i class="fas fa-crown" style="color:#d4a017;font-size:20px;margin-bottom:6px"></i>{% else %}<i class="fas fa-medal" style="color:var(--c);font-size:18px;margin-bottom:6px"></i>{% endif %}
             <div class="av">{% if l.pessoa.profile_picture %}<img src="{{ l.pessoa.profile_picture.url }}" alt="">{% else %}{{ l.nome|slice:':1'|upper }}{% endif %}</div>
             <div class="nome">{{ l.nome }}</div><div class="loja">{{ l.loja }}</div>
-            <div class="base"><b>{{ ordem }}º</b><span style="font-weight:700">{{ l.total_txt }} pts</span></div>
+            {% if l.pessoa.id == pessoa.id %}<span class="mg-voce">{% if proprio %}Você{% else %}Em foco{% endif %}</span>{% endif %}
+            <div class="base"><b>{{ ordem }}º</b><span style="font-weight:700">{{ l.total_txt }} pts</span><small class="mg-degrau-nivel">{{ l.nivel.nome }}</small></div>
         </div>
         {% endif %}{% endfor %}{% endfor %}
     </div>
-    <p style="text-align:center;font-size:12px;color:var(--mg-texto-3);margin:0 0 16px">Guardião do Mês · reconhecimento de quem transforma responsabilidade em excelência.</p>
+    <p style="text-align:center;font-size:12px;color:var(--mg-texto-3);margin:0 12px 16px">Guardião do Mês · reconhecimento de quem transforma responsabilidade em excelência.</p>
     {% else %}
     <div class="mg-vazio">Ainda ninguém pontuou neste ciclo.</div>
     {% endif %}
 </section>
 
-<section class="mg-card" data-rc-revela>
-    <div class="mg-card-cab"><h2><i class="fas fa-list-ol"></i>Todos os Guardiões</h2><span style="font-size:12px;color:var(--mg-texto-3)">{{ ranking|length }} participante{{ ranking|length|pluralize }}</span></div>
-    {% if ranking %}
-    <ul class="mg-lista mg-rank">
-        {% for l in ranking %}
-        <li class="{% if l.pessoa.id == pessoa.id %}eu{% endif %}">
+<section class="mg-card mg-faixas rc-sobe" data-faixas>
+    <div class="mg-card-cab"><h2><i class="fas fa-bars"></i>Faixas</h2><a class="mg-link" style="font-size:12px" href="{% url 'rotina_adm:guardiao_codigo' %}{% if q %}?{{ q }}{% endif %}">Código de Conquista <i class="fas fa-chevron-right" style="font-size:9px"></i></a></div>
+    <div class="mg-faixa-atual mg-nivel-cor {{ faixas.atual.classe }}">
+        <span class="ic"><i class="fas {{ faixas.atual.icone }}"></i></span>
+        <div style="min-width:0">
+            <small>{% if proprio %}Sua faixa{% else %}Faixa de {{ pessoa.first_name|default:pessoa.username }}{% endif %} · Nível {{ faixas.atual.numero|stringformat:'02d' }}</small>
+            <b>{{ faixas.atual.nome }}</b>
+            <span class="pts"><strong data-faixa-total>{{ faixas.total_txt }}</strong> de 100 pts{% if minha_linha %} · {{ minha_linha.posicao }}º de {{ ranking|length }}{% endif %}</span>
+        </div>
+    </div>
+    <div class="mg-faixa-progresso">
+        <div class="mg-trilho"><i style="--w:{{ faixas.pct_na_faixa|stringformat:'.1f' }}%"></i></div>
+        <p data-faixa-falta>{% if faixas.proxima %}Faltam <b>{{ faixas.falta_txt }} pts</b> para <b>{{ faixas.proxima.nome }}</b>{% else %}<i class="fas fa-star" style="color:var(--mg-roxo)"></i> Faixa máxima: Missão de Excelência{% endif %}</p>
+    </div>
+    <ol class="mg-faixas-lista">
+        {% for f in faixas.lista reversed %}
+        <li class="{{ f.estado }} mg-nivel-cor {{ f.classe }}" data-faixa="{{ f.estado }}">
+            <span class="ic"><i class="fas {% if f.estado == 'futura' %}fa-lock{% else %}{{ f.icone }}{% endif %}"></i></span>
+            <span class="txt"><small>Nível {{ f.numero|stringformat:'02d' }}</small><b>{{ f.nome }}</b></span>
+            <span class="faixa-pts">{% if f.ultima %}100 pts{% elif f.minimo == 0 %}até {{ f.ate }} pts{% else %}{{ f.minimo }}–{{ f.ate }} pts{% endif %}</span>
+            <span class="estado">{% if f.estado == 'atual' %}<span class="mg-voce">{% if proprio %}Você está aqui{% else %}Está aqui{% endif %}</span>{% elif f.estado == 'alcancada' %}<i class="fas fa-check-circle"></i> Alcançada{% endif %}</span>
+        </li>
+        {% endfor %}
+    </ol>
+</section>
+</div>
+
+<section class="mg-card" data-rc-revela data-classificacao>
+    <div class="mg-card-cab mg-rank-cab">
+        <h2><i class="fas fa-chart-bar"></i>{% if podio %}Demais Guardiões{% else %}Todos os Guardiões{% endif %}</h2>
+        <span class="mg-legenda">{% for chave, nome, maximo, lema in pilares_def %}<span class="{{ chave }}"><i></i>{{ nome }} <small>{{ maximo }}</small></span>{% endfor %}</span>
+        <span style="font-size:12px;color:var(--mg-texto-3)">{{ ranking|length }} participante{{ ranking|length|pluralize }}</span>
+    </div>
+    {% if demais %}
+    <ul class="mg-classif">
+        {% for l in demais %}
+        <li class="{% if l.pessoa.id == pessoa.id %}eu{% endif %}"{% if l.pessoa.id == pessoa.id %} data-eu{% endif %}>
             <span class="pos">{{ l.posicao }}º</span>
-            <span style="min-width:0"><b style="font-size:13.5px;overflow-wrap:anywhere">{{ l.nome }}</b><span class="meta"><span>{{ l.loja }}</span><span class="mg-nivel {{ l.nivel.classe }}">{{ l.nivel.nome }}</span></span></span>
-            <span class="mini">{% for p in l.pilares %}<span class="{{ p.chave }}" title="{{ p.chave }} {{ p.pontos_txt }}/{{ p.maximo }}"><span class="mg-trilho"><i style="--w:{{ p.pct|stringformat:'.1f' }}%"></i></span></span>{% endfor %}</span>
-            <span style="text-align:right;font-weight:800;color:var(--mg-texto);font-size:14px">{{ l.total_txt }}</span>
+            <div class="corpo">
+                <div class="linha1">
+                    <b class="nome">{{ l.nome }}</b>
+                    {% if l.pessoa.id == pessoa.id %}<span class="mg-voce">{% if proprio %}Você{% else %}Em foco{% endif %}</span>{% endif %}
+                    <span class="meta">{{ l.loja }}</span>
+                    <span class="mg-nivel {{ l.nivel.classe }}">{{ l.nivel.nome }}</span>
+                </div>
+                <div class="mg-barra-pilares" role="img" aria-label="{{ l.total_txt }} de 100 pontos">
+                    {% for p in l.pilares %}<i class="{{ p.chave }}" style="width:{{ p.w|stringformat:'.2f' }}%" title="{{ p.chave|capfirst }}: {{ p.pontos_txt }} de {{ p.maximo }}"></i>{% endfor %}
+                    {% for m in marcos %}<span class="marco" style="left:{{ m }}%" aria-hidden="true"></span>{% endfor %}
+                </div>
+            </div>
+            <span class="pts"><b>{{ l.total_txt }}</b><small>{% if l.atras_do_lider != '0' %}−{{ l.atras_do_lider }} do 1º{% else %}pts{% endif %}</small></span>
         </li>
         {% endfor %}
     </ul>
+    <p class="mg-classif-rodape">Barra de 0 a 100 pontos, dividida por pilar. As marcas mostram onde começam as faixas ({% for m in marcos %}{{ m }}{% if not forloop.last %}, {% endif %}{% endfor %} pts).</p>
+    {% elif ranking %}
+    <div class="mg-vazio">Todos os Guardiões deste ciclo estão no pódio.</div>
     {% else %}
     <div class="mg-vazio">Nenhum Guardião ainda: o ranking mostra quem tem a Rotina ADM liberada e é de loja.{% if superadmin %} Libere em <a class="mg-link" href="{% url 'rotina_adm:acessos' %}">Acessos</a>.{% endif %}</div>
     {% endif %}

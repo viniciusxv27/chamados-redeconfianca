@@ -4,11 +4,10 @@
 {% block extra_css %}<link rel="stylesheet" href="{% static 'rotina_adm/rotina_adm.css' %}?v=6">{% endblock %}
 {% block content %}
 <div class="ra">
-    {% comment %}Abas: Gestor/SUPERADMIN veem todas; o analista (Visualizador) vê a central e o ranking (24/11/2026).{% endcomment %}
+    {% comment %}Abas: Gestor/SUPERADMIN veem todas; o analista (Visualizador) vê a central e a Missão Guardião (o ranking antigo saiu em 27/11/2026).{% endcomment %}
     <nav class="ra-abas">
         <a href="{% url 'rotina_adm:painel' %}{% if gestor and loja %}?loja={{ loja.id }}{% endif %}" class="{% if aba == 'painel' %}ativa{% endif %}"><i class="fas fa-gauge-high mr-1"></i>Central da loja</a>
         {% if gestor %}<a href="{% url 'rotina_adm:checklist_editar' %}{% if loja %}?loja={{ loja.id }}{% endif %}" class="{% if aba == 'checklist' %}ativa{% endif %}"><i class="fas fa-list-check mr-1"></i>Check-list das lojas</a>{% endif %}
-        <a href="{% url 'rotina_adm:ranking' %}" class="{% if aba == 'ranking' %}ativa{% endif %}"><i class="fas fa-trophy mr-1"></i>Ranking dos analistas</a>
         <a href="{% url 'rotina_adm:guardiao' %}" class="{% if aba == 'guardiao' %}ativa{% endif %}"><i class="fas fa-shield-alt mr-1"></i>Missão Guardião</a>
         {% if superadmin %}<a href="{% url 'rotina_adm:acessos' %}" class="{% if aba == 'acessos' %}ativa{% endif %}"><i class="fas fa-user-shield mr-1"></i>Acessos</a>{% endif %}
     </nav>

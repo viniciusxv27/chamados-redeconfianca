@@ -360,10 +360,13 @@ def pendentes(request):
         # O XML do pedido do perfil GEFAC: o mais novo de cada pessoa, numa consulta só.
         for x in XmlGefac.objects.filter(colaborador_id__in=[c.id for c in linhas]).select_related('enviado_por'):
             xmls.setdefault(x.colaborador_id, x)
-    admissoes = dict(User.objects.filter(id__in=[c.user_id for c in linhas if c.user_id])
-                     .values_list('id', 'admission_date'))
+    usuarios = {u.id: u for u in User.objects.filter(id__in=[c.user_id for c in linhas if c.user_id])
+                .select_related('sector')}
     for c in linhas:
-        admissao = admissoes.get(c.user_id)
+        u = usuarios.get(c.user_id)
+        admissao = u.admission_date if u else None
+        c.dados_card = sv.dados_do_card(c, u)
+        c.texto_card = sv.texto_do_card(c.dados_card)
         c.admissao_futura = admissao if admissao and admissao > hoje else None
         c.dias_ate_admissao = (admissao - hoje).days if c.admissao_futura else None
         c.chamado_lib = sv.chamado_de_liberacao(c) if etapa == 4 else None
@@ -711,6 +714,13 @@ def historico(request):
 def desligamentos(request):
     hoje = timezone.localdate()
     base = Colaborador.objects.select_related('local')
+    inativados = list(AvisoInativacao.objects.filter(status=AvisoInativacao.PENDENTE)
+                      .select_related('colaborador', 'colaborador__local', 'colaborador__user', 'user')
+                      .order_by('inativado_em'))
+    for a in inativados:
+        # A ficha pode não ter usuário (legado achado pelo CPF) e o aviso perde o dele se o usuário for apagado:
+        # a data de demissão sai daqui, sem o template seguir FK nula (VariableDoesNotExist em 27/11/2026).
+        a.data_demissao = next((u.demission_date for u in (a.user, a.colaborador.user) if u and u.demission_date), None)
     return render(request, 'acess/desligamentos.html', _ctx(
         request, 'desligamentos', hoje=hoje,
         pendentes_execucao=list(base.filter(status=Colaborador.ATIVO, desligamento_em__lte=hoje).order_by('desligamento_em')),
@@ -718,9 +728,7 @@ def desligamentos(request):
         arquivados=list(base.filter(status=Colaborador.DESLIGADO).order_by('-desligado_em')[:200]),
         pedidos=list(PedidoDesligamento.objects.filter(status=PedidoDesligamento.ABERTO)
                      .select_related('colaborador', 'colaborador__local', 'solicitante').order_by('criado_em')),
-        inativados=list(AvisoInativacao.objects.filter(status=AvisoInativacao.PENDENTE)
-                        .select_related('colaborador', 'colaborador__local', 'colaborador__user', 'user')
-                        .order_by('inativado_em')),
+        inativados=inativados,
         ativos=base.filter(status=Colaborador.ATIVO, desligamento_em__isnull=True).order_by('nome')))
 
 
@@ -847,10 +855,20 @@ def pedir_desligamento(request):
     if request.method == 'POST':
         c = get_object_or_404(Colaborador, pk=request.POST.get('colaborador') or 0)
         try:
-            sv.criar_pedido_desligamento(c, request.POST.get('tipo'), parse_date(request.POST.get('saida') or ''),
-                                         parse_date(request.POST.get('execucao') or ''), request.POST.get('observacao'),
-                                         request.user, request)
+            pedido = sv.criar_pedido_desligamento(c, request.POST.get('tipo'), parse_date(request.POST.get('saida') or ''),
+                                                  parse_date(request.POST.get('execucao') or ''),
+                                                  request.POST.get('observacao'), request.user, request)
             messages.success(request, f'Pedido de {c.nome} enviado ao time de Acessos.')
+            ina = getattr(pedido, 'inativacao', None) or {}
+            if ina.get('situacao') == 'inativado':
+                messages.success(request, f'O perfil de {c.nome} no portal foi inativado e a data de demissão ficou '
+                                          f'{ina["data"]:%d/%m/%Y}.')
+            elif ina.get('situacao') == 'ja_inativo':
+                messages.info(request, f'O perfil de {c.nome} no portal já estava inativo (demissão {ina["data"]:%d/%m/%Y}).')
+            elif ina.get('situacao') == 'proprio':
+                messages.warning(request, 'O pedido é para o seu próprio usuário: o perfil não foi inativado por aqui.')
+            else:
+                messages.warning(request, f'{c.nome} não tem usuário no portal ligado à ficha: nenhum perfil foi inativado.')
         except (sv.RegraAcess, ValueError) as exc:
             messages.error(request, str(exc))
         return redirect('acess:pedir_desligamento')

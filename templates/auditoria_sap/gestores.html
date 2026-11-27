@@ -104,16 +104,29 @@
 <script>
 (function () {
     // Cada lista (acessos e gestores) tem o seu filtro e a sua contagem.
+    // O label tem a classe "flex", que vence o atributo hidden: por isso esconder é por style.display.
+    // Busca sem acento e sem diferença de maiúscula ("joao" acha "João").
+    function normalizar(t) {
+        return (t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    }
     document.querySelectorAll('[data-sap-lista]').forEach(function (form) {
         var filtro = form.querySelector('[data-sap-filtro]');
         var contagem = form.querySelector('[data-sap-contagem]');
         var sufixo = form.dataset.sapLista === 'gestores' ? ' marcado(s)' : ' liberado(s)';
-        filtro.addEventListener('input', function () {
-            var termo = filtro.value.trim().toLowerCase();
-            form.querySelectorAll('[data-nome]').forEach(function (l) {
-                l.hidden = termo && l.dataset.nome.indexOf(termo) === -1;
-            });
+        var linhas = Array.prototype.map.call(form.querySelectorAll('[data-nome]'), function (l) {
+            return {el: l, nome: normalizar(l.dataset.nome)};
         });
+        function filtrar() {
+            var termos = normalizar(filtro.value).trim().split(/\s+/).filter(Boolean);
+            linhas.forEach(function (l) {
+                var bate = termos.every(function (t) { return l.nome.indexOf(t) !== -1; });
+                l.el.style.display = bate ? '' : 'none';
+            });
+        }
+        filtro.addEventListener('input', filtrar);
+        filtro.addEventListener('search', filtrar);
+        // Enter no filtro não envia o formulário (salvaria a lista sem querer).
+        filtro.addEventListener('keydown', function (e) { if (e.key === 'Enter') e.preventDefault(); });
         form.querySelectorAll('input[type=checkbox]').forEach(function (c) {
             c.addEventListener('change', function () {
                 contagem.textContent = form.querySelectorAll('input[type=checkbox]:checked').length + sufixo;

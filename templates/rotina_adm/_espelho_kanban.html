@@ -36,9 +36,9 @@ Um cartão por pessoa, loja e dia, com os itens que aquela pessoa marcou.
         </div>
         {% endfor %}
         {% if espelho_rotina_adm.restantes %}
-        <p class="text-[11px] text-gray-500 px-1">+{{ espelho_rotina_adm.restantes }} dia{{ espelho_rotina_adm.restantes|pluralize }} mais antigo{{ espelho_rotina_adm.restantes|pluralize }}{% if espelho_rotina_adm.ve_ranking %} — veja o <a class="text-emerald-700 font-semibold hover:underline" href="{% url 'rotina_adm:ranking' %}">ranking da Rotina ADM</a>{% endif %}.</p>
+        <p class="text-[11px] text-gray-500 px-1">+{{ espelho_rotina_adm.restantes }} dia{{ espelho_rotina_adm.restantes|pluralize }} mais antigo{{ espelho_rotina_adm.restantes|pluralize }}{% if espelho_rotina_adm.ve_ranking %} — veja os <a class="text-emerald-700 font-semibold hover:underline" href="{% url 'rotina_adm:guardiao_destaque' %}">Guardiões em Destaque</a>{% endif %}.</p>
         {% elif espelho_rotina_adm.ve_ranking %}
-        <p class="text-[11px] px-1"><a class="text-emerald-700 font-semibold hover:underline" href="{% url 'rotina_adm:ranking' %}"><i class="fas fa-trophy mr-1"></i>Ranking dos analistas</a></p>
+        <p class="text-[11px] px-1"><a class="text-emerald-700 font-semibold hover:underline" href="{% url 'rotina_adm:guardiao_destaque' %}"><i class="fas fa-trophy mr-1"></i>Guardiões em Destaque</a></p>
         {% endif %}
     </div>
 </details>

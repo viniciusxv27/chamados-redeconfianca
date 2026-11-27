@@ -21,14 +21,7 @@
                 {% else %}<strong>{{ loja.name|default:"Sem loja" }}</strong>{% endif %}
             </div>
         </div>
-        {% if meus_pontos %}
-        <a class="ra-meus-pontos {{ meus_pontos.nivel.classe }}" href="{% url 'rotina_adm:ranking' %}" title="Seus pontos no ranking do mês" data-meus-pontos>
-            <i class="fas {{ meus_pontos.nivel.icone }}"></i>
-            <span><b data-total>{{ meus_pontos.total }}</b> pts<small>{{ meus_pontos.posicao }}º de {{ meus_pontos.participantes }} · {{ meus_pontos.nivel.nome }}</small></span>
-        </a>
-        {% else %}
-        <a class="ra-botao" href="{% url 'rotina_adm:ranking' %}"><i class="fas fa-trophy"></i>Ranking</a>
-        {% endif %}
+        <a class="ra-botao" href="{% url 'rotina_adm:guardiao' %}"><i class="fas fa-shield-alt"></i>Missão Guardião</a>
         {% if gestor %}<a class="ra-botao" href="{% url 'rotina_adm:checklist_editar' %}{% if loja %}?loja={{ loja.id }}{% endif %}"><i class="fas fa-list-check"></i>Montar check-list</a>{% endif %}
     </div>
 </header>
@@ -56,7 +49,6 @@
                 {% if fiscal.pdv and user|tem_acesso:'sap' %}<a class="ra-link" href="{% url 'auditoria_sap:lista' %}?grupo=sem_nf&mes=todos&loja={{ fiscal.pdv|urlencode }}">Ver na Visão SAP <i class="fas fa-chevron-right text-[10px]"></i></a>{% endif %}</div>
             <p class="ra-numero">{% if fiscal.disponivel %}{{ fiscal.total }}{% else %}—{% endif %}</p>
             <p class="ra-sub">{% if not fiscal.disponivel %}Visão SAP indisponível agora{% elif not fiscal.pdvs %}loja sem linhas na Visão SAP{% else %}venda{{ fiscal.total|pluralize }} sem NF em aberto · <b>{{ fiscal.mes }}</b> neste mês{% endif %}</p>
-            {% if fiscal.total %}<p class="ra-ganha"><i class="fas fa-star"></i>+10 pts por venda que você resolver</p>{% endif %}
         </div>
     </article>
     <article class="ra-card ra-kpi verde">
@@ -65,7 +57,6 @@
             <div class="ra-kpi-cabeca"><h3>Check-list de hoje</h3><a class="ra-link" href="#raChecklist">Ir para a lista <i class="fas fa-chevron-down text-[10px]"></i></a></div>
             <p class="ra-numero">{{ checklist_feitos }}<span style="font-size:20px;color:var(--ra-texto-3)">/{{ checklist|length }}</span></p>
             <p class="ra-sub">{% if not checklist %}nenhum item montado para a loja{% elif checklist_feitos == checklist|length %}tudo feito hoje 🎉{% else %}ite{{ checklist|length|pluralize:"m,ns" }} concluído{{ checklist|length|pluralize }}{% endif %}</p>
-            {% if checklist %}<p class="ra-ganha"><i class="fas fa-star"></i>+2 pts por item no prazo · +3 no dia 100%</p>{% endif %}
         </div>
     </article>
 </section>
@@ -112,13 +103,12 @@ Compacto desde 12/11/2026: só os números; as listas recentes abrem no "Ver det
     </article>
 </section>
 
-{% comment %}Contagem de estoque LVUT (24/11/2026): a loja registra a contagem de cada categoria; cada categoria
-contada na semana vale pontos no ranking (uma vez por categoria e semana).{% endcomment %}
+{% comment %}Contagem de estoque LVUT (24/11/2026): a loja registra a contagem de cada categoria (a pontuação
+é a da Missão Guardião; o ranking antigo saiu em 27/11/2026).{% endcomment %}
 <section class="ra-card ra-secao" id="raEstoque">
     <div class="ra-secao-cabeca">
         <div class="ra-secao-titulo"><span class="ic" style="background:var(--ra-roxo-claro);color:var(--ra-roxo)"><i class="fas fa-cubes"></i></span>
             <div><h2>Contagem de Estoque LVUT</h2><p>Conte cada categoria uma vez por semana e registre aqui. Dúvida? Peça um help no grupo dos ADMs.</p></div></div>
-        <span class="ra-selo roxo"><i class="fas fa-star"></i>+{{ pontos_estoque }} pts por categoria na semana</span>
     </div>
     <div class="ra-lvut">
         {% for c in estoque %}
@@ -256,7 +246,6 @@ contada na semana vale pontos no ranking (uma vez por categoria e semana).{% end
                 <input class="ra-campo" type="number" name="divergencias" min="0" max="100000" value="0" required inputmode="numeric"></label>
             <label class="ra-rotulo">Observação (opcional)
                 <textarea class="ra-campo" name="observacao" rows="3" maxlength="2000" placeholder="Ex.: 2 películas faltando, já avisei o gerente"></textarea></label>
-            <p class="ra-nota"><i class="fas fa-star"></i> A primeira contagem da categoria na semana vale +{{ pontos_estoque }} pts.</p>
         </div>
         <p class="ra-modal-rodape"><button type="button" class="ra-botao" data-fechar>Cancelar</button>
             <button type="submit" class="ra-botao primario"><i class="fas fa-check"></i>Registrar</button></p>
@@ -359,20 +348,6 @@ contada na semana vale pontos no ranking (uma vez por categoria e semana).{% end
     const lista = document.querySelector('.ra-check');
     if (!lista) return;
     const csrf = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
-    // Gamificação (24/11/2026): o "+2 pts" pula do item e o contador do topo sobe.
-    function ganhou(li, pontos, dia100) {
-        const bolha = document.createElement('span');
-        bolha.className = 'ra-mais-pontos' + (dia100 ? ' dia100' : '');
-        bolha.textContent = '+' + pontos + ' pts' + (dia100 ? ' · dia 100%! 🎉' : '');
-        li.appendChild(bolha);
-        setTimeout(function () { bolha.remove(); }, 1800);
-        const total = document.querySelector('[data-meus-pontos] [data-total]');
-        if (total) {
-            total.textContent = Number(total.textContent) + pontos;
-            const chip = total.closest('[data-meus-pontos]');
-            chip.classList.remove('pulou'); void chip.offsetWidth; chip.classList.add('pulou');
-        }
-    }
     const url = '{% url "rotina_adm:checklist_marcar" 0 %}';
     function atualizar() {
         const total = Number(lista.dataset.total), feitos = lista.querySelectorAll('li.feito').length;
@@ -395,8 +370,7 @@ contada na semana vale pontos no ranking (uma vez por categoria e semana).{% end
         b.disabled = false;
         if (!j.ok) { li.classList.toggle('feito', !feito); atualizar(); alert(j.erro || 'Não deu para salvar.'); return; }
         const estado = li.querySelector('.estado'), quem = li.querySelector('.quem');
-        if (j.feito) { estado.className = 'ra-selo verde estado'; estado.textContent = 'Feito'; quem.textContent = 'feito às ' + j.hora + (j.quem ? ' por ' + j.quem : '');
-            if (j.pontos) ganhou(li, j.pontos, j.dia_100); }
+        if (j.feito) { estado.className = 'ra-selo verde estado'; estado.textContent = 'Feito'; quem.textContent = 'feito às ' + j.hora + (j.quem ? ' por ' + j.quem : ''); }
         else { estado.className = 'ra-selo amarelo estado'; estado.textContent = 'Pendente'; quem.textContent = ''; }
     });
 })();

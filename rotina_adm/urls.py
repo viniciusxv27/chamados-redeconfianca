@@ -1,4 +1,5 @@
 from django.urls import path
+from django.views.generic import RedirectView
 
 from . import views, views_guardiao as vg
 
@@ -8,7 +9,8 @@ urlpatterns = [
     path('', views.painel, name='painel'),
     path('checklist/', views.checklist_editar, name='checklist_editar'),
     path('checklist/<int:item_id>/marcar/', views.checklist_marcar, name='checklist_marcar'),
-    path('ranking/', views.ranking_analistas, name='ranking'),
+    # O ranking antigo dos analistas saiu em 27/11/2026: a Missão Guardião é o ranking. A URL velha leva para lá.
+    path('ranking/', RedirectView.as_view(pattern_name='rotina_adm:guardiao_destaque', query_string=True)),
     path('estoque/registrar/', views.estoque_registrar, name='estoque_registrar'),
     path('acessos/', views.acessos, name='acessos'),
     # Missão Guardião (26/11/2026)

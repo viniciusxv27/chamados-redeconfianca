@@ -110,6 +110,16 @@ def guardiao_tela(request, aba='visao'):
         contexto['ranking'] = rk['linhas']
         contexto['podio'] = [l for l in rk['linhas'][:3] if l['total'] > 0]
         contexto['minha_linha'] = next((l for l in rk['linhas'] if l['pessoa'].id == pessoa.id), None)
+        # Embaixo do pódio, as barras dos demais (com a pessoa em destaque); ao lado, as faixas do Código de Conquista.
+        contexto['demais'] = rk['linhas'][len(contexto['podio']):]
+        contexto['faixas'] = guardiao.faixas(dados['total'])
+        contexto['marcos'] = [n[0] for n in guardiao.NIVEIS[1:] if n[0] < 100]  # 100 é a borda da barra
+        lider = rk['linhas'][0]['total'] if rk['linhas'] else 0
+        for l in rk['linhas']:
+            l['atras_do_lider'] = guardiao.fmt(max(lider - l['total'], 0))
+            l['pct_total'] = round(min(max(l['total'], 0), 100), 1)
+            for pl in l['pilares']:
+                pl['w'] = round(pl['pct'] * pl['maximo'] / 100, 2)  # largura na barra de 0 a 100 pontos
     if aba == 'lvut' and dados['loja'] is not None:
         contexto['estoque_semana'] = servicos.contagem_estoque(dados['loja'])
     if aba == 'agenda':

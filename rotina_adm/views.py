@@ -14,7 +14,7 @@ from django.views.decorators.http import require_POST
 from communications.models import CommunicationGroup
 from users.models import Sector, User
 
-from . import ranking, servicos
+from . import servicos
 from .models import AcessoRotinaAdm, ConfiguracaoRotinaAdm, ContagemEstoque, ItemChecklist, MarcacaoChecklist
 from .permissoes import e_superadmin, exige_acesso, papel, pode_gerir
 
@@ -57,7 +57,7 @@ def painel(request):
     contexto = {
         'loja': loja, 'gestor': gestor, 'papel': papel(request.user), 'superadmin': e_superadmin(request.user),
         'hoje': hoje, 'hoje_extenso': f'{DIAS[hoje.weekday()]}, {hoje.day} de {MESES[hoje.month - 1]} de {hoje.year}',
-        'lojas': servicos.lojas() if gestor else [], 'aba': 'painel', 'pontos_estoque': ranking.PONTOS['estoque'],
+        'lojas': servicos.lojas() if gestor else [], 'aba': 'painel',
         'link_grupo_adm': ConfiguracaoRotinaAdm.get().link_grupo_whatsapp,
     }
     if loja is not None:
@@ -87,23 +87,10 @@ def painel(request):
         'semana_atual': segunda == hoje - timedelta(days=hoje.weekday()),
         'segunda': segunda,
     })
-    contexto['meus_pontos'] = _meus_pontos(request.user)
     if gestor:
         contexto['pessoas_com_rotina'] = (User.objects.filter(rotina_gerencial__ativa=True, is_active=True)
                                           .order_by('first_name', 'last_name'))
     return render(request, 'rotina_adm/painel.html', contexto)
-
-
-def _meus_pontos(user):
-    """A linha da pessoa no ranking do mês (pontos, posição, nível), ou None se ela não pontua."""
-    try:
-        dados = ranking.calcular()
-    except Exception:  # noqa: BLE001 — a central não cai por causa do ranking
-        return None
-    linha = next((l for l in dados['linhas'] if l['pessoa'].id == user.id), None)
-    if linha:
-        linha = {**linha, 'participantes': len(dados['linhas'])}
-    return linha
 
 
 @login_required
@@ -131,10 +118,8 @@ def estoque_registrar(request):
         loja=loja, categoria=categoria, data=hoje, divergencias=int(texto),
         observacao=(request.POST.get('observacao') or '').strip()[:2000], feito_por=request.user)
     nome = contagem.get_categoria_display()
-    if ja_na_semana:
-        messages.success(request, f'Contagem de {nome} registrada. Esta categoria já tinha pontuado nesta semana.')
-    else:
-        messages.success(request, f'Contagem de {nome} registrada: +{ranking.PONTOS["estoque"]} pontos no ranking!')
+    messages.success(request, f'Contagem de {nome} registrada.' + (' Esta categoria já tinha sido contada nesta semana.'
+                                                                    if ja_na_semana else ''))
     return redirect(volta)
 
 
@@ -152,21 +137,10 @@ def checklist_marcar(request, item_id):
         return JsonResponse({'ok': False, 'erro': 'Envio inválido.'}, status=400)
     hoje = timezone.localdate()
     if feito:
-        m, criada = MarcacaoChecklist.objects.get_or_create(item=item, data=hoje, defaults={'feito_por': request.user})
+        m, _criada = MarcacaoChecklist.objects.get_or_create(item=item, data=hoje, defaults={'feito_por': request.user})
         quem = (m.feito_por.full_name if m.feito_por else '')
-        # Quanto a marcação rendeu no ranking (o "+2" que pula na tela).
-        pontos, dia_100 = 0, False
-        if criada:
-            no_prazo = item.horario is None or timezone.localtime(m.feito_em).time() <= item.horario
-            pontos = ranking.PONTOS['item_no_prazo' if no_prazo else 'item_atrasado']
-            ativos = set(ItemChecklist.objects.filter(loja=item.loja, ativo=True).values_list('id', flat=True))
-            meus = set(MarcacaoChecklist.objects.filter(item__loja=item.loja, data=hoje, feito_por=request.user)
-                       .values_list('item_id', flat=True))
-            if ativos and ativos <= meus:
-                dia_100 = True
-                pontos += ranking.PONTOS['dia_100']
         return JsonResponse({'ok': True, 'feito': True, 'hora': timezone.localtime(m.feito_em).strftime('%H:%M'),
-                             'quem': quem, 'pontos': pontos, 'dia_100': dia_100})
+                             'quem': quem})
     MarcacaoChecklist.objects.filter(item=item, data=hoje).delete()
     return JsonResponse({'ok': True, 'feito': False})
 
@@ -229,51 +203,6 @@ def checklist_editar(request):
         'loja': loja, 'lojas': [(l, contagem.get(l.id, 0)) for l in servicos.lojas()],
         'itens': ItemChecklist.objects.filter(loja=loja, ativo=True),
         'gestor': True, 'superadmin': e_superadmin(request.user), 'aba': 'checklist',
-    })
-
-
-@login_required
-@exige_acesso()
-def ranking_analistas(request):
-    """Ranking de pontos dos analistas (24/11/2026) e quem está elegível ao broche (12/11/2026).
-
-    Todo mundo com a Rotina ADM vê os próprios pontos e a tabela geral; só o SUPERADMIN muda
-    os mínimos do broche.
-    """
-    cfg = ConfiguracaoRotinaAdm.get()
-    mes = (request.GET.get('mes') or request.POST.get('mes') or '').strip()
-    if request.method == 'POST':
-        volta = reverse('rotina_adm:ranking') + (f'?mes={mes}' if mes else '')
-        if not e_superadmin(request.user):
-            messages.error(request, 'Só o SUPERADMIN muda o critério do broche.')
-            return redirect(volta)
-        valores = {}
-        for campo in ('broche_pct_minimo', 'broche_no_prazo_minimo'):
-            texto = (request.POST.get(campo) or '').strip()
-            if not texto.isdigit() or int(texto) > 100:
-                messages.error(request, 'Use números de 0 a 100.')
-                return redirect(volta)
-            valores[campo] = int(texto)
-        ConfiguracaoRotinaAdm.objects.filter(pk=cfg.pk).update(
-            atualizado_por=request.user, atualizado_em=timezone.now(), **valores)
-        messages.success(request, 'Critério do broche salvo.')
-        return redirect(volta)
-
-    dados = ranking.calcular(mes, cfg)
-    mes_escolhido = f'{dados["inicio"].year:04d}-{dados["inicio"].month:02d}'
-    meu = next((l for l in dados['linhas'] if l['pessoa'].id == request.user.id), None)
-    frentes = [{'chave': c, 'nome': n, 'icone': i, 'cor': cor} for c, n, i, cor in ranking.FRENTES]
-    if meu:
-        for f in frentes:
-            f['pontos'] = meu['pontos'][f['chave']]
-            f['pct'] = round(f['pontos'] * 100 / meu['total']) if meu['total'] else 0
-    return render(request, 'rotina_adm/ranking.html', {
-        **dados, 'mes': mes_escolhido, 'meses': ranking.meses_para_escolher(),
-        'mes_extenso': f'{MESES[dados["inicio"].month - 1]} de {dados["inicio"].year}',
-        'mes_atual': dados['inicio'] == timezone.localdate().replace(day=1),
-        'gestor': pode_gerir(request.user), 'superadmin': e_superadmin(request.user), 'aba': 'ranking',
-        'meu': meu, 'frentes': frentes, 'regra': ranking.PONTOS, 'regra_assiduidade': ranking.ASSIDUIDADE,
-        'niveis': ranking.NIVEIS, 'podio': dados['linhas'][:3] if dados['linhas'] and dados['linhas'][0]['total'] else [],
     })
 
 

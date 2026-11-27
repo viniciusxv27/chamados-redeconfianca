@@ -4,7 +4,7 @@
 <div class="container mx-auto px-4 py-6 max-w-3xl">
     <h1 class="text-2xl font-bold text-gray-900"><i class="fas fa-user-minus text-amber-500 mr-2"></i>Pedir desligamento</h1>
     <p class="text-sm text-gray-500 mb-5">O pedido vai direto para o time de Acessos, que agenda a execução e responde aqui.</p>
-    {% for m in messages %}<div class="mb-3 px-4 py-2 rounded-lg text-sm {% if m.tags == 'error' %}bg-red-50 text-red-700{% else %}bg-green-50 text-green-700{% endif %}">{{ m }}</div>{% endfor %}
+    {% for m in messages %}<div class="mb-3 px-4 py-2 rounded-lg text-sm {% if m.tags == 'error' %}bg-red-50 text-red-700{% elif m.tags == 'warning' or m.tags == 'info' %}bg-amber-50 text-amber-800{% else %}bg-green-50 text-green-700{% endif %}" data-msg="{{ m.tags }}">{% if 'inativado' in m.message %}<i class="fas fa-user-slash mr-1"></i>{% endif %}{{ m }}</div>{% endfor %}
     <form method="post" class="bg-white rounded-xl border border-gray-200 p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">{% csrf_token %}
         <label class="text-sm sm:col-span-2"><span class="font-medium text-gray-700">Colaborador *</span>
             <select name="colaborador" required class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"><option value="">Escolha…</option>
@@ -18,7 +18,9 @@
             <small class="text-xs text-gray-500">Já vem no início do mês seguinte, para não pesar no PPL.</small></label>
         <label class="text-sm"><span class="font-medium text-gray-700">Observação</span>
             <textarea name="observacao" rows="2" maxlength="1000" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea></label>
-        <div class="sm:col-span-2 flex justify-end"><button class="px-5 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-orange-600">Enviar pedido</button></div>
+        <div class="sm:col-span-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <p class="text-xs text-amber-800 bg-amber-50 rounded-lg px-3 py-2" data-aviso-inativa><i class="fas fa-user-slash mr-1"></i>Ao enviar, o perfil da pessoa no portal é inativado na hora e a data de demissão recebe a saída da empresa.</p>
+            <button class="px-5 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-orange-600 shrink-0">Enviar pedido</button></div>
     </form>
     <h2 class="text-sm font-semibold text-gray-700 mb-2">Meus pedidos</h2>
     <div class="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">

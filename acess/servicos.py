@@ -165,6 +165,60 @@ def dados_do_usuario(u):
             'email': u.email, 'telefone': u.phone, 'cargo': u.job_title, 'login': u.login_code}
 
 
+# Dados do colaborador no card de Acessos pendentes (27/11/2026), na ordem pedida pelo time.
+CAMPOS_DO_CARD = ('NOME', 'EMAIL', 'CPF', 'DATA DE NASCIMENTO', 'TELEFONE DE CONTATO', 'DATA DE ADMISSÃO', 'LOJA',
+                  'CARGO', 'RG', 'ÓRGÃO EMISSOR', 'VALE TRANSPORTE', 'SEXO', 'PIS', 'ESTADO CIVIL', 'ENDEREÇO COMPLETO',
+                  'NOME DO PAI', 'NOME DA MÃE', 'TAMANHO CAMISA', 'TAMANHO CALÇA')
+
+
+def _data(d):
+    return d.strftime('%d/%m/%Y') if d else ''
+
+
+def endereco_completo(u):
+    """Rua, número, complemento – bairro – cidade/UF – CEP (o que houver)."""
+    if u is None:
+        return ''
+    rua = ', '.join(x for x in ((u.address or '').strip(), (u.address_number or '').strip(),
+                                (u.address_complement or '').strip()) if x)
+    cidade = '/'.join(x for x in ((u.city or '').strip(), (u.state or '').strip()) if x)
+    cep = (u.cep or '').strip()
+    return ' – '.join(x for x in (rua, (u.neighborhood or '').strip(), cidade, f'CEP {cep}' if cep else '') if x)
+
+
+def dados_do_card(c, u=None):
+    """[(rótulo, valor)] na ordem de CAMPOS_DO_CARD; valor '' = vazio (a tela mostra "—").
+
+    Vem do cadastro do portal (o pré-cadastro grava no próprio User); sem usuário, ficam os dados da ficha.
+    A loja é o setor principal (user.sector). CPF só com números e data dd/mm/aaaa, como no "copiar" do módulo.
+    Vale transporte ainda não existe no cadastro do portal nem no pré-cadastro: sai vazio.
+    """
+    g = (lambda campo: (getattr(u, campo, '') or '') if u is not None else '')
+    disp = (lambda campo: getattr(u, f'get_{campo}_display')() if u is not None and getattr(u, campo, '') else '')
+    loja = getattr(u, 'sector', None) if u is not None else None
+    loja = loja or c.loja_vinculo or c.local
+    valores = (
+        (u.get_full_name() if u is not None else '') or c.nome,
+        g('email') or c.email,
+        so_digitos(g('cpf')) or c.cpf,
+        _data(g('birth_date') or c.nascimento),
+        g('phone') or c.telefone,
+        _data(g('admission_date')),
+        loja.name if loja else '',
+        g('job_title') or c.cargo,
+        g('rg'), g('rg_issuer'),
+        '',  # VALE TRANSPORTE (SIM/NÃO): sem campo no portal
+        disp('sex'), g('pis'), disp('marital_status'), endereco_completo(u),
+        g('father_name'), g('mother_name'), g('uniform_size_shirt'), g('uniform_size_pants'),
+    )
+    return [(r, str(v or '').strip()) for r, v in zip(CAMPOS_DO_CARD, valores)]
+
+
+def texto_do_card(dados):
+    """O mesmo formato do card, para colar: "RÓTULO: valor" (vazio = —), uma linha por campo."""
+    return '\n'.join(f'{r}: {v or "—"}' for r, v in dados)
+
+
 def entrar_no_fluxo(user, por=None, request=None, origem='PRE_CADASTRO'):
     """Pré-cadastro aprovado: a pessoa entra na esteira (Etapa 1). Idempotente.
 
@@ -842,11 +896,18 @@ def ficha_ativa_do_usuario(user):
 
 def avisar_inativacao(user):
     """O usuário ficou inativo no portal: o Acess pergunta se o desligamento é imediato ou agendado (PPL)."""
+    from .models import PedidoDesligamento
     c = ficha_ativa_do_usuario(user)
     if c is None or c.desligamento_em:
         return None  # sem ficha ativa, ou o desligamento já está agendado
+    if PedidoDesligamento.objects.filter(colaborador=c, status=PedidoDesligamento.ABERTO).exists():
+        return None  # o pedido de desligamento (que inativou o perfil) já está na fila de Desligamentos
     if AvisoInativacao.objects.filter(colaborador=c, status=AvisoInativacao.PENDENTE).exists():
         return None
+    if c.user_id is None and not Colaborador.objects.filter(user=user).exists():
+        # Ficha do legado achada pelo CPF: passa a ter o vínculo com o usuário (era o aviso "sem usuário").
+        c.user = user
+        c.save(update_fields=['user', 'atualizado_em'])
     aviso = AvisoInativacao.objects.create(colaborador=c, user=user)
     registrar(None, 'USUARIO_INATIVADO', 'DESLIGAMENTO',
               f'{c.nome} foi inativado no portal: decidir se o desligamento é imediato ou agendado', colaborador=c)
@@ -937,14 +998,79 @@ def criar_pedido_desligamento(colaborador, tipo, saida, execucao, observacao, us
         raise RegraAcess('A execução não pode ser antes da saída da empresa.')
     if Pedido.objects.filter(colaborador=colaborador, status=Pedido.ABERTO).exists():
         raise RegraAcess(f'Já existe um pedido em aberto para {colaborador.nome}.')
-    pedido = Pedido.objects.create(colaborador=colaborador, tipo=tipo, saida_empresa=saida, execucao_sugerida=execucao,
-                                   observacao=str(observacao or '').strip()[:1000], solicitante=usuario)
-    registrar(request, 'DESLIGAMENTO_PEDIDO', 'DESLIGAMENTO',
-              f'{usuario.get_full_name() or usuario.email} pediu {pedido.get_tipo_display().lower()} de {colaborador.nome}',
-              colaborador=colaborador, usuario=usuario)
+    with transaction.atomic():  # o pedido e a inativação do perfil entram juntos (ou nenhum dos dois)
+        pedido = Pedido.objects.create(colaborador=colaborador, tipo=tipo, saida_empresa=saida, execucao_sugerida=execucao,
+                                       observacao=str(observacao or '').strip()[:1000], solicitante=usuario)
+        registrar(request, 'DESLIGAMENTO_PEDIDO', 'DESLIGAMENTO',
+                  f'{usuario.get_full_name() or usuario.email} pediu {pedido.get_tipo_display().lower()} de {colaborador.nome}',
+                  colaborador=colaborador, usuario=usuario)
+        # 27/11/2026: enviar o pedido já inativa o perfil no portal e preenche a data de demissão.
+        pedido.inativacao = inativar_pelo_pedido(pedido, usuario, request)
     _notificar(_usuarios_que_cuidam_de_desligamento(), f'Pedido de desligamento: {colaborador.nome}',
                f'{usuario.get_full_name() or usuario.email} pediu para {execucao:%d/%m/%Y}.', '/acess/desligamentos/')
     return pedido
+
+
+def usuario_da_ficha(c):
+    """O usuário do portal desta ficha: o vínculo, senão o único usuário com o mesmo CPF (fichas importadas do legado)."""
+    if c.user_id:
+        return c.user
+    d = so_digitos(c.cpf)
+    if len(d) != 11:
+        return None
+    from django.contrib.auth import get_user_model
+    from django.db.models import Q
+    gente = list(get_user_model().objects.filter(Q(cpf=d) | Q(cpf=f'{d[:3]}.{d[3:6]}.{d[6:9]}-{d[9:]}')))
+    if len(gente) > 1:
+        gente = [u for u in gente if u.is_active]
+    return gente[0] if len(gente) == 1 else None
+
+
+def inativar_pelo_pedido(pedido, usuario, request=None):
+    """Inativa o usuário do portal do pedido e grava a demissão (a saída da empresa; sem ela, hoje).
+
+    Devolve um dict para a tela: situacao = 'inativado' | 'ja_inativo' | 'sem_usuario' | 'proprio'.
+    O sinal de inativação (acess/sinais.py) não abre AvisoInativacao: o pedido em aberto já é a decisão
+    (ver avisar_inativacao). O grupo por cargo tira a pessoa dos grupos pelo próprio sinal do save.
+    """
+    from django.contrib.auth import get_user_model
+
+    from users.auditoria import fotografar
+    from users.auditoria import registrar as registrar_no_cadastro
+    c = pedido.colaborador
+    u = usuario_da_ficha(c)
+    if u is None:
+        return {'situacao': 'sem_usuario', 'user': None, 'data': None}
+    if u.pk == getattr(usuario, 'pk', None):
+        return {'situacao': 'proprio', 'user': u, 'data': None}
+    User = get_user_model()
+    data = pedido.saida_empresa or timezone.localdate()
+    with transaction.atomic():
+        u = User.objects.select_for_update(of=('self',)).get(pk=u.pk)
+        antes = fotografar(u)
+        estava_ativo = u.is_active
+        if estava_ativo:
+            u.is_active = False
+            u.status = User.STATUS_INATIVO
+            u.demission_date = data
+            motivo = f'Pedido de desligamento no Acess ({pedido.get_tipo_display()}) por {usuario.get_full_name() or usuario.email}'
+            u.inactivation_reason = motivo[:1000]
+        elif not u.demission_date:
+            u.demission_date = data
+        else:
+            data = u.demission_date
+        u.save()
+        if c.user_id is None and not Colaborador.objects.filter(user=u).exists():
+            c.user = u          # a ficha achada pelo CPF passa a ter o vínculo (evita o aviso sem usuário)
+            c.save(update_fields=['user', 'atualizado_em'])
+    registrar_no_cadastro(u, antes, usuario, ip=_ip(request))
+    situacao = 'inativado' if estava_ativo else 'ja_inativo'
+    registrar(request, 'USUARIO_INATIVADO_PEDIDO', 'DESLIGAMENTO',
+              (f'{usuario.get_full_name() or usuario.email} inativou o perfil de {c.nome} pelo pedido de desligamento '
+               f'(demissão {data:%d/%m/%Y})') if estava_ativo else
+              f'Perfil de {c.nome} já estava inativo; demissão {data:%d/%m/%Y}',
+              colaborador=c, usuario=usuario, depois={'is_active': False, 'demission_date': data.isoformat()})
+    return {'situacao': situacao, 'user': u, 'data': data}
 
 
 def decidir_pedido_desligamento(pedido, decisao, execucao, resposta, usuario, request=None):

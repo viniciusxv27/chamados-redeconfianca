@@ -80,13 +80,13 @@ html.dark .mg {
 .mg-total small { font-size: 13px; font-weight: 500; color: var(--mg-texto-3); margin-left: 3px; }
 .mg-nivel { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 4px 11px; margin-bottom: 6px;
   color: var(--nv, var(--mg-laranja)); background: var(--nv-claro, var(--mg-laranja-claro)); }
-.mg-nivel.desenvolvimento { --nv: #64748b; --nv-claro: #f1f5f9; }
-.mg-nivel.evolucao { --nv: var(--mg-laranja); --nv-claro: var(--mg-laranja-claro); }
-.mg-nivel.avancada { --nv: #b4530a; --nv-claro: #ffeedd; }
-.mg-nivel.cumprida { --nv: var(--mg-verde); --nv-claro: var(--mg-verde-claro); }
-.mg-nivel.excelencia { --nv: var(--mg-roxo); --nv-claro: var(--mg-roxo-claro); }
-html.dark .mg-nivel.desenvolvimento { --nv: #cbd5e1; --nv-claro: rgba(203, 213, 225, .12); }
-html.dark .mg-nivel.avancada { --nv: #fdba74; --nv-claro: rgba(253, 186, 116, .14); }
+.mg-nivel.desenvolvimento, .mg-nivel-cor.desenvolvimento { --nv: #64748b; --nv-claro: #f1f5f9; }
+.mg-nivel.evolucao, .mg-nivel-cor.evolucao { --nv: var(--mg-laranja); --nv-claro: var(--mg-laranja-claro); }
+.mg-nivel.avancada, .mg-nivel-cor.avancada { --nv: #b4530a; --nv-claro: #ffeedd; }
+.mg-nivel.cumprida, .mg-nivel-cor.cumprida { --nv: var(--mg-verde); --nv-claro: var(--mg-verde-claro); }
+.mg-nivel.excelencia, .mg-nivel-cor.excelencia { --nv: var(--mg-roxo); --nv-claro: var(--mg-roxo-claro); }
+html.dark .mg-nivel.desenvolvimento, .mg-nivel-cor.desenvolvimento { --nv: #cbd5e1; --nv-claro: rgba(203, 213, 225, .12); }
+html.dark .mg-nivel.avancada, .mg-nivel-cor.avancada { --nv: #fdba74; --nv-claro: rgba(253, 186, 116, .14); }
 
 .mg-barras { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
 .mg-barra-cab { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; }
@@ -249,6 +249,67 @@ textarea.mg-input { height: auto; min-height: 60px; padding: 8px 10px; resize: v
 .mg-rank .meta .mg-nivel { padding: 1px 7px; margin: 0; font-size: 10.5px; white-space: normal; }
 .mg-rank .mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 
+/* Destaque (27/11/2026): pódio + Faixas lado a lado; embaixo, a classificação em barras por pilar */
+.mg-destaque-topo { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 14px; margin-bottom: 14px; align-items: stretch; }
+.mg-destaque-topo > .mg-card { margin: 0; }
+.mg-voce { display: inline-block; font-size: 10.5px; font-weight: 800; letter-spacing: .02em; color: #fff; background: var(--mg-laranja-2);
+  border-radius: 999px; padding: 2px 8px; line-height: 1.4; white-space: nowrap; }
+.mg-degrau.eu .av { box-shadow: 0 0 0 3px var(--mg-card), 0 0 0 5px var(--mg-laranja-2); }
+.mg-degrau.eu .base { background: var(--mg-laranja-claro); }
+.mg-degrau .mg-voce { margin-top: 4px; }
+.mg-degrau-nivel { display: block; font-size: 10.5px; color: var(--mg-texto-3); margin-top: 2px; line-height: 1.2; }
+.mg-faixas { display: flex; flex-direction: column; }
+.mg-faixa-atual { display: flex; align-items: center; gap: 12px; margin: 16px 20px 0; padding: 12px 14px; border-radius: 14px;
+  background: var(--nv-claro, var(--mg-card-2)); }
+.mg-faixa-atual .ic, .mg-faixas-lista .ic { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex-shrink: 0;
+  color: #fff; background: var(--nv, var(--mg-laranja)); font-size: 16px; }
+.mg-faixa-atual small { display: block; font-size: 11px; font-weight: 700; color: var(--nv); text-transform: uppercase; letter-spacing: .03em; }
+.mg-faixa-atual b { display: block; font-size: 15px; font-weight: 800; color: var(--mg-texto); line-height: 1.25; }
+.mg-faixa-atual .pts { font-size: 12px; color: var(--mg-texto-2); }
+.mg-faixa-atual .pts strong { color: var(--mg-texto); font-size: 14px; }
+.mg-faixa-progresso { padding: 10px 20px 4px; }
+.mg-faixa-progresso .mg-trilho { height: 8px; }
+.mg-faixa-progresso p { margin: 6px 0 0; font-size: 12.5px; color: var(--mg-texto-2); }
+.mg-faixa-progresso b { color: var(--mg-texto); }
+.mg-faixas-lista { list-style: none; margin: 8px 0 0; padding: 4px 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+.mg-faixas-lista li { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; padding: 7px 8px;
+  border-radius: 12px; border: 1px solid transparent; }
+.mg-faixas-lista .ic { width: 32px; height: 32px; border-radius: 10px; font-size: 13px; }
+.mg-faixas-lista .txt small { display: block; font-size: 10px; font-weight: 700; color: var(--mg-texto-3); text-transform: uppercase; letter-spacing: .03em; }
+.mg-faixas-lista .txt b { display: block; font-size: 13px; font-weight: 700; color: var(--mg-texto); overflow-wrap: anywhere; line-height: 1.25; }
+.mg-faixas-lista .faixa-pts { font-size: 12px; font-weight: 700; color: var(--mg-texto-2); white-space: nowrap; }
+.mg-faixas-lista .estado { grid-column: 2 / -1; font-size: 11px; color: var(--mg-verde); font-weight: 700; }
+.mg-faixas-lista .estado:empty { display: none; }
+.mg-faixas-lista li.atual { border-color: color-mix(in srgb, var(--nv) 45%, var(--mg-borda)); background: var(--nv-claro); }
+.mg-faixas-lista li.futura .ic { background: var(--mg-trilho); color: var(--mg-texto-3); }
+.mg-faixas-lista li.futura .txt b, .mg-faixas-lista li.futura .faixa-pts { color: var(--mg-texto-3); }
+.mg-rank-cab { flex-wrap: wrap; gap: 8px 14px; }
+.mg-legenda { display: inline-flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: var(--mg-texto-2); margin-left: auto; }
+.mg-legenda span { display: inline-flex; align-items: center; gap: 5px; }
+.mg-legenda i { width: 10px; height: 10px; border-radius: 3px; background: var(--tom); }
+.mg-legenda small { color: var(--mg-texto-3); }
+.mg-classif { list-style: none; margin: 0; padding: 6px 0; }
+.mg-classif li { display: grid; grid-template-columns: 40px minmax(0, 1fr) 76px; gap: 12px; align-items: center; padding: 10px 20px; }
+.mg-classif li + li { border-top: 1px solid var(--mg-borda); }
+.mg-classif li.eu { background: var(--mg-laranja-claro); box-shadow: inset 3px 0 0 var(--mg-laranja-2); }
+.mg-classif .pos { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 13px;
+  color: var(--mg-texto-2); background: var(--mg-card-2); border: 1px solid var(--mg-borda); }
+.mg-classif li.eu .pos { color: #fff; background: var(--mg-laranja-2); border-color: transparent; }
+.mg-classif .linha1 { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; margin-bottom: 6px; }
+.mg-classif .nome { font-size: 13.5px; color: var(--mg-texto); overflow-wrap: anywhere; }
+.mg-classif .meta { font-size: 11.5px; color: var(--mg-texto-3); }
+.mg-classif .mg-nivel { padding: 1px 8px; margin: 0; font-size: 10.5px; white-space: normal; }
+.mg-barra-pilares { position: relative; display: flex; height: 12px; border-radius: 999px; background: var(--mg-trilho); overflow: hidden; }
+.mg-barra-pilares > i { display: block; height: 100%; background: var(--tom); animation: mg-cresce .8s cubic-bezier(.2, .8, .2, 1) both;
+  transform-origin: left center; }
+.mg-barra-pilares > i + i { box-shadow: inset 1px 0 0 var(--mg-card); }
+.mg-barra-pilares .marco { position: absolute; top: 0; bottom: 0; width: 1px; background: color-mix(in srgb, var(--mg-texto) 28%, transparent); }
+@keyframes mg-cresce { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.mg-classif .pts { text-align: right; }
+.mg-classif .pts b { display: block; font-size: 16px; font-weight: 800; color: var(--mg-texto); line-height: 1.1; }
+.mg-classif .pts small { font-size: 11px; color: var(--mg-texto-3); white-space: nowrap; }
+.mg-classif-rodape { margin: 0; padding: 8px 20px 14px; font-size: 11.5px; color: var(--mg-texto-3); border-top: 1px solid var(--mg-borda); }
+
 /* Código de Conquista */
 .mg-tabela { width: 100%; border-collapse: collapse; font-size: 13px; }
 .mg-tabela th { text-align: left; font-size: 11.5px; color: var(--mg-texto-3); font-weight: 700; padding: 8px 12px; border-bottom: 1px solid var(--mg-borda); }
@@ -262,6 +323,7 @@ textarea.mg-input { height: auto; min-height: 60px; padding: 8px 10px; resize: v
 
 /* Telas menores */
 @media (max-width: 1100px) {
+  .mg-destaque-topo { grid-template-columns: minmax(0, 1fr); }
   .mg-linha1 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .mg-linha1 > :last-child { grid-column: 1 / -1; }
   .mg-numeros { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -285,8 +347,13 @@ textarea.mg-input { height: auto; min-height: 60px; padding: 8px 10px; resize: v
   .mg-podio { padding: 14px 8px; gap: 6px; }
   .mg-rank li { grid-template-columns: 28px minmax(0, 1fr) 58px; }
   .mg-rank .mini { display: none; }
+  .mg-faixa-atual { margin: 14px 14px 0; } .mg-faixa-progresso { padding: 10px 14px 4px; } .mg-faixas-lista { padding: 4px 8px 12px; }
+  .mg-classif li { grid-template-columns: 32px minmax(0, 1fr) 58px; gap: 10px; padding: 10px 14px; }
+  .mg-classif .pos { width: 30px; height: 30px; font-size: 12px; }
+  .mg-legenda { margin-left: 0; order: 3; width: 100%; }
+  .mg-classif-rodape { padding: 8px 14px 12px; }
   .mg-niveis { grid-template-columns: minmax(0, 1fr); }
   .mg-tabela th, .mg-tabela td { padding: 8px 6px; font-size: 12px; }
   .mg-card-cab, .mg-card-pad, .mg-missao, .mg-cat, .mg-central { padding-left: 14px; padding-right: 14px; }
 }
-@media (prefers-reduced-motion: reduce) { .mg-trilho > i { animation: none; width: var(--w); } }
+@media (prefers-reduced-motion: reduce) { .mg-trilho > i { animation: none; width: var(--w); } .mg-barra-pilares > i { animation: none; } }

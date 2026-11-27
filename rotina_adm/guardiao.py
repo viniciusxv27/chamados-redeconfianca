@@ -102,6 +102,32 @@ def nivel(total):
     return {'minimo': atual[0], 'nome': atual[1], 'classe': atual[2], 'icone': atual[3]}
 
 
+def faixas(total):
+    """As faixas do Código de Conquista (NIVEIS) com a situação de quem tem ``total`` pontos no ciclo.
+
+    Cada faixa: numero, minimo, ate (o mínimo da seguinte − 1 ou 100), nome, classe, icone e
+    estado = 'alcancada' | 'atual' | 'futura'. ``proxima`` é a faixa seguinte (None na última) e
+    ``falta`` quantos pontos faltam para ela; ``pct_na_faixa`` mostra o avanço dentro da atual.
+    """
+    atual = nivel(total)
+    lista = []
+    for i, (minimo, nome, classe, icone) in enumerate(NIVEIS):
+        seguinte = NIVEIS[i + 1][0] if i + 1 < len(NIVEIS) else None
+        estado = 'atual' if minimo == atual['minimo'] else ('alcancada' if minimo < atual['minimo'] else 'futura')
+        lista.append({'numero': i + 1, 'minimo': minimo, 'ate': (seguinte - 1) if seguinte is not None else 100,
+                      'nome': nome, 'classe': classe, 'icone': icone, 'estado': estado, 'ultima': seguinte is None})
+    i_atual = next(i for i, f in enumerate(lista) if f['estado'] == 'atual')
+    proxima = lista[i_atual + 1] if i_atual + 1 < len(lista) else None
+    falta = max(proxima['minimo'] - total, 0) if proxima else 0
+    if proxima:
+        largura = proxima['minimo'] - lista[i_atual]['minimo']
+        pct = round(min(max((total - lista[i_atual]['minimo']) * 100 / largura, 0), 100), 1) if largura else 100
+    else:
+        pct = 100
+    return {'lista': lista, 'atual': lista[i_atual], 'proxima': proxima, 'falta': falta, 'falta_txt': fmt(falta),
+            'pct_na_faixa': pct, 'total_txt': fmt(total), 'pct_total': round(min(max(total, 0), 100), 1)}
+
+
 def periodo(mes_texto=None, hoje=None):
     """(início, fim, hoje) do ciclo. ``mes_texto`` 'AAAA-MM'; inválido ou futuro = o mês de hoje."""
     hoje = hoje or timezone.localdate()
