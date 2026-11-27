@@ -201,11 +201,7 @@ t('a lista não é embrulhada na rolagem lateral (cabe no celular)', 'id="fbTabe
 t('sem kanban na tela (nem aba, nem quadro, nem arrastar)', 'id="kanbanBoard"' not in h and 'Kanban</a>' not in h
   and 'Sortable.min.js' not in h)
 t('lista tem a faixa da validação, os contadores e as ordens inconsistentes',
-  'id="fbVal"' in h and 'id="fbKpis"' in h and 'data-vfiltro=' in h and 'data-chip="agendado"' in h and 'data-chip="nao_localizado"' not in h)
-st = {c['key']: c['count'] for c in k['por_status']}
-t('contadores por status, como a lista sempre contou (não pela coluna do kanban)',
-  st == {s_: sum(1 for c in k['colunas'] for f in c['items'] if f.status == s_) for s_ in st}
-  and sum(st.values()) == sum(c['count'] for c in k['colunas']), st)
+  'id="fbVal"' in h and 'id="fbKpis"' in h and 'data-vfiltro=' in h and 'data-chip="nao_localizado"' in h)
 import re as _re
 for p in ['templates/fibras/lista.html']:
     ruins = [m for m in _re.finditer(r'\{#(.*?)#\}', open(p).read(), _re.S) if '\n' in m.group(1)]

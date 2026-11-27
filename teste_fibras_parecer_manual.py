@@ -13,6 +13,11 @@ import django
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'redeconfianca.settings')
+# Cache em memória ANTES do setup: com o Redis de verdade, o quadro do /fibras guardava o estado de
+# dentro da transação deste teste e a tela real mostrava esses dados por 5 min (27/11/2026).
+from django.conf import settings as _s
+_s.CACHES = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache', 'LOCATION': 'zz-teste'},
+             'local': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache', 'LOCATION': 'zz-teste2'}}
 django.setup()
 
 from django.conf import settings
