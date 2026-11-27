@@ -1321,6 +1321,8 @@ class CategoriaDocumento(models.Model):
     criada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                    related_name='+', verbose_name='Criada por')
     criada_em = models.DateTimeField(auto_now_add=True)
+    # Desativada: some da escolha (envio e reclassificação), mas os documentos dela continuam na seção dela.
+    ativa = models.BooleanField(default=True, db_default=True, verbose_name='Ativa')
 
     class Meta:
         ordering = ['nome']
@@ -1337,12 +1339,18 @@ class CategoriaDocumento(models.Model):
         super().save(*args, **kwargs)
 
 
-def categorias_documento():
-    """As fixas e as criadas pela tela (antes de "Outros Documentos"), como [(chave, rótulo)]."""
+def categorias_documento(so_ativas=False):
+    """As fixas e as criadas pela tela (antes de "Outros Documentos"), como [(chave, rótulo)].
+
+    so_ativas=True tira as criadas que foram desativadas (é o que se oferece para escolher).
+    """
     from django.db import transaction
     try:
         with transaction.atomic():      # savepoint: sem a tabela (migração pendente) valem só as fixas
-            extras = [(c.chave, c.nome) for c in CategoriaDocumento.objects.only('chave', 'nome')]
+            qs = CategoriaDocumento.objects.only('chave', 'nome')
+            if so_ativas:
+                qs = qs.filter(ativa=True)
+            extras = [(c.chave, c.nome) for c in qs]
     except Exception:  # noqa: BLE001
         extras = []
     fixas = [c for c in CATEGORIAS_DOCUMENTO if c[0] != CATEGORIA_DOC_OUTROS]

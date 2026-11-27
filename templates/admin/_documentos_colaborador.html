@@ -23,16 +23,17 @@
     <div class="p-6">
         <nav class="flex gap-1.5 flex-wrap mb-4" aria-label="Categorias de documento">
             {% for g in grupos_documentos %}
-            <a href="#doc-{{ g.categoria|lower }}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium {% if g.lista %}border-gray-300 text-gray-700 bg-white hover:bg-gray-50{% else %}border-dashed border-gray-200 text-gray-400{% endif %}">
-                <i class="fas {{ g.icone }} {{ g.cor }}"></i>{{ g.rotulo }} <b class="tabular">{{ g.lista|length }}</b></a>
+            <a href="#doc-{{ g.categoria|lower }}" data-cat-secao="{{ g.categoria }}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium {% if g.lista %}border-gray-300 text-gray-700 bg-white hover:bg-gray-50{% else %}border-dashed border-gray-200 text-gray-400{% endif %}">
+                <i class="fas {{ g.icone }} {{ g.cor }}"></i><span data-cat-rotulo="{{ g.categoria }}">{{ g.rotulo }}</span> <b class="tabular">{{ g.lista|length }}</b></a>
             {% endfor %}
         </nav>
 
         {% for g in grupos_documentos %}
-        <div class="mb-6" id="doc-{{ g.categoria|lower }}">
-            <h4 class="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                <i class="fas {{ g.icone }} {{ g.cor }}"></i>{{ g.rotulo }}
+        <div class="mb-6" id="doc-{{ g.categoria|lower }}" data-cat-secao="{{ g.categoria }}">
+            <h4 class="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2 flex-wrap">
+                <i class="fas {{ g.icone }} {{ g.cor }}"></i><span data-cat-rotulo="{{ g.categoria }}">{{ g.rotulo }}</span>
                 <span class="text-xs font-normal text-gray-500">({{ g.lista|length }})</span>
+                <span class="text-[11px] font-normal text-amber-700 {% if not g.inativa %}hidden{% endif %}" data-cat-inativa="{{ g.categoria }}"><i class="fas fa-eye-slash mr-0.5"></i>categoria desativada</span>
                 {% if g.categoria == 'ATESTADO' %}<span class="text-[11px] font-normal text-red-600"><i class="fas fa-lock mr-0.5"></i>acesso restrito</span>{% endif %}
             </h4>
             {% if g.lista %}
@@ -76,6 +77,15 @@
                     </div>
                     <p class="text-xs mt-2 text-red-600 hidden" data-cat-erro role="alert"></p>
                 </div>
+                <div class="hidden mt-3 p-3 rounded-lg bg-white border border-blue-300" data-cat-edicao role="group" aria-labelledby="catEdTitulo{{ alvo.id }}">
+                    <div class="flex items-center justify-between gap-2 mb-2">
+                        <p class="text-xs font-semibold text-blue-800" id="catEdTitulo{{ alvo.id }}"><i class="fas fa-pen-to-square mr-1"></i>Editar categorias criadas</p>
+                        <button type="button" data-cat-ed-fechar class="w-8 h-8 -my-1 -mr-1 rounded-lg text-blue-400 hover:text-blue-700 hover:bg-blue-50" aria-label="Fechar" title="Fechar"><i class="fas fa-xmark"></i></button>
+                    </div>
+                    <p class="text-xs text-gray-500 mb-2">As categorias padrão (Pessoais, Admissionais, Atestados, Declarações, Outros) não mudam. Categoria com documentos não é excluída: desative-a e ela some da escolha, mas os documentos continuam nela.</p>
+                    <div class="space-y-2" data-cat-ed-lista></div>
+                    <p class="text-xs mt-2 text-red-600 hidden" data-cat-ed-erro role="alert"></p>
+                </div>
                 <div class="flex flex-wrap items-center justify-between gap-2 mt-3">
                     <div class="flex flex-wrap gap-2">
                     <button type="button" data-doc-mais class="px-3 py-2 rounded-lg border border-blue-300 bg-white text-blue-700 hover:bg-blue-100 text-sm font-medium inline-flex items-center">
@@ -84,6 +94,9 @@
                     <button type="button" data-cat-abrir class="px-3 py-2 rounded-lg border border-blue-300 bg-white text-blue-700 hover:bg-blue-100 text-sm font-medium inline-flex items-center">
                         <i class="fas fa-folder-plus mr-2"></i> Nova categoria
                     </button>
+                    <button type="button" data-cat-ed-abrir aria-expanded="false" class="px-3 py-2 rounded-lg border border-blue-300 bg-white text-blue-700 hover:bg-blue-100 text-sm font-medium inline-flex items-center">
+                        <i class="fas fa-pen-to-square mr-2"></i> Editar categorias
+                    </button>
                     </div>
                     <button type="submit" data-doc-enviar class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm inline-flex items-center disabled:opacity-60">
                         <i class="fas fa-upload mr-2"></i> <span>Enviar documento</span>
@@ -91,6 +104,7 @@
                 </div>
                 <p class="text-xs mt-2 text-emerald-700 hidden" data-cat-msg role="status"></p>
             </form>
+            {% with sid=alvo.id|stringformat:"s" %}{% with jid="catEdDados"|add:sid %}{{ categorias_editaveis|json_script:jid }}{% endwith %}{% endwith %}
             <template id="docLinhaModelo{{ alvo.id }}">
                 <div class="doc-linha relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end p-3 rounded-lg bg-white/70 border border-blue-200" data-doc-linha>
                     <p class="sm:col-span-2 lg:col-span-4 -mb-1 flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-blue-800">
@@ -230,12 +244,13 @@
                 criar.disabled = false;
                 if (!d.ok) { avisoCat(d.erro || 'Não deu para criar a categoria.'); return; }
                 incluirOpcao(d.chave, d.nome);
+                if (d.categoria) { guardarCat(d.categoria); marcarInativa(d.chave, false); if (!edPainel.classList.contains('hidden')) renderEd(); }
                 var destino = alvoCat || (function () {
                     var vazias = Array.prototype.filter.call(caixa.querySelectorAll('select[data-nome="categoria"]'), function (s) { return !s.value; });
                     return vazias.length === 1 ? vazias[0] : null;
                 })();
                 if (destino) { destino.value = d.chave; destino.dataset.antes = d.chave; }
-                var texto = (d.ja_existia ? 'A categoria “' + d.nome + '” já existia' : 'Categoria “' + d.nome + '” criada') +
+ var texto = (d.reativada ? 'A categoria “' + d.nome + '” estava desativada e foi reativada' : d.ja_existia ? 'A categoria “' + d.nome + '” já existia' : 'Categoria “' + d.nome + '” criada') +
                     (destino ? ' e escolhida na linha.' : ': escolha-a na linha do documento.');
                 fecharCat();
                 msgCat.innerHTML = '<i class="fas fa-check mr-1"></i>'; msgCat.appendChild(document.createTextNode(texto));
@@ -244,6 +259,147 @@
                 if (destino) destino.focus();
             })
             .catch(function () { criar.disabled = false; avisoCat('Sem conexão. Tente de novo.'); });
+    });
+
+    // Editar categorias criadas: nome, quem vê, desativar/reativar e excluir (só sem documentos).
+    var edPainel = form.querySelector('[data-cat-edicao]'), edLista = edPainel.querySelector('[data-cat-ed-lista]'),
+        edErro = edPainel.querySelector('[data-cat-ed-erro]'), edAbrir = form.querySelector('[data-cat-ed-abrir]'),
+        edDados = document.getElementById('catEdDados{{ alvo.id }}'), cats = [];
+    try { cats = JSON.parse(edDados ? edDados.textContent : '[]') || []; } catch (e) { cats = []; }
+    var ROTULO_ACESSO = {GESTORES: 'Quem gerencia cadastros', RH_DP: 'Só RH/DP e SUPERADMIN', SUPERADMIN: 'Só o SUPERADMIN'},
+        ORDEM_ACESSO = {GESTORES: 0, RH_DP: 1, SUPERADMIN: 2}, SUPERADMIN = {{ e_superadmin_docs|yesno:"true,false" }},
+        PODE_DAR = acessoCat ? Array.prototype.map.call(acessoCat.options, function (o) { return o.value; }) : ['GESTORES'];
+    function avisoEd(texto) { edErro.textContent = texto || ''; edErro.classList.toggle('hidden', !texto); }
+    function el(tag, cls, texto) { var e = document.createElement(tag); if (cls) e.className = cls; if (texto != null) e.textContent = texto; return e; }
+    function opcoesAcesso(cat) {
+        return ['GESTORES', 'RH_DP', 'SUPERADMIN'].filter(function (a) {
+            if (a === cat.acesso) return true;
+            if (PODE_DAR.indexOf(a) < 0) return false;
+            return SUPERADMIN || ORDEM_ACESSO[a] >= ORDEM_ACESSO[cat.acesso];
+        });
+    }
+    function botao(rotulo, icone, cls, acao) {
+        var b = el('button', 'px-3 py-2 rounded-lg text-sm font-medium inline-flex items-center justify-center disabled:opacity-60 ' + cls);
+        b.type = 'button'; b.dataset.catAcao = acao;
+        b.innerHTML = '<i class="fas ' + icone + ' mr-1.5"></i>'; b.appendChild(document.createTextNode(rotulo));
+        return b;
+    }
+    function renderEd() {
+        edLista.textContent = '';
+        if (!cats.length) { edLista.appendChild(el('p', 'text-sm text-gray-500 px-1', 'Nenhuma categoria criada ainda. Use "Nova categoria".')); return; }
+        cats.forEach(function (cat) {
+            var item = el('div', 'flex flex-wrap gap-2 items-end p-2.5 rounded-lg border ' +
+                (cat.ativa ? 'border-blue-200 bg-blue-50' : 'border-dashed border-gray-300 bg-gray-50'));
+            item.dataset.catItem = cat.chave;
+            var cNome = el('div', 'flex-1 min-w-[14rem]'), idNome = 'catEd{{ alvo.id }}_' + cat.chave;
+            var lNome = el('label', 'block text-xs font-medium text-blue-800 mb-1', 'Nome'); lNome.htmlFor = idNome;
+            var iNome = el('input', 'w-full px-3 py-2 border border-blue-300 rounded-lg bg-white text-sm');
+            iNome.type = 'text'; iNome.maxLength = 60; iNome.value = cat.nome; iNome.id = idNome; iNome.dataset.catEdNome = '';
+            cNome.appendChild(lNome); cNome.appendChild(iNome);
+            var info = el('p', 'w-full -mt-1 text-[11px] text-gray-500');
+            info.textContent = (cat.documentos ? cat.documentos + ' documento(s) na rede' : 'Nenhum documento') + (cat.ativa ? '' : ' · desativada (fora da escolha)');
+            item.appendChild(cNome);
+            var opcoes = opcoesAcesso(cat), cAcesso = el('div', 'w-full sm:w-auto sm:min-w-[13rem]');
+            var lAc = el('label', 'block text-xs font-medium text-blue-800 mb-1', 'Quem vê'), sAc = el('select', 'w-full px-3 py-2 border border-blue-300 rounded-lg bg-white text-sm');
+            lAc.htmlFor = sAc.id = idNome + '_acesso'; sAc.dataset.catEdAcesso = '';
+            opcoes.forEach(function (a) { sAc.appendChild(new Option(ROTULO_ACESSO[a], a, false, a === cat.acesso)); });
+            sAc.disabled = opcoes.length < 2;
+            cAcesso.appendChild(lAc); cAcesso.appendChild(sAc);
+            item.appendChild(cAcesso);
+            var acoes = el('div', 'flex flex-wrap gap-2');
+            acoes.appendChild(botao('Salvar', 'fa-check', 'bg-blue-600 text-white hover:bg-blue-700', 'salvar'));
+            acoes.appendChild(cat.ativa ? botao('Desativar', 'fa-eye-slash', 'border border-amber-300 bg-white text-amber-700 hover:bg-amber-50', 'desativar')
+                                        : botao('Reativar', 'fa-eye', 'border border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50', 'reativar'));
+            var bEx = botao('Excluir', 'fa-trash', 'border border-red-200 bg-white text-red-600 hover:bg-red-50', 'excluir');
+            if (cat.documentos) bEx.title = 'Tem documentos: não pode ser excluída (desative-a).';
+            acoes.appendChild(bEx);
+            item.appendChild(acoes);
+            item.appendChild(info);
+            edLista.appendChild(item);
+        });
+    }
+    function guardarCat(cat) {
+        var i = cats.findIndex(function (c) { return c.chave === cat.chave; });
+        if (i < 0) cats.push(cat); else cats[i] = cat;
+        cats.sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+    }
+    function trocarNome(chave, nome) {
+        selectsDeCategoria().forEach(function (sel) { var o = sel.querySelector('option[value="' + chave + '"]'); if (o) o.textContent = nome; });
+        document.querySelectorAll('[data-cat-rotulo="' + chave + '"]').forEach(function (e) { e.textContent = nome; });
+    }
+    function tirarDaEscolha(chave, tudo) {
+        var limpas = 0;
+        selectsDeCategoria().forEach(function (sel) {
+            var o = sel.querySelector('option[value="' + chave + '"]'); if (!o) return;
+            if (sel.classList.contains('js-doc-categoria') && !tudo) { if (!o.selected) o.remove(); return; }
+            if (o.selected && sel.closest('[data-doc-linha]')) { sel.value = ''; sel.dataset.antes = ''; limpas++; }
+            o.remove();
+        });
+        return limpas;
+    }
+    function marcarInativa(chave, inativa) {
+        document.querySelectorAll('[data-cat-inativa="' + chave + '"]').forEach(function (e) { e.classList.toggle('hidden', !inativa); });
+    }
+    function mostrarMsg(texto) {
+        msgCat.innerHTML = '<i class="fas fa-check mr-1"></i>'; msgCat.appendChild(document.createTextNode(texto));
+        msgCat.classList.remove('hidden');
+        clearTimeout(timerCat); timerCat = setTimeout(function () { msgCat.classList.add('hidden'); }, 6000);
+    }
+    edAbrir.addEventListener('click', function () {
+        var abrir = edPainel.classList.contains('hidden');
+        edPainel.classList.toggle('hidden', !abrir); edAbrir.setAttribute('aria-expanded', abrir ? 'true' : 'false');
+        avisoEd('');
+        if (abrir) { renderEd(); fecharCat(); var p = edLista.querySelector('input'); if (p) p.focus(); edPainel.scrollIntoView({block: 'nearest', behavior: 'smooth'}); }
+    });
+    edPainel.querySelector('[data-cat-ed-fechar]').addEventListener('click', function () { edPainel.classList.add('hidden'); edAbrir.setAttribute('aria-expanded', 'false'); edAbrir.focus(); });
+    edLista.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && e.target.matches('[data-cat-ed-nome]')) { e.preventDefault(); e.target.closest('[data-cat-item]').querySelector('[data-cat-acao="salvar"]').click(); }
+    });
+    edLista.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-cat-acao]'); if (!b) return;
+        var item = b.closest('[data-cat-item]'), chave = item.dataset.catItem, acao = b.dataset.catAcao,
+            cat = cats.find(function (c) { return c.chave === chave; }) || {};
+        var corpo = new URLSearchParams({acao: acao, csrfmiddlewaretoken: '{{ csrf_token }}'});
+        if (acao === 'salvar') {
+            var nome = item.querySelector('[data-cat-ed-nome]').value.trim();
+            if (nome.length < 3) { avisoEd('Dê um nome à categoria (ao menos 3 letras).'); item.querySelector('[data-cat-ed-nome]').focus(); return; }
+            corpo.set('nome', nome); corpo.set('acesso', item.querySelector('[data-cat-ed-acesso]').value);
+        }
+        if (acao === 'excluir') {
+            if (cat.documentos) { avisoEd('“' + cat.nome + '” tem ' + cat.documentos + ' documento(s) e não pode ser excluída. Desative-a: some da escolha e os documentos continuam nela.'); return; }
+            if (!confirm('Excluir a categoria “' + cat.nome + '”? Ela não tem documentos.')) return;
+        }
+        if (acao === 'desativar' && !confirm('Desativar “' + cat.nome + '”? Ela some da escolha de categoria; os ' + (cat.documentos || 0) + ' documento(s) dela continuam onde estão.')) return;
+        avisoEd(''); item.querySelectorAll('button').forEach(function (x) { x.disabled = true; });
+        fetch('{% url "documento_categoria_editar" "CHAVE" %}'.replace('CHAVE', encodeURIComponent(chave)), {method: 'POST', body: corpo, credentials: 'same-origin'})
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                item.querySelectorAll('button').forEach(function (x) { x.disabled = false; });
+                if (!d.ok) {
+                    if (d.em_uso) { cat.documentos = d.em_uso; renderEd(); }
+                    avisoEd(d.erro || 'Não deu para salvar.'); return;
+                }
+                if (d.excluida) {
+                    tirarDaEscolha(chave, true);
+                    document.querySelectorAll('[data-cat-secao="' + chave + '"]').forEach(function (e) { e.remove(); });
+                    cats = cats.filter(function (c) { return c.chave !== chave; });
+                    renderEd(); mostrarMsg('Categoria “' + cat.nome + '” excluída.'); return;
+                }
+                var nova = d.categoria;
+                if (!nova) { cats = cats.filter(function (c) { return c.chave !== chave; }); tirarDaEscolha(chave, false); renderEd(); mostrarMsg('Categoria salva; com o novo acesso você deixou de vê-la.'); return; }
+                guardarCat(nova); trocarNome(chave, nova.nome);
+                if (acao === 'desativar') {
+                    var limpas = tirarDaEscolha(chave, false); marcarInativa(chave, true);
+                    mostrarMsg('Categoria “' + nova.nome + '” desativada.' + (limpas ? ' ' + limpas + ' linha(s) de envio voltaram para "Pelo nome do documento".' : ''));
+                } else if (acao === 'reativar') {
+                    incluirOpcao(chave, nova.nome); marcarInativa(chave, false);
+                    mostrarMsg('Categoria “' + nova.nome + '” reativada.');
+                } else mostrarMsg(d.mudou ? 'Categoria “' + nova.nome + '” salva.' : 'Nada mudou em “' + nova.nome + '”.');
+                renderEd();
+                var foco = edLista.querySelector('[data-cat-item="' + chave + '"] [data-cat-acao="' + (acao === 'desativar' ? 'reativar' : acao === 'reativar' ? 'desativar' : acao) + '"]');
+                if (foco) foco.focus();
+            })
+            .catch(function () { item.querySelectorAll('button').forEach(function (x) { x.disabled = false; }); avisoEd('Sem conexão. Tente de novo.'); });
     });
     window.addEventListener('pageshow', function (e) { if (e.persisted) { enviar.disabled = false; enviar.querySelector('i').className = 'fas fa-upload mr-2'; renumerar(); } });
     nova(false);

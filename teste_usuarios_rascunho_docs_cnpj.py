@@ -196,6 +196,103 @@ try:
         h = html(cg.get(f'/users/manage/users/{alvo.pk}/profile/'))
         t('…nem a vê na lista de categorias', 'Saúde ocupacional' not in h and 'ZZ Uniformes' in h)
 
+        print('— Editar categorias pelo card')
+        h = html(ca.get(f'/users/manage/users/{alvo.pk}/edit/'))
+        t('botão "Editar categorias" e os dados das criadas na tela', 'data-cat-ed-abrir' in h and f'id="catEdDados{alvo.pk}"' in h
+          and f'"chave": "{cat.chave}"' in h)
+        ed = lambda chave: f'/users/manage/documentos/categorias/{chave}/editar/'
+        j = ca.post(ed(cat.chave), {'acao': 'salvar', 'nome': ' Treinamentos  NR ZZ ', 'acesso': 'GESTORES'}).json()
+        cat.refresh_from_db()
+        t('renomeia (nome limpo) e devolve a categoria', j['ok'] and j['mudou'] and cat.nome == 'Treinamentos NR ZZ'
+          and j['categoria']['nome'] == 'Treinamentos NR ZZ' and j['categoria']['documentos'] == 2, j)
+        t('renomear mantém a chave e os documentos', UserDocument.objects.filter(categoria=cat.chave).count() == 2)
+        j = ca.post(ed(cat.chave), {'acao': 'salvar', 'nome': 'Treinamentos NR ZZ'}).json()
+        t('salvar sem mudar nada', j['ok'] and not j['mudou'])
+        r = ca.post(ed(cat.chave), {'acao': 'salvar', 'nome': 'declaracoes'})
+        t('nome de outra categoria (até fixa) recusado', r.status_code == 409 and 'Declarações' in r.json()['erro'])
+        r = ca.post(ed(cat.chave), {'acao': 'salvar', 'nome': 'zz uniformes'})
+        t('nome de outra criada recusado', r.status_code == 409)
+        t('nome curto recusado na edição', ca.post(ed(cat.chave), {'acao': 'salvar', 'nome': 'x'}).status_code == 400)
+        t('categoria fixa não se edita', ca.post(ed('PESSOAL'), {'acao': 'salvar', 'nome': 'Pessoais ZZ'}).status_code == 400)
+        t('chave que não existe: 404', ca.post(ed('CATZZZZZZZZ'), {'acao': 'desativar'}).status_code == 404)
+        t('quem não gerencia cadastros não edita', cc.post(ed(cat.chave), {'acao': 'desativar'}).status_code == 403)
+        t('só POST', ca.get(ed(cat.chave)).status_code == 405)
+        # quem vê
+        j = ca.post(ed(cat.chave), {'acao': 'salvar', 'nome': 'Treinamentos NR ZZ', 'acesso': 'RH_DP'}).json()
+        t('SUPERADMIN muda quem vê (grava a regra)', j['ok'] and j['categoria']['acesso'] == 'RH_DP'
+          and PermissaoCategoriaDocumento.objects.get(categoria=cat.chave).acesso == 'RH_DP')
+        j = ca.post(ed(cat.chave), {'acao': 'salvar', 'nome': 'Treinamentos NR ZZ', 'acesso': 'GESTORES'}).json()
+        t('SUPERADMIN abre de novo', j['ok'] and PermissaoCategoriaDocumento.objects.get(categoria=cat.chave).acesso == 'GESTORES')
+        uni = CategoriaDocumento.objects.get(nome='ZZ Uniformes')
+        r = cg.post(ed(uni.chave), {'acao': 'salvar', 'nome': 'ZZ Uniformes', 'acesso': 'SUPERADMIN'})
+        t('supervisor não esconde a categoria dele mesmo', r.status_code == 403
+          and not PermissaoCategoriaDocumento.objects.filter(categoria=uni.chave).exists())
+        r = cg.post(ed(restrita.chave), {'acao': 'salvar', 'nome': 'Liberada ZZ', 'acesso': 'GESTORES'})
+        restrita.refresh_from_db()
+        t('supervisor não edita categoria restrita que não vê', r.status_code == 403 and restrita.nome == 'ZZ Saúde ocupacional')
+        rh = User.objects.create_user(username='zz.urd.rh', email='zz.urd.rh@exemplo-teste.local', password='x',
+                                      first_name='ZZ', last_name='RH', hierarchy='SUPERVISOR', sector=loja)
+        with mock.patch.object(User, 'pode_ver_atestados', lambda self: self.pk == rh.pk or self.is_superuser
+                               or self.hierarchy == 'SUPERADMIN'):
+            crh = Client()
+            crh.force_login(rh)
+            r = crh.post(ed(restrita.chave), {'acao': 'salvar', 'nome': 'ZZ Saúde ocupacional', 'acesso': 'GESTORES'})
+            t('RH não abre categoria restrita (só o SUPERADMIN abre)', r.status_code == 403
+              and PermissaoCategoriaDocumento.objects.get(categoria=restrita.chave).acesso == 'RH_DP')
+            j = crh.post(ed(uni.chave), {'acao': 'salvar', 'nome': 'ZZ Uniformes', 'acesso': 'RH_DP'}).json()
+            t('RH restringe uma aberta', j['ok'] and PermissaoCategoriaDocumento.objects.get(categoria=uni.chave).acesso == 'RH_DP')
+            crh.post(ed(uni.chave), {'acao': 'salvar', 'nome': 'ZZ Uniformes', 'acesso': 'GESTORES'})
+        ca.post(ed(uni.chave), {'acao': 'salvar', 'nome': 'ZZ Uniformes', 'acesso': 'GESTORES'})
+        # em uso: excluir recusado, desativar esconde da escolha
+        r = ca.post(ed(cat.chave), {'acao': 'excluir'})
+        t('categoria em uso: exclusão recusada com aviso', r.status_code == 409 and r.json()['em_uso'] == 2
+          and 'Desative' in r.json()['erro'] and CategoriaDocumento.objects.filter(chave=cat.chave).exists())
+        j = ca.post(ed(cat.chave), {'acao': 'desativar'}).json()
+        cat.refresh_from_db()
+        t('desativa', j['ok'] and not cat.ativa and j['categoria']['ativa'] is False)
+        t('desativada sai das categorias para escolher, mas não da lista geral',
+          cat.chave not in dict(categorias_documento(so_ativas=True)) and cat.chave in dict(categorias_documento()))
+        h = html(ca.get(f'/users/manage/users/{alvo.pk}/edit/'))
+        i_cat = h.find(f'id="doc-{cat.chave.lower()}"')
+        modelo_linha = h[h.find('id="docLinhaModelo'):h.find('</template>', h.find('id="docLinhaModelo'))]
+        t('os documentos continuam na seção dela, marcada como desativada', i_cat > 0 and h.find('NR-10 ZZ', i_cat) > 0
+          and f'data-cat-inativa="{cat.chave}"' in h)
+        t('…e ela some da linha de envio', cat.chave not in modelo_linha and uni.chave in modelo_linha)
+        doc_fora = UserDocument.objects.filter(user=alvo, document_name='Antigo ZZ').first()
+        i_row = h.find(f'/users/manage/user-documents/{doc_fora.pk}/categoria/')
+        t('reclassificar: a desativada só aparece no documento que já está nela',
+          f'value="{cat.chave}"' not in h[i_row:h.find('</select>', i_row)] and f'value="{cat.chave}" selected' in h)
+        antes = UserDocument.objects.filter(user=alvo).count()
+        r = ca.post(f'/users/manage/users/{alvo.pk}/documents/upload/', {'categoria_0': cat.chave, 'file_0': pdf('des.pdf')})
+        t('não sobe documento em categoria desativada', UserDocument.objects.filter(user=alvo).count() == antes
+          and any('desativada' in str(m) for m in r.wsgi_request._messages))
+        r = ca.post(f'/users/manage/user-documents/{doc_fora.pk}/categoria/', {'categoria': cat.chave})
+        t('não reclassifica para categoria desativada', r.status_code == 400 and r.json()['erro'] == 'Esta categoria está desativada.')
+        r = ca.post(f'/users/manage/user-documents/{outro.pk}/categoria/', {'categoria': 'PESSOAL'})
+        t('documento sai da desativada normalmente', r.json()['ok'])
+        ca.post(f'/users/manage/user-documents/{outro.pk}/categoria/', {'categoria': cat.chave})
+        outro.refresh_from_db()
+        t('…mas não volta para ela', outro.categoria == 'PESSOAL')
+        sem_docs = User.objects.create_user(username='zz.urd.semdocs', email='zz.urd.semdocs@exemplo-teste.local', password='x',
+                                            first_name='ZZ', hierarchy='PADRAO', sector=loja)
+        h = html(ca.get(f'/users/manage/users/{sem_docs.pk}/edit/'))
+        t('quem não tem documento nela não vê a seção da desativada', f'id="doc-{cat.chave.lower()}"' not in h
+          and f'id="doc-{uni.chave.lower()}"' in h)
+        j = ca.post(URL_NOVA, {'nome': 'treinamentos nr zz'}).json()
+        cat.refresh_from_db()
+        t('criar de novo com o mesmo nome reativa a desativada', j['ok'] and j['reativada'] and cat.ativa and j['chave'] == cat.chave)
+        ca.post(ed(cat.chave), {'acao': 'desativar'})
+        j = ca.post(ed(cat.chave), {'acao': 'reativar'}).json()
+        cat.refresh_from_db()
+        t('reativa', j['ok'] and cat.ativa and cat.chave in dict(categorias_documento(so_ativas=True)))
+        # excluir sem uso
+        PermissaoCategoriaDocumento.objects.get_or_create(categoria=uni.chave, defaults={'acesso': 'GESTORES'})
+        j = cg.post(ed(uni.chave), {'acao': 'excluir'}).json()
+        t('sem documentos: exclui (e a regra de acesso vai junto)', j['ok'] and j['excluida']
+          and not CategoriaDocumento.objects.filter(pk=uni.pk).exists()
+          and not PermissaoCategoriaDocumento.objects.filter(categoria=uni.chave).exists())
+        t('excluir de novo: 404', ca.post(ed(uni.chave), {'acao': 'excluir'}).status_code == 404)
+
         print('— Pré-cadastro: CNPJ Filial')
         User.objects.filter(pk=alvo.pk).update(branch_cnpj='39410478/000125')
         r = ca.get('/users/manage/users/pre-register/')

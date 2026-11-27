@@ -1596,15 +1596,24 @@ def _contexto_documentos(request, target):
     from .documentos_acesso import categorias_visiveis
     documents, documentos_restritos = _documentos_visiveis(request.user, target)
     visiveis = categorias_visiveis(request.user)
+    inativas = set(CategoriaDocumento.objects.filter(ativa=False).values_list('chave', flat=True))
     grupos = []
     for categoria, rotulo in visiveis:
         icone, cor = ICONES_CATEGORIA_DOCUMENTO.get(categoria, ICONE_CATEGORIA_CRIADA)
         lista = [d for d in documents if d.categoria_efetiva == categoria]
-        grupos.append({'categoria': categoria, 'rotulo': rotulo, 'icone': icone, 'cor': cor, 'lista': lista})
+        if categoria in inativas and not lista:
+            continue        # desativada e sem documento desta pessoa: nem aparece
+        grupos.append({'categoria': categoria, 'rotulo': rotulo, 'icone': icone, 'cor': cor, 'lista': lista,
+                       'inativa': categoria in inativas})
     return {
         'documents': documents, 'grupos_documentos': grupos, 'documentos_restritos': documentos_restritos,
-        'categorias_documento': categorias_documento(), 'categorias_para_escolher': visiveis,
+        'categorias_documento': categorias_documento(),
+        'categorias_para_escolher': [c for c in visiveis if c[0] not in inativas],
+        # Reclassificar: a desativada só aparece no documento que já está nela.
+        'categorias_reclassificar': visiveis, 'categorias_inativas': inativas,
         'acessos_nova_categoria': _acessos_que_pode_dar(request.user),
+        'categorias_editaveis': _categorias_editaveis(request.user),
+        'e_superadmin_docs': _e_superadmin(request.user),
         'required_documents': RequiredDocument.objects.filter(is_active=True),
         'pode_configurar_documentos': request.user.is_superuser or request.user.hierarchy == 'SUPERADMIN',
     }
@@ -2946,6 +2955,7 @@ def admin_upload_user_document_view(request, user_id):
         return _voltar_documentos(request, target.id)
 
     categorias = dict(categorias_documento())
+    inativas = set(CategoriaDocumento.objects.filter(ativa=False).values_list('chave', flat=True))
     tipos = {str(t.id): t for t in RequiredDocument.objects.filter(
         id__in=[v for v in (request.POST.get(f'document_type{suf}') for suf, _n in linhas) if v and v.isdigit()])}
     enviados, falhas, escondidos = [], [], []
@@ -2954,6 +2964,9 @@ def admin_upload_user_document_view(request, user_id):
         categoria = request.POST.get(f'categoria{sufixo}', '')
         if categoria and (categoria not in categorias or not pode_ver_categoria(request.user, categoria)):
             falhas.append(f'{prefixo}você não tem acesso a esta categoria de documento.')
+            continue
+        if categoria and categoria in inativas:
+            falhas.append(f'{prefixo}a categoria "{categorias[categoria]}" está desativada; escolha outra.')
             continue
         doc_type = tipos.get(request.POST.get(f'document_type{sufixo}') or '')
         custom_name = request.POST.get(f'document_name{sufixo}', '').strip()
@@ -3028,7 +3041,11 @@ def documento_categoria_nova_view(request):
         if _nome_comparavel(rotulo) == comparavel:
             if not pode_ver_categoria(request.user, chave):
                 return JsonResponse({'ok': False, 'erro': f'Já existe a categoria "{rotulo}", com acesso restrito.'}, status=403)
-            return JsonResponse({'ok': True, 'chave': chave, 'nome': rotulo, 'ja_existia': True})
+            reativada = CategoriaDocumento.objects.filter(chave=chave, ativa=False).update(ativa=True) > 0
+            if reativada:
+                log_action(request.user, 'USER_UPDATE', f'Categoria de documento reativada (criada de novo): "{rotulo}"', request)
+            return JsonResponse({'ok': True, 'chave': chave, 'nome': rotulo, 'ja_existia': True, 'reativada': reativada,
+                                 'categoria': _categoria_editavel_json(request.user, chave)})
     from django.db import IntegrityError, transaction
     try:
         with transaction.atomic():
@@ -3042,7 +3059,122 @@ def documento_categoria_nova_view(request):
         return JsonResponse({'ok': True, 'chave': existente.chave, 'nome': existente.nome, 'ja_existia': True})
     log_action(request.user, 'USER_UPDATE', f'Categoria de documento criada: "{nome}" '
                                              f'({dict(P.ACESSOS)[acesso].lower()})', request)
-    return JsonResponse({'ok': True, 'chave': categoria.chave, 'nome': categoria.nome, 'ja_existia': False})
+    return JsonResponse({'ok': True, 'chave': categoria.chave, 'nome': categoria.nome, 'ja_existia': False,
+                         'categoria': _categoria_editavel_json(request.user, categoria.chave)})
+
+
+ORDEM_ACESSO_CATEGORIA = {'GESTORES': 0, 'RH_DP': 1, 'SUPERADMIN': 2}
+
+
+def _e_superadmin(user):
+    return user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN'
+
+
+def _categorias_editaveis(user, chaves=None):
+    """As categorias criadas pela tela que esta pessoa vê, com o que dá para editar nelas.
+
+    As fixas (Pessoais, Admissionais…) ficam fora: são do código.
+    """
+    from django.db.models import Count
+    from .documentos_acesso import PADRAO, pode_ver_categoria
+    from .models import PermissaoCategoriaDocumento as P
+    qs = CategoriaDocumento.objects.all()
+    if chaves is not None:
+        qs = qs.filter(chave__in=chaves)
+    cats = [c for c in qs if pode_ver_categoria(user, c.chave)]
+    if not cats:
+        return []
+    chaves_vistas = [c.chave for c in cats]
+    regras = dict(P.objects.filter(categoria__in=chaves_vistas).values_list('categoria', 'acesso'))
+    uso = dict(UserDocument.objects.filter(categoria__in=chaves_vistas).values('categoria')
+               .annotate(n=Count('id')).values_list('categoria', 'n'))
+    return [{'chave': c.chave, 'nome': c.nome, 'ativa': c.ativa, 'documentos': uso.get(c.chave, 0),
+             'acesso': regras.get(c.chave, PADRAO.get(c.chave, P.GESTORES))} for c in cats]
+
+
+def _categoria_editavel_json(user, chave):
+    achadas = _categorias_editaveis(user, [chave])
+    return achadas[0] if achadas else None
+
+
+@login_required
+@require_POST
+def documento_categoria_editar_view(request, chave):
+    """Edita uma categoria criada pela tela: nome, quem vê, desativar/reativar ou excluir.
+
+    Excluir só sem nenhum documento nela (de ninguém); em uso, a exclusão é recusada e a saída
+    é desativar: some da escolha, os documentos continuam na seção dela e dá para reativar.
+    Quem não é SUPERADMIN só restringe "quem vê" (abrir uma categoria restrita expõe documentos).
+    """
+    from django.db import IntegrityError, transaction
+    from .documentos_acesso import PADRAO, pode_ver_categoria
+    from .models import PermissaoCategoriaDocumento as P
+    if not request.user.can_manage_users():
+        return JsonResponse({'ok': False, 'erro': 'Sem permissão.'}, status=403)
+    categoria = CategoriaDocumento.objects.filter(chave=chave).first()
+    if categoria is None:
+        if chave in dict(categorias_documento()):
+            return JsonResponse({'ok': False, 'erro': 'As categorias padrão do portal não podem ser editadas.'}, status=400)
+        return JsonResponse({'ok': False, 'erro': 'Categoria não encontrada (talvez já excluída). Recarregue a tela.'}, status=404)
+    if not pode_ver_categoria(request.user, chave):
+        return JsonResponse({'ok': False, 'erro': 'Você não tem acesso a esta categoria de documento.'}, status=403)
+    acao = request.POST.get('acao', 'salvar')
+    em_uso = UserDocument.objects.filter(categoria=chave).count()
+
+    if acao == 'excluir':
+        if em_uso:
+            return JsonResponse({'ok': False, 'em_uso': em_uso, 'erro': (
+                f'"{categoria.nome}" tem {em_uso} documento(s) e não pode ser excluída. '
+                'Desative-a: some da escolha e os documentos continuam nela.')}, status=409)
+        with transaction.atomic():
+            P.objects.filter(categoria=chave).delete()
+            categoria.delete()
+        log_action(request.user, 'USER_UPDATE', f'Categoria de documento excluída: "{categoria.nome}"', request)
+        return JsonResponse({'ok': True, 'excluida': True, 'chave': chave})
+
+    if acao in ('desativar', 'reativar'):
+        ativa = acao == 'reativar'
+        if categoria.ativa != ativa:
+            CategoriaDocumento.objects.filter(pk=categoria.pk).update(ativa=ativa)
+            log_action(request.user, 'USER_UPDATE', f'Categoria de documento {"reativada" if ativa else "desativada"}: '
+                                                     f'"{categoria.nome}" ({em_uso} documento(s))', request)
+        return JsonResponse({'ok': True, 'categoria': _categoria_editavel_json(request.user, chave)})
+
+    if acao != 'salvar':
+        return JsonResponse({'ok': False, 'erro': 'Ação inválida.'}, status=400)
+    nome = ' '.join((request.POST.get('nome') or '').split())[:60]
+    if len(nome) < 3:
+        return JsonResponse({'ok': False, 'erro': 'Dê um nome à categoria (ao menos 3 letras).'}, status=400)
+    comparavel = _nome_comparavel(nome)
+    for outra, rotulo in categorias_documento():
+        if outra != chave and _nome_comparavel(rotulo) == comparavel:
+            return JsonResponse({'ok': False, 'erro': f'Já existe a categoria "{rotulo}".'}, status=409)
+    regra = P.objects.filter(categoria=chave).first()
+    acesso_antes = regra.acesso if regra else PADRAO.get(chave, P.GESTORES)
+    acesso = request.POST.get('acesso') or acesso_antes
+    if acesso != acesso_antes:
+        if acesso not in dict(_acessos_que_pode_dar(request.user)):
+            return JsonResponse({'ok': False, 'erro': 'Você não pode deixar a categoria num acesso que nem você veria.'}, status=403)
+        if not _e_superadmin(request.user) and ORDEM_ACESSO_CATEGORIA[acesso] < ORDEM_ACESSO_CATEGORIA[acesso_antes]:
+            return JsonResponse({'ok': False, 'erro': 'Só o SUPERADMIN abre o acesso de uma categoria restrita.'}, status=403)
+    mudancas = []
+    try:
+        with transaction.atomic():
+            if nome != categoria.nome:
+                mudancas.append(f'nome "{categoria.nome}" → "{nome}"')
+                CategoriaDocumento.objects.filter(pk=categoria.pk).update(nome=nome)
+            if acesso != acesso_antes:
+                mudancas.append(f'quem vê: {dict(P.ACESSOS)[acesso_antes].lower()} → {dict(P.ACESSOS)[acesso].lower()}')
+                if regra is None:
+                    P.objects.create(categoria=chave, acesso=acesso, atualizado_por=request.user)
+                else:
+                    regra.acesso, regra.atualizado_por = acesso, request.user
+                    regra.save(update_fields=['acesso', 'atualizado_por', 'atualizado_em'])
+    except IntegrityError:
+        return JsonResponse({'ok': False, 'erro': 'Já existe uma categoria com esse nome.'}, status=409)
+    if mudancas:
+        log_action(request.user, 'USER_UPDATE', f'Categoria de documento "{nome}": ' + '; '.join(mudancas), request)
+    return JsonResponse({'ok': True, 'mudou': bool(mudancas), 'categoria': _categoria_editavel_json(request.user, chave)})
 
 
 @login_required
@@ -3059,6 +3191,8 @@ def user_document_categoria_view(request, document_id):
     if not (pode_ver_categoria(request.user, doc.categoria_efetiva) and pode_ver_categoria(request.user, categoria)):
         return JsonResponse({'ok': False, 'erro': 'Você não tem acesso a esta categoria de documento.'}, status=403)
     antes = doc.categoria_efetiva
+    if categoria != antes and CategoriaDocumento.objects.filter(chave=categoria, ativa=False).exists():
+        return JsonResponse({'ok': False, 'erro': 'Esta categoria está desativada.'}, status=400)
     UserDocument.objects.filter(pk=doc.pk).update(categoria=categoria)
     log_action(request.user, 'USER_UPDATE', f'Documento "{doc.display_name}" de {doc.user.full_name}: categoria {antes} → {categoria}', request)
     return JsonResponse({'ok': True})
