@@ -292,6 +292,18 @@ def api_exportar_planilha(request):
     return _arquivo(regras.planilha_auditoria(inicio, fim), f"Auditoria D-1 {inicio:%Y-%m}.xlsx", XLSX)
 
 
+MANUAIS_NO_CABECALHO = 60
+
+
+def resumo_cabecalho(resumo):
+    """Resumo enxuto para o X-Resumo: a lista inteira de vendas não cabe num cabeçalho (novembro/2026 deu 278 KB e o
+    Chrome recusa resposta com mais de 256 KB de cabeçalhos — o download falhava com "Failed to fetch")."""
+    incluidas, manuais = resumo["incluidas"], resumo["manuais"]
+    return {"total": len(incluidas), "contestadas": sum(1 for x in incluidas if x.get("contestada")),
+            "manuais_total": len(manuais),
+            "manuais": [{k: m.get(k) for k in ("id_venda", "correcao", "valor")} for m in manuais[:MANUAIS_NO_CABECALHO]]}
+
+
 @api(AUDITOR)
 def api_exportar(request):
     """CSV no layout de modelo_importacao_ged.csv com as vendas alteradas na auditoria do mês. O resumo (vendas
@@ -299,7 +311,7 @@ def api_exportar(request):
     inicio, fim = regras.mes(request.GET.get("mes"))
     dados, resumo = importacao_vivogo.gerar(db.vendas_divergentes(inicio, fim))
     resp = _arquivo(dados, f"Importacao VivoGo {inicio:%Y-%m}.csv", "text/csv; charset=windows-1252")
-    resp["X-Resumo"] = quote(json.dumps(resumo, ensure_ascii=False, default=str))
+    resp["X-Resumo"] = quote(json.dumps(resumo_cabecalho(resumo), ensure_ascii=False, default=str))
     resp["Access-Control-Expose-Headers"] = "X-Resumo"
     return resp
 
@@ -423,10 +435,11 @@ def api_sva_whatsapp_cancelar(request):
 # ---------------------------------------------------------------- API: cruzamento Fixa
 @api(GESTOR, ("POST",))
 def api_fixa_previa(request):
-    """Cruza o Analítico de Vendas enviado com as vendas de fixa e mostra o que mudaria, sem gravar nada."""
+    """Cruza a Base Fixa enviada (export do /fibras; o Analítico de Vendas da Vivo ainda é aceito) com as vendas
+    de fixa e mostra o que mudaria, sem gravar nada."""
     nome, base, erro = _ler_upload(request, cruzamento_fixa.ler_base,
-                                   "Envie o ANALÍTICO DE VENDAS da Vivo (.xlsx).",
-                                   "Não consegui ler o arquivo. Envie o Analítico em .xlsx, como baixado da Vivo.")
+                                   "Envie a planilha exportada do /fibras (.xlsx).",
+                                   "Não consegui ler o arquivo. Envie a planilha em .xlsx, como exportada do /fibras.")
     if erro:
         return erro
     resultados, _ = cruzamento_fixa.cruzar(base)

@@ -429,7 +429,15 @@ t('ID Serviço fica logo depois de ID Venda e traz o ID do serviço', cab.index(
   and por_venda['101']['ID Serviço'] == 'S2')
 resumo = json.loads(unquote(r['X-Resumo']))
 t('linha incorreta fica fora do arquivo e vai para os manuais', '102' not in por_venda and any(m['id_venda'] == '102' for m in resumo['manuais']))
-t('resumo marca a contestada', any(x.get('contestada') for x in resumo['incluidas']))
+t('resumo conta a contestada', resumo['contestadas'] >= 1 and resumo['total'] == len(rows) - 1, resumo)
+from auditoria_d1.views import resumo_cabecalho  # noqa: E402
+_grande = resumo_cabecalho({'incluidas': [{'id_venda': str(i), 'servico': 'Alta Banda Larga', 'correcao': 'MOVIMENTO INELEGÍVEL',
+                                             'data': '05/11/2026', 'contestada': i % 50 == 0} for i in range(3000)],
+                            'manuais': [{'id_venda': str(i), 'correcao': 'LINHA INCORRETA', 'motivo': 'x' * 40, 'valor': '27 99999-0000'}
+                                        for i in range(500)]})
+_tam = len(__import__('urllib.parse', fromlist=['quote']).quote(json.dumps(_grande, ensure_ascii=False)))
+t('X-Resumo enxuto: 3000 vendas e 500 manuais cabem no cabeçalho (< 16 KB)', _tam < 16000 and _grande['total'] == 3000
+  and _grande['contestadas'] == 60 and _grande['manuais_total'] == 500 and len(_grande['manuais']) == 60, _tam)
 
 r = ca.delete('/auditoria-d1/api/contestacoes/S9')
 v = q("SELECT * FROM verificacao_vendas WHERE id_servico='S9'")[0]
@@ -623,6 +631,107 @@ jpost(cg, '/auditoria-d1/api/fixa/aplicar', {'token': jf2['token']})
 t('venda contestada não é remarcada pela automação', q("SELECT status FROM verificacao_vendas WHERE id_servico='F1'")[0]['status'] == 'CONTESTADA')
 t('lista de importações Fixa', cg.get('/auditoria-d1/api/fixa/importacoes').json()[0]['meses'] == '202610')
 
+print('== BASE FIXA PELO EXPORT DO /FIBRAS (27/11/2026) ==')
+from auditoria_d1 import cruzamento_fixa  # noqa: E402
+
+CAB_FIBRAS = ['Nº Venda', 'CPF', 'Cliente', 'Endereço', 'Nº Acesso', 'Plano', 'Valor', 'PDV', 'Vendedor', 'Data da Venda',
+              'Data de agendamento', 'Pilar', 'Serviço Técnico', 'Status', 'Status manual', 'Retorno Myrella',
+              'Primeira sincronização', 'Última sincronização']
+
+
+def base_fibras(linhas):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Fibras'
+    ws.append(CAB_FIBRAS)
+    for x in linhas:
+        ws.append(x)
+    b = io.BytesIO()
+    wb.save(b)
+    return b.getvalue()
+
+
+def lf(venda_, cpf, data, status, manual='', agenda=None):
+    return [venda_, cpf, 'CLIENTE', 'Rua X, 1, Bairro Y , CEP 29000-000 - Serra / ES', '27 99999-0000', 'Vivo Total 600 Mbps',
+            100, 'LARANJEIRAS', 'JOAO VENDEDOR', data, agenda, 'Fixa', 'Alta Banda Larga', status, manual, None,
+            '26/11/2026 08:43', '27/11/2026 08:20']
+
+
+DN = dt.date(2026, 11, 20)
+venda('N1', '400', DN, servico='Alta Banda Larga', grupo='Alta', pilar='Fixa', plano='FIBRA 600', cliente='ANA', cpf='52998224725', receita=100, valor=100)
+venda('N1tv', '400', DN, servico='Alta TV', grupo='Alta', pilar='Fixa', plano='TV', cliente='ANA', cpf='52998224725', receita=40, valor=40)
+venda('N2', '401', DN, servico='Alta Banda Larga', grupo='Alta', pilar='Fixa', plano='FIBRA 600', cliente='BETO', cpf='11144477735', receita=100, valor=100)
+venda('N3', '402', DN, servico='Alta Banda Larga', grupo='Alta', pilar='Fixa', plano='FIBRA 600', cliente='CAIO', cpf='39053344705', receita=100, valor=100)
+venda('N4', '403', DN, servico='Alta Banda Larga', grupo='Alta', pilar='Fixa', plano='FIBRA 600', cliente='DUDA', cpf='39053344705', receita=100, valor=100)
+venda('N5', '404', DN, servico='Alta Banda Larga', grupo='Alta', pilar='Fixa', plano='FIBRA 600', cliente='EVA', cpf='11144477735', receita=100, valor=100)
+cache.clear()
+arqn = base_fibras([
+    lf('400', '52998224725', '20/11/2026', 'Cancelado', 'Sim'),
+    lf('401', '11144477735', '20/11/2026', 'Instalado'),
+    lf('402', '39053344705', '20/11/2026', 'Agendado', agenda='28/11/2026'),
+    lf('403', '52998224725', '20/11/2026', 'Cancelado'),          # CPF não confere com o da VivoGo → sugestão
+    lf('999999', '11144477735', '20/11/2026', 'Cancelado'),        # não existe na VivoGo
+    lf('400', '52998224725', '20/11/2026', 'Cancelado'),          # repetida: ignorada
+])
+bn = cruzamento_fixa.ler_base(arqn)
+t('parser: export do /fibras reconhecido pelo cabeçalho', all(a['fonte'] == 'FIBRAS' for a in bn) and len(bn) == 5, bn[:1])
+b0 = bn[0]
+t('parser: Nº Venda, data, status, status manual e CPF mapeados',
+  (b0['id_venda'], b0['data'], b0['situacao'], b0['manual'], b0['cpf'], b0['anomes'], b0['pdv'])
+  == ('400', DN, 'CANCELADA', True, '52998224725', '202611', 'LARANJEIRAS'), b0)
+t('parser: Agendado vira pendente com a data de agendamento', bn[2]['situacao'] == 'PENDENTE' and bn[2]['data_agenda'] == dt.date(2026, 11, 28))
+t('parser: Analítico antigo continua reconhecido', cruzamento_fixa.ler_base(arqf)[0]['fonte'] == 'ANALITICO')
+try:
+    cruzamento_fixa.ler_base(base_sva([['202610']]))
+    t('parser: planilha de outro modelo é recusada', False)
+except ValueError as e:
+    t('parser: planilha de outro modelo é recusada', '/fibras' in str(e), str(e))
+ANEXO = pathlib.Path('/Users/teste/Downloads/fibras_cancelado_20261127_1136.xlsx')
+if ANEXO.exists():
+    ba = cruzamento_fixa.ler_base(ANEXO.read_bytes())
+    t('parser: arquivo anexo (181 canceladas) lido inteiro', len(ba) == 181 and {a['situacao'] for a in ba} == {'CANCELADA'}
+      and all(a['fonte'] == 'FIBRAS' for a in ba), len(ba))
+
+r = cg.post('/auditoria-d1/api/fixa/previa', {'base': SimpleUploadedFile('fibras_cancelado.xlsx', arqn)})
+jn = r.json()
+t('prévia /fibras', r.status_code == 200 and jn['fonte'] == 'FIBRAS' and jn['meses'] == ['202611'], r.content[:400])
+t('prévia /fibras: 1 cancelada a zerar (só a banda larga)', jn['aplicar_pedidos'] == 1 and jn['aplicar_servicos'] == 1
+  and [x['id_venda'] for x in jn['aplicar_lista']] == ['400'], jn.get('aplicar_lista'))
+t('prévia /fibras: CPF divergente vira sugestão', [x['id_venda'] for x in jn['sugestoes_lista']] == ['403'], jn.get('sugestoes_lista'))
+t('prévia /fibras: instalada OK, agendada pendente, venda inexistente na VivoGo só informada',
+  (jn['ok'], jn['pendentes'], jn['nao_lancadas'], jn['localizadas'], jn['alta']) == (1, 1, 1, 4, 4), jn)
+t('prévia /fibras: venda da VivoGo fora da planilha (404) não entra', '404' not in json.dumps(jn))
+r = jpost(cg, '/auditoria-d1/api/fixa/aplicar', {'token': jn['token']})
+t('aplicar /fibras', r.status_code == 200 and r.json()['aplicadas'] == 1, r.content[:300])
+fn = {x['id_servico']: x for x in q("SELECT * FROM verificacao_vendas WHERE origem='CRUZAMENTO_FIXA' AND cruzamento_anomes='202611'")}
+t('N1 zerado com Movimento inelegível · FIBRA CANCELADA; TV do combo intacta', set(fn) == {'N1'}
+  and (fn['N1']['correcao_vivogo'], fn['N1']['tipo_penalidade'], fn['N1']['receita_validada'], fn['N1']['confianca'])
+  == ('MOVIMENTO INELEGÍVEL', 'FIBRA CANCELADA', 0, 'Fixa Alta'), fn)
+t('observação da marcação cita o /fibras e o status manual', '/fibras: Cancelado (status definido à mão)' in fn['N1']['observacao'], fn['N1']['observacao'])
+sn = q("SELECT * FROM cruzamento_sugestoes WHERE origem='CRUZAMENTO_FIXA' AND anomes='202611'")
+t('sugestão do /fibras gravada com a correção', [(s['id_servico'], s['correcao']) for s in sn] == [('N4', 'MOVIMENTO INELEGÍVEL')]
+  and sn[0]['servico_base'].startswith('/fibras Cancelado'), sn)
+t('base de outubro (Analítico) não foi mexida', q("SELECT status FROM verificacao_vendas WHERE id_servico='F1'")[0]['status'] == 'CONTESTADA')
+
+print('== VIVO GO: SITUAÇÃO DO SERVIÇO = CANCELADO NO EXCLUIR VENDA ==')
+r = ca.get('/auditoria-d1/api/exportar?mes=2026-11')
+rows = list(csv.reader(io.StringIO(r.content.decode('cp1252')), delimiter=';'))
+pv = {x[rows[0].index('ID Serviço')]: dict(zip(rows[0], x)) for x in rows[1:]}
+t('Exportar: fibra cancelada pela Base Fixa sai com Situação do serviço(**) = Cancelado',
+  pv.get('N1', {}).get('Situação do serviço(**)') == 'Cancelado' and pv['N1']['Status BKO(*)(**)'] == 'Improcedente', pv.get('N1'))
+t('Exportar: TV do combo e sugestão não entram', set(pv) == {'N1'}, set(pv))
+L = _gerar(v_correcao='VENDA INEXISTENTE')
+t('venda inexistente → Situação do serviço(**) = Cancelado', L['Situação do serviço(**)'] == 'Cancelado', L)
+L = _gerar(v_correcao='MOVIMENTO INELEGÍVEL', v_penalidade='REALTA', protocolo_ged='123')
+t('movimento inelegível → Situação do serviço(**) = Cancelado (mesmo com GED)', L['Situação do serviço(**)'] == 'Cancelado', L)
+L = _gerar(v_correcao='VALORES INCORRETOS', v_receita_correta=49.9)
+t('valores incorretos: Situação do serviço como estava (Não avaliado)', L['Situação do serviço(**)'] == 'Não avaliado', L)
+L = _gerar(v_correcao='VALORES INCORRETOS', v_receita_correta=49.9, status_servico='Cancelado')
+t('valores incorretos em venda já cancelada: continua Cancelado', L['Situação do serviço(**)'] == 'Cancelado', L)
+L = _gerar(v_status='CONTESTADA', v_correcao='MOVIMENTO INELEGÍVEL', v_penalidade='FIBRA CANCELADA', status_servico='Cancelado')
+t('contestação procedente de exclusão desfaz o Cancelado (Confirmado)', L['Situação do serviço(**)'] == 'Confirmado'
+  and L['Status BKO(*)(**)'] == 'Procedente', L)
+
 print('== WHATSAPP DAS LOJAS ==')
 GrupoWhatsappLoja.objects.create(setor=loja, grupo='120363000000000001')
 imp_sva = q("SELECT id FROM cruzamento_importacoes WHERE origem='CRUZAMENTO_SVA' ORDER BY id DESC")[0]['id']
@@ -734,7 +843,7 @@ from vendas.models import Plano  # noqa: E402
 # 1. botão "Exportar"
 pa = ca.get('/auditoria-d1/').content.decode()
 t('botão de exportar se chama "Exportar" (não "Exportar mês")', '<span>Exportar</span>' in pa and 'Exportar mês' not in pa)
-t('estáticos com ?v= novo', "esteira.js?v=4" in pa and "auditoria_d1.css?v=3" in pa)
+t('estáticos com ?v= novo', "esteira.js?v=5" in pa and "auditoria_d1.css?v=3" in pa)
 t('busca geral no topo, com o atalho / indicado', 'id="buscaGeral"' in pa and '( / )' in pa and 'id="bgPainel"' in pa)
 t('CONSULTA também tem a busca geral', 'id="buscaGeral"' in cc.get('/auditoria-d1/').content.decode())
 
@@ -1074,7 +1183,7 @@ _js = (pathlib.Path(__file__).resolve().parent / 'static' / 'auditoria_d1' / 'es
 t('card "Documento sem pontuação" com os dígitos do documento', '["Documento sem pontuação", dig(it.documento) || "—", dig(it.documento)]' in _js)
 t('cada card dos dados da venda tem o botão de copiar (menos os vazios)', 'class="copiar" data-copiar="${esc(alvo)}"' in _js
   and 'txt === "—" ? "" : txt' in _js)
-t('esteira.js e o CSS com versão nova', "esteira.js' %}?v=4" in (pathlib.Path(__file__).resolve().parent / 'templates' / 'auditoria_d1' / 'esteira.html').read_text()
+t('esteira.js e o CSS com versão nova', "esteira.js' %}?v=5" in (pathlib.Path(__file__).resolve().parent / 'templates' / 'auditoria_d1' / 'esteira.html').read_text()
   and "auditoria_d1.css' %}?v=3" in (pathlib.Path(__file__).resolve().parent / 'templates' / 'auditoria_d1' / '_base.html').read_text())
 
 print(f'\n{ok} ok, {fail} falha(s)')

@@ -34,7 +34,7 @@
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 7h11m0 0l-3-3m3 3l-3 3M20 17H9m0 0l3-3m-3 3l3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span>Base SVA</span>
     </button>
-    <button type="button" class="btn-topo" id="btnFixa" title="Importar o Analítico de Vendas (esteira de fixa da Vivo) e cruzar com as vendas de fixa">
+    <button type="button" class="btn-topo" id="btnFixa" title="Importar a planilha exportada do /fibras e cruzar com as vendas de fixa">
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3 11l9-7 9 7M5 9.5V20h14V9.5M10 20v-5h4v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span>Base Fixa</span>
     </button>
@@ -217,16 +217,17 @@
   <div class="d1-modal modal-sva" role="dialog" aria-modal="true" aria-labelledby="tituloFixa">
     <button type="button" class="modal-fechar" id="fecharFixa" title="Fechar (Esc)" aria-label="Fechar">×</button>
     <h2 id="tituloFixa">Cruzamento Fixa</h2>
-    <p class="sva-sub">Importe o <b>ANALÍTICO DE VENDAS</b> (esteira de instalação de fixa da Vivo). Cada pedido de fixa da VivoGo
-      é procurado pela ORDEM (protocolo), na mesma loja e com ±1 dia — a mesma regra do Validação Vendas Go. Fibra
-      <b>cancelada</b> na Vivo com vínculo Alta entra como <b>Movimento inelegível · Fibra cancelada</b> e já sai no Exportar.</p>
+    <p class="sva-sub">Importe a planilha exportada do <b>/fibras</b> (botão Exportar do kanban; pode ser só a de canceladas).
+      Cada linha é ligada à venda da VivoGo pelo <b>Nº Venda</b>. Fibra com status <b>Cancelado</b> entra como
+      <b>Movimento inelegível · Fibra cancelada</b> na Alta Banda Larga e já sai no Exportar. O Analítico de Vendas da
+      Vivo ainda é aceito (reconhecido pelo cabeçalho).</p>
 
     <div class="sva-ultima" id="fixaUltima" hidden></div>
 
     <form class="sva-bloco" id="formFixa">
       <label class="sva-arquivo" id="fixaArquivoLbl">
         <input type="file" id="fixaArquivo" accept=".xlsx">
-        <span id="fixaArquivoNome">Escolher ou arrastar o Analítico de Vendas (.xlsx)</span>
+        <span id="fixaArquivoNome">Escolher ou arrastar a planilha do /fibras (.xlsx)</span>
       </label>
       <button class="btn-pri" type="submit" id="btnFixaPrevia" disabled>Cruzar com as vendas de fixa</button>
     </form>
@@ -267,4 +268,4 @@
 <div class="toasts" id="toasts" aria-live="polite"></div>
 </div>
 {% endblock %}
-{% block extra_js %}<script src="{% static 'auditoria_d1/esteira.js' %}?v=4"></script>{% endblock %}
+{% block extra_js %}<script src="{% static 'auditoria_d1/esteira.js' %}?v=5"></script>{% endblock %}

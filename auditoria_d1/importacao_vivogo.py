@@ -5,6 +5,7 @@ Cada venda alterada na auditoria vira uma linha do modelo, preenchida com os dad
 correções aplicadas nos campos que o VivoGo permite alterar (marcados com (**) no modelo):
   VENDA INEXISTENTE / MOVIMENTO INELEGÍVEL → Status BKO = Improcedente + Motivo Reprovação + Zerar Remuneração = Sim
     + Motivo Cancelamento "CORREÇÃO - PENALIDADE" + Receita 0,00 (18/11/2026: sem o Zerar, o VivoGo não zerava a receita)
+    + Situação do serviço(**) = Cancelado (27/11/2026)
   VALORES INCORRETOS (e PLANO INCORRETO com receita correta) → Valor Plano ajustado e Receita = receita correta
   LINHA INCORRETA, DIVERGÊNCIA CADASTRAL, nome do PLANO → não são campos alteráveis: ficam de fora e são
   avisados como ajuste manual. VENDA EM DUPLICIDADE não altera nada no VivoGo.
@@ -47,6 +48,8 @@ MOTIVO_REPROVACAO = {
     "VENDA INEXISTENTE": "Lançamento incorreto no Vivo GO",
     "MOVIMENTO INELEGÍVEL": "Outros erros",
 }
+# Excluir Venda (Venda Inexistente / Movimento Inelegível) sai com a Situação do serviço(**) = Cancelado (27/11/2026)
+SITUACAO_EXCLUIDA = "Cancelado"
 MOTIVO_MANUAL = {
     "LINHA INCORRETA": "Nº de acesso não é alterável pela importação",
     "DIVERGÊNCIA CADASTRAL": "CPF/CNPJ não é alterável pela importação",
@@ -207,8 +210,9 @@ def desfazer(v, corr, ident, manuais):
     """Campos que voltam a venda contestada ao que era antes da auditoria."""
     volta = {"Observação": f"Auditoria D-1: contestação procedente, venda volta ({_txt(corr)})"}
     if corr in MOTIVO_REPROVACAO:
+        # a exclusão mandou Situação = Cancelado: a venda que volta (BKO Procedente) sai Confirmado
         return {**volta, "Status BKO": "Procedente", "Motivo Reprovação": "", "Zerar Remuneração": "Não",
-                "Motivo Cancelamento": "", "Receita": _num(_receita_original(v))}
+                "Motivo Cancelamento": "", "Receita": _num(_receita_original(v)), "Situação do serviço": "Confirmado"}
     if corr in ("VALORES INCORRETOS", "PLANO INCORRETO") and v["v_receita_correta"] is not None:
         original = _receita_original(v)
         return {**volta, "Valor Plano": _num(_novo_valor_plano(v, original)), "Receita": _num(original)}
@@ -235,7 +239,8 @@ def gerar(vendas):
         alt = {}
         if corr in MOTIVO_REPROVACAO:
             alt = {"Status BKO": "Improcedente", "Motivo Reprovação": MOTIVO_REPROVACAO[corr],
-                   "Zerar Remuneração": "Sim", "Motivo Cancelamento": motivo_cancelamento(v, corr), "Receita": _num(0)}
+                   "Zerar Remuneração": "Sim", "Motivo Cancelamento": motivo_cancelamento(v, corr), "Receita": _num(0),
+                   "Situação do serviço": SITUACAO_EXCLUIDA}
         elif v["v_receita_correta"] is not None and corr in ("VALORES INCORRETOS", "PLANO INCORRETO"):
             alt = {"Valor Plano": _num(_novo_valor_plano(v, v["v_receita_correta"])),
                    "Receita": _num(v["v_receita_correta"])}

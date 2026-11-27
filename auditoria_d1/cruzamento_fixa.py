@@ -262,13 +262,24 @@ def _data(v):
 
 
 def ler_base(conteudo):
+    """Lê a Base Fixa: o export do /fibras (modelo novo, 27/11/2026) ou o ANALÍTICO DE VENDAS da Vivo (modelo
+    antigo, aceito na transição). O modelo é reconhecido pelo cabeçalho; cada linha leva "fonte"."""
     import openpyxl
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         wb = openpyxl.load_workbook(io.BytesIO(conteudo), read_only=True, data_only=True)
-    ws = wb.worksheets[0]
-    linhas = ws.iter_rows(values_only=True)
-    cab = [chave(c) for c in next(linhas)]
+    try:
+        ws = wb.worksheets[0]
+        linhas = ws.iter_rows(values_only=True)
+        cab = [chave(c) for c in next(linhas, ())]
+        if modelo_fibras(cab):
+            return ler_base_fibras(cab, linhas)
+        return _ler_analitico(cab, linhas)
+    finally:
+        wb.close()
+
+
+def _ler_analitico(cab, linhas):
     idx = {}
     for k, nome in CAMPOS.items():
         alvo = chave(nome)
@@ -277,8 +288,8 @@ def ler_base(conteudo):
             idx[k] = cand[0]
     falta = [CAMPOS[k] for k in OBRIGATORIAS if k not in idx]
     if falta:
-        raise ValueError(f"A base não tem as colunas {', '.join(falta)}. Use o ANALÍTICO DE VENDAS (esteira de "
-                         f"instalação de fixa) exportado da Vivo.")
+        raise ValueError(f"A base não tem as colunas {', '.join(falta)}. Use a planilha exportada do /fibras "
+                         f"(Nº Venda, Data da Venda, Status...) ou o ANALÍTICO DE VENDAS da Vivo.")
     base, vistas = [], set()
     for r in linhas:
         reg = {k: (r[i] if i < len(r) else None) for k, i in idx.items()}
@@ -288,12 +299,147 @@ def ler_base(conteudo):
             continue
         vistas.add(ordem)
         reg = {k: (_data(v) if k in ("data", "data_agenda") else texto_id(v)) for k, v in reg.items()}
-        reg.update(ordem=ordem, data=data, adabas=reg["adabas"].strip(), _vend=pessoa(reg.get("vendedor")))
+        reg.update(ordem=ordem, data=data, adabas=reg["adabas"].strip(), _vend=pessoa(reg.get("vendedor")),
+                   fonte=FONTE_ANALITICO)
         base.append(reg)
-    wb.close()
     if not base:
         raise ValueError("A base não tem nenhuma venda (coluna ORDEM vazia).")
     return base
+
+
+# ---------------------------------------------------------------- leitura do export do /fibras (modelo novo)
+# Pedido de 27/11/2026: a Base Fixa passa a ser a planilha exportada do /fibras (botão Exportar do kanban, ex.:
+# fibras_cancelado_AAAAMMDD_HHMM.xlsx). "Nº Venda" é o ID_da_venda da VivoGo (o /fibras sincroniza da própria
+# vendas_servicos), então o cruzamento é direto pelo número da venda — sem ORDEM/ADABAS nem pareamento aproximado.
+FONTE_FIBRAS, FONTE_ANALITICO = "FIBRAS", "ANALITICO"
+CAMPOS_FIBRAS = {  # nome interno → coluna do export do /fibras (comparado sem acento/espaço)
+    "id_venda": "Nº Venda", "cpf": "CPF", "cliente": "Cliente", "endereco": "Endereço", "acesso": "Nº Acesso",
+    "plano": "Plano", "valor": "Valor", "pdv": "PDV", "vendedor": "Vendedor", "data": "Data da Venda",
+    "data_agenda": "Data de agendamento", "pilar": "Pilar", "servico_tecnico": "Serviço Técnico", "status": "Status",
+    "status_manual": "Status manual", "retorno": "Retorno Myrella",
+}
+OBRIGATORIAS_FIBRAS = ["id_venda", "data", "status"]
+# Status do /fibras (get_status_display) → situação usada no cruzamento
+SITUACAO_FIBRAS = {"CANCELADO": "CANCELADA", "INSTALADO": "INSTALADA", "AGENDADO": "PENDENTE", "PENDENTE": "PENDENTE",
+                   "VENDAS COM PROBLEMA": "PENDENTE"}
+
+
+def _idx(cab, campos):
+    idx = {}
+    for k, nome in campos.items():
+        alvo = chave(nome)
+        cand = [i for i, c in enumerate(cab) if c == alvo]
+        if cand:
+            idx[k] = cand[0]
+    return idx
+
+
+def modelo_fibras(cab):
+    """Cabeçalho do export do /fibras: tem Nº Venda + Data da Venda + Status e não tem a ORDEM do Analítico."""
+    idx = _idx(cab, CAMPOS_FIBRAS)
+    return all(k in idx for k in OBRIGATORIAS_FIBRAS) and chave("ORDEM") not in cab
+
+
+def ler_base_fibras(cab, linhas):
+    idx = _idx(cab, CAMPOS_FIBRAS)
+    base, vistas = [], set()
+    for r in linhas:
+        reg = {k: (r[i] if i < len(r) else None) for k, i in idx.items()}
+        venda = texto_id(reg["id_venda"]).lstrip("'")
+        data = _data(reg["data"])
+        if not venda or not data or venda in vistas:
+            continue
+        vistas.add(venda)
+        reg = {k: (_data(v) if k in ("data", "data_agenda") else texto_id(v)) for k, v in reg.items()}
+        status = " ".join(sem_acento(reg.get("status") or "").upper().split())
+        reg.update(id_venda=venda, data=data, anomes=data.strftime("%Y%m"), fonte=FONTE_FIBRAS,
+                   situacao=SITUACAO_FIBRAS.get(status, status or "-"),
+                   manual=(reg.get("status_manual") or "").strip().lower() in ("sim", "s", "1", "true"))
+        base.append(reg)
+    if not base:
+        raise ValueError("A base não tem nenhuma venda (coluna Nº Venda vazia).")
+    return base
+
+
+def carregar_vendas_ids(ids, de, ate):
+    """Serviços de fixa da VivoGo das vendas da base (PDV + data primeiro, que é o índice da tabela)."""
+    lista = db.pdvs() or [""]
+    ids = sorted(set(ids))
+    saida = []
+    for i in range(0, len(ids), 500):
+        pedaco = ids[i:i + 500]
+        sql = f"""SELECT {COLUNAS} FROM vendas_servicos s
+                  WHERE s.`PDV` IN ({', '.join(['%s'] * len(lista))}) AND s.`data_da_venda` BETWEEN %s AND %s
+                    AND s.`ID_da_venda` IN ({', '.join(['%s'] * len(pedaco))})
+                    AND s.`pilar` = 'Fixa' AND s.`Serviço` IN ('Alta', 'Reativação')"""
+        saida += db.consultar(sql, list(lista) + [de, ate] + pedaco)
+    return saida
+
+
+def cruzar_fibras(base):
+    """Cruzamento pela base do /fibras: uma linha por venda da base.
+      Cancelado  → APLICAR  Movimento inelegível · Fibra cancelada na Alta Banda Larga (o /fibras só acompanha ela)
+      Instalado  → OK
+      Agendado / Pendente / Vendas com problema → PENDENTE
+      Nº Venda sem venda de fixa na VivoGo (fora do escopo, apagada ou de outro pilar) → NAO_LANCADA
+    O vínculo é pelo número da venda (assertividade Alta). Se o CPF da base não conferir com o da VivoGo, a
+    marcação vira sugestão. Vendas da VivoGo que não estão na planilha não entram (o export pode vir filtrado
+    por status, como o de canceladas)."""
+    datas = [a["data"] for a in base]
+    de, ate = min(datas), max(datas)
+    janela = dt.timedelta(days=JANELA)  # a data é a mesma da VivoGo; a folga cobre ajuste de data feito depois
+    servicos = defaultdict(list)
+    for v in carregar_vendas_ids([a["id_venda"] for a in base], de - janela, ate + janela):
+        servicos[texto_id(v["id_venda"])].append(v)
+    saida = []
+    for a in base:
+        lista = servicos.get(a["id_venda"])
+        if not lista:
+            saida.append({"acao": "NAO_LANCADA", "status_cruzamento": NAO_LANCADA, "fonte": FONTE_FIBRAS,
+                          "VG_ID_da_venda": a["id_venda"], "data_vivo": a["data"], "etapa": a.get("status"),
+                          "status_inst": a.get("status"), "produto": a.get("plano"), "vendedor_vivo": a.get("vendedor"),
+                          "VG_PDV": a.get("pdv"),
+                          "observacao": "Venda do /fibras sem venda de fixa (Alta/Reativação) na VivoGo dentro do escopo"})
+            continue
+        saida.append(_resultado_fibras(a, lista))
+    return saida, (de, ate)
+
+
+def _resultado_fibras(a, lista):
+    s0 = lista[0]
+    r = {"pid": a["id_venda"], "fonte": FONTE_FIBRAS, "VG_ID_da_venda": s0["id_venda"], "VG_Data_venda": s0["data_venda"],
+         "VG_PDV": s0["pdv"], "adabas": adabas_de(s0["pdv"]), "VG_Vendedor": s0["vendedor"], "VG_Nome_cliente": s0["cliente"],
+         "VG_Protocolo": texto_id(s0["protocolo"]), "protocolo_tratado": limpar_protocolo(s0["protocolo"]),
+         "formato_protocolo": formato_protocolo(limpar_protocolo(s0["protocolo"])),
+         "VG_Servicos": " + ".join(sorted({x["servico"] or x["servico_grupo"] for x in lista})),
+         "VG_Plano_novo": s0["plano"], "VG_Receita": sum(float(x["receita"] or 0) for x in lista),
+         "VG_Endereco": s0["endereco"], "ids_servico": [x["id_servico"] for x in lista], "_servicos": lista,
+         "VG_Status_servico": s0["status_servico"], "qtd_servicos": len(lista),
+         "status_cruzamento": LOCALIZADA, "assertividade": ALTA, "metodo": "Nº da venda (/fibras)",
+         "motivo_vinculo": "Nº Venda do /fibras = ID da venda da VivoGo", "data_vivo": a.get("data_agenda"),
+         "etapa": a.get("status"), "status_inst": a.get("status"), "produto": a.get("plano"),
+         "vendedor_vivo": a.get("vendedor"), "situacao_vivo": a["situacao"], "servico_vivo": a.get("servico_tecnico"),
+         "motivo_vivo": a.get("retorno") or None}
+    cpf_base = re.sub(r"\D", "", a.get("cpf") or "")[-6:]
+    docs = {re.sub(r"\D", "", x["cpf"] or "")[-6:] for x in lista} | {re.sub(r"\D", "", x["documento"] or "")[-6:] for x in lista}
+    cpf_ok = None if len(cpf_base) < 6 else cpf_base in docs
+    r["cpf_confere"] = "-" if cpf_ok is None else "Sim" if cpf_ok else "Não"
+    alvo = indicados(lista, "FTTH")
+    r.update(alvo_ids=[x["id_servico"] for x in alvo], VG_Servico_alvo=" + ".join(x["servico"] for x in alvo))
+    sit = a["situacao"]
+    quem = " (status definido à mão)" if a.get("manual") else ""
+    fibras = f"/fibras: {a.get('status') or '-'}{quem}" + (f" · {a['retorno']}" if a.get("retorno") else "")
+    if cpf_ok is False:
+        fibras += " · CPF da base diferente do cliente da VivoGo"
+    if sit == "CANCELADA":
+        if not alvo:
+            return {**r, "acao": "SUGESTAO", "correcao": CORRECAO, "penalidade": PENALIDADE, "alvo_ids": r["ids_servico"],
+                    "observacao": f"Fibra cancelada ({fibras}), mas a venda não tem Alta Banda Larga lançada"}
+        return {**r, "acao": "APLICAR" if cpf_ok is not False else "SUGESTAO", "correcao": CORRECAO,
+                "penalidade": PENALIDADE, "observacao": f"Fibra cancelada — {fibras}"}
+    if sit == "INSTALADA":
+        return {**r, "acao": "OK", "observacao": f"Instalada — {fibras}"}
+    return {**r, "acao": "PENDENTE", "observacao": f"Instalação pendente — {fibras}"}
 
 
 # ---------------------------------------------------------------- vendas de fixa da VivoGo
@@ -365,7 +511,10 @@ def _atribuir(cand):
 
 
 def cruzar(base):
-    """Devolve (resultados, período). Um resultado por pedido da VivoGo e um por ORDEM da Vivo sem venda lançada."""
+    """Devolve (resultados, período). Base do /fibras: um resultado por venda da base (cruzar_fibras). Analítico:
+    um resultado por pedido da VivoGo e um por ORDEM da Vivo sem venda lançada."""
+    if base and base[0].get("fonte") == FONTE_FIBRAS:
+        return cruzar_fibras(base)
     # no portal o cruzamento roda em várias threads: as tecnologias da base vão por parâmetro, não por global
     tecnologias = {norm_loja(a.get("servico")) or "FTTH" for a in base}
     datas = [a["data"] for a in base]
@@ -581,4 +730,5 @@ def resumo(resultados, base):
             "muito_baixa": sum(1 for r in loc if r["assertividade"] == MUITO_BAIXA),
             "end_diverge": sum(1 for r in loc if r.get("endereco") in (END_DIVERGE, END_PARCIAL)),
             "meses": meses, "anomes": meses[-1] if meses else None,
+            "fonte": (base[0].get("fonte") if base else None) or FONTE_ANALITICO,
             "base_de": min(datas).isoformat(), "base_ate": max(datas).isoformat()}

@@ -493,7 +493,7 @@ def marcacoes_fixa(resultados):
         conf = f"{r.get('assertividade') or '-'}" if r.get("assertividade") not in (None, "-") else r["status_cruzamento"]
         anomes = str(r["VG_Data_venda"])[:7].replace("-", "")
         alvo = set(r.get("alvo_ids") or [])
-        for sid, srv, rec in r["servicos"]:
+        for sid, srv, rec in r.get("servicos") or []:
             if alvo and sid not in alvo:
                 continue  # só o serviço que a ORDEM da Vivo indica (FTTH → banda larga)
             if r["acao"] == "APLICAR":
@@ -507,14 +507,15 @@ def marcacoes_fixa(resultados):
                 })
             else:
                 sugestoes.append({"id_venda": r["VG_ID_da_venda"], "id_servico": sid, "data_venda": r["VG_Data_venda"],
-                                  "servico_base": f"ORDEM {r.get('ordem') or '-'} · {srv}", "confianca": conf,
+                                  "servico_base": (f"/fibras {r.get('etapa') or '-'} · {srv}" if r.get("fonte") == "FIBRAS"
+                                                   else f"ORDEM {r.get('ordem') or '-'} · {srv}"), "confianca": conf,
                                   "motivo": r["observacao"], "correcao": r.get("correcao"),
                                   "penalidade": r.get("penalidade"), "anomes": anomes})
     return marcacoes, sugestoes
 
 
 def resumir_fixa(r):
-    campos = ["acao", "status_cruzamento", "assertividade", "metodo", "motivo_vinculo", "observacao", "correcao",
+    campos = ["acao", "fonte", "status_cruzamento", "assertividade", "metodo", "motivo_vinculo", "observacao", "correcao",
               "penalidade", "VG_ID_da_venda", "VG_Data_venda", "VG_PDV", "adabas", "VG_Vendedor", "VG_Nome_cliente",
               "VG_Servicos", "VG_Servico_alvo", "servico_vivo", "alvo_ids", "VG_Plano_novo", "VG_Receita", "VG_Protocolo",
               "protocolo_tratado", "formato_protocolo",

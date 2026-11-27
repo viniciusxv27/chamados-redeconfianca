@@ -1140,8 +1140,9 @@
         if (!r.ok) throw new Error((await r.json().catch(() => ({}))).erro || `Erro ${r.status}`);
         const resumo = JSON.parse(decodeURIComponent(r.headers.get("X-Resumo") || "%7B%7D"));
         const nome = (r.headers.get("Content-Disposition") || "").match(/filename="?([^";]+)/)?.[1] || `Importacao VivoGo ${S.mes}.csv`;
-        const n = resumo.incluidas?.length || 0, man = resumo.manuais || [];
-        const nc = (resumo.incluidas || []).filter(x => x.contestada).length;
+        const n = resumo.total ?? (resumo.incluidas?.length || 0), man = resumo.manuais || [];
+        const nc = resumo.contestadas ?? (resumo.incluidas || []).filter(x => x.contestada).length;
+        const nman = resumo.manuais_total ?? man.length;
         if (n) {
           const url = URL.createObjectURL(await r.blob());
           const a = Object.assign(document.createElement("a"), { href: url, download: nome });
@@ -1149,8 +1150,9 @@
           setTimeout(() => URL.revokeObjectURL(url), 5000);
         }
         toast(n ? `${n} venda${n > 1 ? "s" : ""} alterada${n > 1 ? "s" : ""} no arquivo de importação${nc ? ` (${nc} voltando por contestação)` : ""}` : "Nenhuma alteração importável neste mês", n ? "ok" : "aviso");
-        if (man.length) toast(`${man.length} correção(ões) não importáveis — ajustar direto no VivoGo: ` +
-          man.map(m => `#${m.id_venda} (${titulo(m.correcao)}${m.valor ? `: ${m.valor}` : ""})`).join(", "), "aviso");
+        if (nman) toast(`${nman} correção(ões) não importáveis — ajustar direto no VivoGo: ` +
+          man.map(m => `#${m.id_venda} (${titulo(m.correcao)}${m.valor ? `: ${m.valor}` : ""})`).join(", ") +
+          (nman > man.length ? ` e mais ${nman - man.length} (veja a planilha do mês)` : ""), "aviso");
       } catch (e) {
         toast(e.message, "erro");
       } finally {
@@ -1330,7 +1332,7 @@
     const modal = $("#modalFixa"), inp = $("#fixaArquivo"), lbl = $("#fixaArquivoLbl");
     const escolher = f => {
       FX.arquivo = f || null;
-      $("#fixaArquivoNome").textContent = FX.arquivo ? `✓ ${FX.arquivo.name}` : "Escolher ou arrastar o Analítico de Vendas (.xlsx)";
+      $("#fixaArquivoNome").textContent = FX.arquivo ? `✓ ${FX.arquivo.name}` : "Escolher ou arrastar a planilha do /fibras (.xlsx)";
       lbl.classList.toggle("ok", !!FX.arquivo);
       $("#btnFixaPrevia").disabled = !FX.arquivo;
       $("#fixaPrevia").hidden = true;
@@ -1409,6 +1411,7 @@
     const ultima = j.ultima && (j.ultima.meses || j.ultima.anomes).split(",").some(m => j.meses.includes(m))
       ? `<div class="aviso">Substitui a base de ${dataBR(j.ultima.base_de)} a ${dataBR(j.ultima.base_ate)} importada antes (${mesesTxt(j.ultima.meses || j.ultima.anomes)}).</div>` : "";
     const el = $("#fixaPrevia");
+    if (j.fonte === "FIBRAS") { el.innerHTML = previaFibras(j, meses, ultima, lista); el.hidden = false; return; }
     el.innerHTML = `
       <div class="sva-tit">Prévia — ${esc(j.arquivo)}</div>
       <div class="sva-periodo">📅 Base ${meses} com ${j.linhas} ORDENS de ${dataBR(j.base_de)} a ${dataBR(j.base_ate)} — vendas depois de ${dataBR(j.base_ate)} entram na próxima base.</div>
@@ -1434,6 +1437,31 @@
       ${lista("Sugestões para revisar", j.sugestoes_lista)}
       <div class="sva-acoes"><button class="btn-sec" id="btnFixaCancelar">Cancelar</button><button class="btn-pri" id="btnFixaAplicar">Aplicar no sistema</button></div>`;
     el.hidden = false;
+  }
+
+  // Base do /fibras (modelo novo, 27/11/2026): vínculo direto pelo Nº Venda
+  function previaFibras(j, meses, ultima, lista) {
+    return `
+      <div class="sva-tit">Prévia — ${esc(j.arquivo)}</div>
+      <div class="sva-periodo">📅 Base do /fibras ${meses} com ${j.linhas} venda(s) de ${dataBR(j.base_de)} a ${dataBR(j.base_ate)}.</div>
+      <div class="sva-nums">
+        <div class="zera"><b>${j.aplicar_pedidos}</b><span>Fibra cancelada · zerar</span></div>
+        <div class="sug"><b>${j.sugestoes}</b><span>Sugestões</span></div>
+        <div class="ok"><b>${j.ok}</b><span>Instaladas</span></div>
+        <div><b>${j.pendentes}</b><span>Instalação pendente</span></div>
+      </div>
+      <div class="sva-txt"><b>${j.localizadas}</b> venda(s) da planilha ligadas à VivoGo pelo Nº Venda${j.nao_lancadas ? ` · ${j.nao_lancadas} sem venda de fixa na VivoGo (só na planilha do resultado)` : ""}.</div>
+      <div class="sva-impacto">
+        ${ultima}
+        <div>Zera ${j.aplicar_servicos} serviço(s) com <b>Movimento inelegível · Fibra cancelada</b> — só a Alta Banda Larga (TV e fixo do combo não mudam).</div>
+        ${j.revertidas ? `<div class="aviso">${j.revertidas} marcação(ões) da base anterior serão desfeitas (não vieram canceladas nesta planilha).</div>` : ""}
+        ${j.manuais_sobrescritas ? `<div class="aviso">${j.manuais_sobrescritas} verificação(ões) feitas na esteira serão substituídas pela automação (ficam guardadas e voltam se a automação sair).</div>` : ""}
+        ${j.contestadas_mantidas ? `<div>${j.contestadas_mantidas} venda(s) que voltaram por contestação ficam como estão.</div>` : ""}
+        ${j.sugestoes ? `<div>Sugestões (cancelada com CPF diferente do cliente da VivoGo, ou sem Alta Banda Larga lançada) aparecem como alerta na esteira.</div>` : ""}
+      </div>
+      ${lista("Fibra cancelada (zerar)", j.aplicar_lista)}
+      ${lista("Sugestões para revisar", j.sugestoes_lista)}
+      <div class="sva-acoes"><button class="btn-sec" id="btnFixaCancelar">Cancelar</button><button class="btn-pri" id="btnFixaAplicar">Aplicar no sistema</button></div>`;
   }
 
   function mostrarAuditor() {
